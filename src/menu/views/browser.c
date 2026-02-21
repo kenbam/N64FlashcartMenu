@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdint.h>
 #include <miniz.h>
 #include <miniz_zip.h>
 #include <stdlib.h>
@@ -59,6 +60,8 @@ static const struct substr hidden_prefixes[] = {
     substr("._"), // macOS "AppleDouble" metadata files
 };
 #define HIDDEN_PREFIXES_COUNT (sizeof(hidden_prefixes) / sizeof(hidden_prefixes[0]))
+
+static uint32_t random_entry_state = 0x9E3779B9u;
 
 static char *normalize_path (const char *path);
 
@@ -716,6 +719,20 @@ static void process (menu_t *menu) {
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
     }
 
+    if (menu->actions.lz_context && menu->browser.entries > 1) {
+        random_entry_state = (random_entry_state * 1664525u) + 1013904223u + (uint32_t)menu->browser.selected + (uint32_t)menu->browser.entries;
+
+        int32_t next = (int32_t)(random_entry_state % (uint32_t)menu->browser.entries);
+        if (next == menu->browser.selected) {
+            next = (next + 1) % menu->browser.entries;
+        }
+
+        menu->browser.selected = next;
+        menu->browser.entry = &menu->browser.list[menu->browser.selected];
+        sound_play_effect(SFX_CURSOR);
+        return;
+    }
+
     if (menu->actions.enter && menu->browser.entry) {
         sound_play_effect(SFX_ENTER);
         switch (menu->browser.entry->type) {
@@ -821,9 +838,10 @@ static void draw (menu_t *menu, surface_t *d) {
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
         "%s\n"
-        "^%02XB: Back^00",
+        "^%02XB: Back^00 | ^%02XL/Z: Random^00",
         menu->browser.entries == 0 ? "" : action,
-        path_is_root(menu->browser.directory) ? STL_GRAY : STL_DEFAULT
+        path_is_root(menu->browser.directory) ? STL_GRAY : STL_DEFAULT,
+        menu->browser.entries > 1 ? STL_DEFAULT : STL_GRAY
     );
 
     ui_components_actions_bar_text_draw(
