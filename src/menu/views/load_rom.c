@@ -1,16 +1,22 @@
 #include "../bookkeeping.h"
 #include "../cart_load.h"
 #include "../datel_codes.h"
+#include "../playtime.h"
 #include "../rom_info.h"
 #include "../sound.h"
 #include "boot/boot.h"
 #include "utils/fs.h"
 #include "views.h"
+#include "../ui_components/constants.h"
+#include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 static bool show_extra_info_message = false;
 static component_boxart_t *boxart;
 static char *rom_filename = NULL;
+static int details_scroll = 0;
+static int details_max_scroll = 0;
 
 static int16_t current_metadata_image_index = 0;
 static const file_image_type_t metadata_image_filename_cache[] = {
@@ -401,6 +407,58 @@ static component_context_menu_t options_context_menu = { .list = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static void format_duration (char *out, size_t out_len, uint64_t seconds) {
+    uint64_t hrs = seconds / 3600;
+    uint64_t mins = (seconds % 3600) / 60;
+    uint64_t secs = seconds % 60;
+    if (hrs > 0) {
+        snprintf(out, out_len, "%lluh %llum %llus", (unsigned long long)hrs, (unsigned long long)mins, (unsigned long long)secs);
+    } else if (mins > 0) {
+        snprintf(out, out_len, "%llum %llus", (unsigned long long)mins, (unsigned long long)secs);
+    } else {
+        snprintf(out, out_len, "%llus", (unsigned long long)secs);
+    }
+}
+
+static void format_last_played (char *out, size_t out_len, int64_t ts) {
+    if (ts <= 0) {
+        snprintf(out, out_len, "Never");
+        return;
+    }
+    time_t t = (time_t)ts;
+    char *s = ctime(&t);
+    if (!s) {
+        snprintf(out, out_len, "Unknown");
+        return;
+    }
+    // ctime adds trailing newline
+    size_t len = strnlen(s, out_len - 1);
+    if (len > 0 && s[len - 1] == '\n') {
+        len--;
+    }
+    snprintf(out, out_len, "%.*s", (int)len, s);
+}
+
+static void paragraph_builder_add_text(const char *text) {
+    const char *start = text;
+    const char *p = text;
+    while (*p) {
+        if (*p == '\n') {
+            if (p > start) {
+                rdpq_paragraph_builder_span(start, (size_t)(p - start));
+            }
+            rdpq_paragraph_builder_newline();
+            p++;
+            start = p;
+            continue;
+        }
+        p++;
+    }
+    if (p > start) {
+        rdpq_paragraph_builder_span(start, (size_t)(p - start));
+    }
+}
+
 static void process (menu_t *menu) {
     if (ui_components_context_menu_process(menu, &options_context_menu)) {
         return;
@@ -427,6 +485,19 @@ static void process (menu_t *menu) {
     } else if (menu->actions.go_left) {
         iterate_metadata_image(menu, -1);
         sound_play_effect(SFX_CURSOR);
+    } else if (!show_extra_info_message && (menu->actions.go_down || menu->actions.go_up)) {
+        int step = menu->actions.go_fast ? 48 : 12;
+        if (menu->actions.go_down) {
+            details_scroll += step;
+            if (details_scroll > details_max_scroll) {
+                details_scroll = details_max_scroll;
+            }
+        } else if (menu->actions.go_up) {
+            details_scroll -= step;
+            if (details_scroll < 0) {
+                details_scroll = 0;
+            }
+        }
     }
 }
 
@@ -448,33 +519,81 @@ static void draw (menu_t *menu, surface_t *d) {
             rom_filename
         );
 
-        ui_components_main_text_draw(
-            STL_DEFAULT,
-            ALIGN_LEFT, VALIGN_TOP,
-            "\n\n\t%.300s\n",
-            format_rom_description(menu)
-            
-        );
+        playtime_entry_t *pt = playtime_get(&menu->playtime, path_get(menu->load.rom_path));
+        char total_buf[64];
+        char last_session_buf[64];
+        char last_played_buf[64];
+        if (pt) {
+            format_duration(total_buf, sizeof(total_buf), pt->total_seconds);
+            format_duration(last_session_buf, sizeof(last_session_buf), pt->last_session_seconds);
+            format_last_played(last_played_buf, sizeof(last_played_buf), pt->last_played);
+        } else {
+            snprintf(total_buf, sizeof(total_buf), "0s");
+            snprintf(last_session_buf, sizeof(last_session_buf), "0s");
+            snprintf(last_played_buf, sizeof(last_played_buf), "Never");
+        }
 
-        ui_components_main_text_draw(
-            STL_DEFAULT,
-            ALIGN_LEFT, VALIGN_TOP,
-            "\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        char details[2048];
+        snprintf(details, sizeof(details),
+            "Description:\n\t%.300s\n\n"
             "Datel Cheats:\t\t%s\n"
             "Patches:\t\t\t%s\n"
             "TV region:\t\t%s\n"
             "Expansion PAK:\t%s\n"
             "Rumble PAK:\t\t%s\n"
             "Transfer PAK:\t\t%s\n"
-            "Save type:\t\t%s\n",
+            "Save type:\t\t%s\n"
+            "Playtime:\t\t%s\n"
+            "Last session:\t\t%s\n"
+            "Last played:\t\t%s\n",
+            format_rom_description(menu),
             format_boolean_type(menu->load.rom_info.settings.cheats_enabled),
             format_boolean_type(menu->load.rom_info.settings.patches_enabled),
             format_rom_tv_type(rom_info_get_tv_type(&menu->load.rom_info)),
             format_rom_expansion_pak_info(menu->load.rom_info.features.expansion_pak),
             format_rom_pak_feature_info(menu->load.rom_info.features.rumble_pak),
             format_rom_pak_feature_info(menu->load.rom_info.features.transfer_pak),
-            format_rom_save_type(rom_info_get_save_type(&menu->load.rom_info), menu->load.rom_info.features.controller_pak)
+            format_rom_save_type(rom_info_get_save_type(&menu->load.rom_info), menu->load.rom_info.features.controller_pak),
+            total_buf,
+            last_session_buf,
+            last_played_buf
         );
+
+        int base_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TEXT_OFFSET_VERTICAL + 18;
+        int visible_height = LAYOUT_ACTIONS_SEPARATOR_Y - base_y - (TEXT_MARGIN_VERTICAL * 2);
+        if (visible_height < 0) {
+            visible_height = 0;
+        }
+
+        rdpq_paragraph_builder_begin(
+            &(rdpq_textparms_t) {
+                .width = VISIBLE_AREA_WIDTH - (TEXT_MARGIN_HORIZONTAL * 2),
+                .height = 10000,
+                .wrap = WRAP_WORD,
+                .line_spacing = TEXT_LINE_SPACING_ADJUST,
+            },
+            FNT_DEFAULT,
+            NULL
+        );
+        rdpq_paragraph_builder_style(STL_DEFAULT);
+        paragraph_builder_add_text(details);
+        rdpq_paragraph_t *layout = rdpq_paragraph_builder_end();
+
+        int total_height = layout->bbox.y1 - layout->bbox.y0;
+        details_max_scroll = total_height > visible_height ? (total_height - visible_height) : 0;
+        if (details_scroll > details_max_scroll) {
+            details_scroll = details_max_scroll;
+        }
+        if (details_scroll < 0) {
+            details_scroll = 0;
+        }
+
+        rdpq_paragraph_render(
+            layout,
+            VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL,
+            base_y - details_scroll
+        );
+        rdpq_paragraph_free(layout);
 
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
@@ -566,6 +685,8 @@ static void load (menu_t *menu) {
         return;
     }
 
+    playtime_start_session(&menu->playtime, path_get(menu->load.rom_path), menu->current_time);
+
     bookkeeping_history_add(&menu->bookkeeping, menu->load.rom_path, NULL, BOOKKEEPING_TYPE_ROM);
 
     menu->next_mode = MENU_MODE_BOOT;
@@ -613,6 +734,8 @@ static void deinit (void) {
     boxart = NULL;
     current_metadata_image_index = 0;
     metadata_images_scanned = false;
+    details_scroll = 0;
+    details_max_scroll = 0;
 
     // Clear availability cache
     for (uint16_t i = 0; i < metadata_image_filename_cache_length; i++) {

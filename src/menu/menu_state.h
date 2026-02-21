@@ -16,6 +16,7 @@
 #include "disk_info.h"
 #include "flashcart/flashcart.h"
 #include "path.h"
+#include "playtime.h"
 #include "rom_info.h"
 #include "settings.h"
 #include "bookkeeping.h"
@@ -95,6 +96,7 @@ typedef struct {
     const char *storage_prefix;
     settings_t settings;
     bookkeeping_t bookkeeping;
+    playtime_db_t playtime;
     boot_params_t *boot_params;
 
     char *error_message;

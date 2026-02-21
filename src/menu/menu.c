@@ -18,6 +18,7 @@
 #include "menu_state.h"
 #include "menu.h"
 #include "mp3_player.h"
+#include "playtime.h"
 #include "png_decoder.h"
 #include "settings.h"
 #include "sound.h"
@@ -29,6 +30,7 @@
 #define MENU_SETTINGS_FILE          "config.ini"
 #define MENU_CUSTOM_FONT_FILE       "custom.font64"
 #define MENU_ROM_LOAD_HISTORY_FILE  "history.ini"
+#define MENU_ROM_PLAYTIME_FILE      "playtime.ini"
 
 #define MENU_CACHE_DIRECTORY        "cache"
 #define BACKGROUND_CACHE_FILE       "background.data"
@@ -93,6 +95,13 @@ static void menu_init (boot_params_t *boot_params) {
     menu->load.load_history_id = -1;
     menu->load.load_favorite_id = -1;
     path_pop(path);
+
+    path_push(path, MENU_ROM_PLAYTIME_FILE);
+    playtime_init(path_get(path));
+    playtime_load(&menu->playtime);
+    time(&menu->current_time);
+    playtime_finalize_active(&menu->playtime, menu->current_time);
+    path_pop(path);
   
     if (menu->settings.pal60_compatibility_mode) { // hardware VI mods that dont really understand the output
         tv_type = get_tv_type();
@@ -147,6 +156,9 @@ static void menu_deinit (menu_t *menu) {
     hdmi_send_game_id(menu->boot_params);
 
     ui_components_background_free();
+
+    playtime_save(&menu->playtime);
+    playtime_free(&menu->playtime);
 
     path_free(menu->load.disk_slots.primary.disk_path);
     path_free(menu->load.rom_path);
