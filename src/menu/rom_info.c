@@ -834,6 +834,17 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
                                  sizeof(rom_info->metadata.long_desc));
         path_free(description_path);
     }
+
+    // Common metadata fallback used by our generated sets.
+    if (rom_info->metadata.long_desc[0] == '\0') {
+        path_t *description_path = path_clone(directory);
+        path_push(description_path, "description.txt");
+        if (file_exists(path_get(description_path))) {
+            read_text_file_to_buffer(path_get(description_path), rom_info->metadata.long_desc,
+                                     sizeof(rom_info->metadata.long_desc));
+        }
+        path_free(description_path);
+    }
 }
 
 static void load_rom_metadata (path_t *rom_path, rom_info_t *rom_info) {
