@@ -2,6 +2,7 @@
 #include <miniz.h>
 #include <miniz_zip.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -21,6 +22,7 @@ static const char *image_extensions[] = { "png", NULL };
 static const char *music_extensions[] = { "mp3", NULL };
 static const char *n64_rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
 static const char *patch_extensions[] = { "bps", "ips", "aps", "ups", "xdelta", NULL };
+static const char *playlist_extensions[] = { "m3u", "m3u8", NULL };
 // TODO: "eep", "sra", "srm", "fla" could be used if transfered from different flashcarts.
 static const char *save_extensions[] = { "sav", NULL };
 static const char *text_extensions[] = { "txt", "ini", "yml", "yaml", NULL };
@@ -57,6 +59,8 @@ static const struct substr hidden_prefixes[] = {
     substr("._"), // macOS "AppleDouble" metadata files
 };
 #define HIDDEN_PREFIXES_COUNT (sizeof(hidden_prefixes) / sizeof(hidden_prefixes[0]))
+
+static char *normalize_path (const char *path);
 
 
 static bool path_is_hidden (path_t *path) {
@@ -131,6 +135,10 @@ static int compare_entry (const void *pa, const void *pb) {
             return -1;
         } else if (b->type == ENTRY_TYPE_ROM_PATCH) {
             return 1;
+        } else if (a->type == ENTRY_TYPE_PLAYLIST) {
+            return -1;
+        } else if (b->type == ENTRY_TYPE_PLAYLIST) {
+            return 1;
         } else if (a->type == ENTRY_TYPE_SAVE) {
             return -1;
         } else if (b->type == ENTRY_TYPE_SAVE) {
@@ -150,9 +158,11 @@ static void browser_list_free (menu_t *menu) {
         mz_zip_reader_end(&menu->browser.zip);
     }
     menu->browser.archive = false;
+    menu->browser.playlist = false;
 
     for (int i = menu->browser.entries - 1; i >= 0; i--) {
         free(menu->browser.list[i].name);
+        free(menu->browser.list[i].path);
     }
 
     free(menu->browser.list);
@@ -193,6 +203,7 @@ static bool load_archive (menu_t *menu) {
             browser_list_free(menu);
             return true;
         }
+        entry->path = NULL;
 
         entry->type = ENTRY_TYPE_ARCHIVED;
         entry->size = info.m_uncomp_size;
@@ -207,6 +218,198 @@ static bool load_archive (menu_t *menu) {
     qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry);
 
     return false;
+}
+
+static char *trim_line (char *line) {
+    if (line == NULL) {
+        return NULL;
+    }
+
+    size_t len = strlen(line);
+    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' || line[len - 1] == ' ' || line[len - 1] == '\t')) {
+        line[len - 1] = '\0';
+        len--;
+    }
+
+    while (*line == ' ' || *line == '\t') {
+        line++;
+    }
+
+    return line;
+}
+
+static bool load_playlist (menu_t *menu) {
+    browser_list_free(menu);
+
+    FILE *f = fopen(path_get(menu->browser.directory), "r");
+    if (f == NULL) {
+        return true;
+    }
+
+    menu->browser.playlist = true;
+
+    path_t *playlist_dir = path_clone(menu->browser.directory);
+    path_pop(playlist_dir);
+
+    char line[1024];
+    while (fgets(line, sizeof(line), f) != NULL) {
+        char *trimmed = trim_line(line);
+        if (trimmed == NULL || trimmed[0] == '\0' || trimmed[0] == '#') {
+            continue;
+        }
+
+        path_t *entry_path = NULL;
+        if (strstr(trimmed, ":/") != NULL) {
+            entry_path = path_create(trimmed);
+        } else if (trimmed[0] == '/') {
+            entry_path = path_init(menu->storage_prefix, trimmed);
+        } else {
+            entry_path = path_clone(playlist_dir);
+            path_push(entry_path, trimmed);
+        }
+
+        char *normalized = normalize_path(path_get(entry_path));
+        if (!normalized) {
+            path_free(entry_path);
+            fclose(f);
+            browser_list_free(menu);
+            return true;
+        }
+
+        if (!file_has_extensions(normalized, n64_rom_extensions)) {
+            free(normalized);
+            path_free(entry_path);
+            continue;
+        }
+
+        menu->browser.list = realloc(menu->browser.list, (menu->browser.entries + 1) * sizeof(entry_t));
+
+        entry_t *entry = &menu->browser.list[menu->browser.entries++];
+        entry->name = strdup(file_basename(normalized));
+        if (!entry->name) {
+            free(normalized);
+            path_free(entry_path);
+            fclose(f);
+            browser_list_free(menu);
+            return true;
+        }
+
+        entry->path = normalized;
+        if (!entry->path) {
+            free(normalized);
+            path_free(entry_path);
+            fclose(f);
+            browser_list_free(menu);
+            return true;
+        }
+
+        entry->type = ENTRY_TYPE_ROM;
+        entry->size = -1;
+        entry->index = menu->browser.entries - 1;
+
+        path_free(entry_path);
+    }
+
+    path_free(playlist_dir);
+    fclose(f);
+
+    if (menu->browser.entries > 0) {
+        menu->browser.selected = 0;
+        menu->browser.entry = &menu->browser.list[menu->browser.selected];
+    }
+
+    return false;
+}
+
+static char *normalize_path (const char *path) {
+    if (path == NULL) {
+        return NULL;
+    }
+
+    const char *prefix_pos = strstr(path, ":/");
+    size_t prefix_len = 0;
+    if (prefix_pos != NULL) {
+        prefix_len = (size_t)(prefix_pos - path) + 2;
+    } else if (path[0] == '/') {
+        prefix_len = 1;
+    }
+
+    size_t path_len = strlen(path);
+    char *work = malloc(path_len + 1);
+    if (!work) {
+        return NULL;
+    }
+    memcpy(work, path, path_len + 1);
+
+    char *segments_start = work + prefix_len;
+    size_t max_segments = (path_len / 2) + 1;
+    char **segments = malloc(max_segments * sizeof(char *));
+    if (!segments) {
+        free(work);
+        return NULL;
+    }
+
+    size_t seg_count = 0;
+    char *cursor = segments_start;
+    while (*cursor) {
+        while (*cursor == '/') {
+            cursor++;
+        }
+        if (*cursor == '\0') {
+            break;
+        }
+        char *seg = cursor;
+        while (*cursor && *cursor != '/') {
+            cursor++;
+        }
+        if (*cursor) {
+            *cursor++ = '\0';
+        }
+
+        if (strcmp(seg, ".") == 0 || strcmp(seg, "") == 0) {
+            continue;
+        }
+        if (strcmp(seg, "..") == 0) {
+            if (seg_count > 0) {
+                seg_count--;
+            }
+            continue;
+        }
+        segments[seg_count++] = seg;
+    }
+
+    size_t out_cap = path_len + 2;
+    char *out = malloc(out_cap);
+    if (!out) {
+        free(segments);
+        free(work);
+        return NULL;
+    }
+
+    size_t out_len = 0;
+    if (prefix_len > 0) {
+        memcpy(out, path, prefix_len);
+        out_len = prefix_len;
+    }
+
+    for (size_t i = 0; i < seg_count; i++) {
+        if (out_len > 0 && out[out_len - 1] != '/') {
+            out[out_len++] = '/';
+        }
+        size_t seg_len = strlen(segments[i]);
+        memcpy(out + out_len, segments[i], seg_len);
+        out_len += seg_len;
+    }
+
+    if (out_len == 0) {
+        out[out_len++] = '.';
+    }
+
+    out[out_len] = '\0';
+
+    free(segments);
+    free(work);
+    return out;
 }
 
 static bool load_directory (menu_t *menu) {
@@ -248,6 +451,7 @@ static bool load_directory (menu_t *menu) {
                 browser_list_free(menu);
                 return true;
             }
+            entry->path = NULL;
 
             if (info.d_type == DT_DIR) {
                 entry->type = ENTRY_TYPE_DIR;
@@ -271,6 +475,8 @@ static bool load_directory (menu_t *menu) {
                 entry->type = ENTRY_TYPE_MUSIC;
             } else if (file_has_extensions(entry->name, archive_extensions)) {
                 entry->type = ENTRY_TYPE_ARCHIVE;
+            } else if (file_has_extensions(entry->name, playlist_extensions)) {
+                entry->type = ENTRY_TYPE_PLAYLIST;
             } else {
                 entry->type = ENTRY_TYPE_OTHER;
             }
@@ -381,6 +587,22 @@ static bool select_file (menu_t *menu, path_t *file) {
     return false;
 }
 
+static bool push_playlist (menu_t *menu, char *playlist) {
+    path_t *previous_directory = path_clone(menu->browser.directory);
+
+    path_push(menu->browser.directory, playlist);
+
+    if (load_playlist(menu)) {
+        path_free(menu->browser.directory);
+        menu->browser.directory = previous_directory;
+        return true;
+    }
+
+    path_free(previous_directory);
+
+    return false;
+}
+
 static void show_properties (menu_t *menu, void *arg) {
     menu->next_mode = menu->browser.entry->type == ENTRY_TYPE_ARCHIVED ? MENU_MODE_EXTRACT_FILE : MENU_MODE_FILE_INFO;
 }
@@ -427,6 +649,13 @@ static component_context_menu_t entry_context_menu = {
     }
 };
 
+static component_context_menu_t playlist_context_menu = {
+    .list = {
+        { .text = "Show entry properties", .action = show_properties },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static component_context_menu_t archive_context_menu = {
     .list = {
         { .text = "Show entry properties", .action = show_properties },
@@ -453,7 +682,14 @@ static component_context_menu_t settings_context_menu = {
 };
 
 static void process (menu_t *menu) {
-    if (ui_components_context_menu_process(menu, menu->browser.archive ? &archive_context_menu : &entry_context_menu)) {
+    component_context_menu_t *active_context_menu = &entry_context_menu;
+    if (menu->browser.archive) {
+        active_context_menu = &archive_context_menu;
+    } else if (menu->browser.playlist) {
+        active_context_menu = &playlist_context_menu;
+    }
+
+    if (ui_components_context_menu_process(menu, active_context_menu)) {
         return;
     }
 
@@ -487,6 +723,12 @@ static void process (menu_t *menu) {
                 if (push_directory(menu, menu->browser.entry->name, true)) {
                     menu->browser.valid = false;
                     menu_show_error(menu, "Couldn't open file archive");
+                }
+                break;
+            case ENTRY_TYPE_PLAYLIST:
+                if (push_playlist(menu, menu->browser.entry->name)) {
+                    menu->browser.valid = false;
+                    menu_show_error(menu, "Couldn't open playlist");
                 }
                 break;
             case ENTRY_TYPE_ARCHIVED:
@@ -534,7 +776,7 @@ static void process (menu_t *menu) {
         }
         sound_play_effect(SFX_EXIT);
     } else if (menu->actions.options && menu->browser.entry) {
-        ui_components_context_menu_show(menu->browser.archive ? &archive_context_menu : &entry_context_menu);
+        ui_components_context_menu_show(active_context_menu);
         sound_play_effect(SFX_SETTING);
     } else if (menu->actions.settings) {
         ui_components_context_menu_show(&settings_context_menu);
@@ -570,6 +812,7 @@ static void draw (menu_t *menu, surface_t *d) {
             case ENTRY_TYPE_TEXT: action = "A: View"; break;
             case ENTRY_TYPE_MUSIC: action = "A: Play"; break;
             case ENTRY_TYPE_ARCHIVE: action = "A: Open"; break;
+            case ENTRY_TYPE_PLAYLIST: action = "A: Open"; break;
             default: action = "A: Info"; break;
         }
     }
@@ -608,7 +851,13 @@ static void draw (menu_t *menu, surface_t *d) {
         );
     }
 
-    ui_components_context_menu_draw(menu->browser.archive ? &archive_context_menu : &entry_context_menu);
+    if (menu->browser.archive) {
+        ui_components_context_menu_draw(&archive_context_menu);
+    } else if (menu->browser.playlist) {
+        ui_components_context_menu_draw(&playlist_context_menu);
+    } else {
+        ui_components_context_menu_draw(&entry_context_menu);
+    }
 
     ui_components_context_menu_draw(&settings_context_menu);
 
@@ -620,6 +869,7 @@ void view_browser_init (menu_t *menu) {
     if (!menu->browser.valid) {
         ui_components_context_menu_init(&entry_context_menu);
         ui_components_context_menu_init(&archive_context_menu);
+        ui_components_context_menu_init(&playlist_context_menu);
         ui_components_context_menu_init(&settings_context_menu);
         if (load_directory(menu)) {
             path_free(menu->browser.directory);

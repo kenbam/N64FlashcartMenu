@@ -275,7 +275,11 @@ void view_load_disk_init (menu_t *menu) {
         }
     } else {
         // Existing browser path logic
-        menu->load.disk_slots.primary.disk_path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
+        if (menu->browser.entry && menu->browser.entry->path) {
+            menu->load.disk_slots.primary.disk_path = path_create(menu->browser.entry->path);
+        } else {
+            menu->load.disk_slots.primary.disk_path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
+        }
     }
 
     disk_filename = path_last_get(menu->load.disk_slots.primary.disk_path);

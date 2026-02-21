@@ -58,6 +58,7 @@ typedef enum {
     ENTRY_TYPE_IMAGE,
     ENTRY_TYPE_MUSIC,
     ENTRY_TYPE_OTHER,
+    ENTRY_TYPE_PLAYLIST,
     ENTRY_TYPE_ROM,
     ENTRY_TYPE_ROM_CHEAT,
     ENTRY_TYPE_ROM_PATCH,
@@ -70,6 +71,7 @@ typedef enum {
 /** @brief File Entry Structure */
 typedef struct {
     char *name;
+    char *path;
     entry_type_t type;
     int64_t size;
     int32_t index;
@@ -118,6 +120,7 @@ typedef struct {
         bool valid;
         bool reload;
         bool archive;
+        bool playlist;
         mz_zip_archive zip;
         path_t *directory;
         entry_t *list;

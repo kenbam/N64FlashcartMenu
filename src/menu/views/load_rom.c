@@ -634,7 +634,11 @@ void view_load_rom_init (menu_t *menu) {
         } else if(menu->load.load_favorite_id != -1) {
             menu->load.rom_path = path_clone(menu->bookkeeping.favorite_items[menu->load.load_favorite_id].primary_path);
         } else {
-            menu->load.rom_path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
+            if (menu->browser.entry && menu->browser.entry->path) {
+                menu->load.rom_path = path_create(menu->browser.entry->path);
+            } else {
+                menu->load.rom_path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
+            }
         }
 
         rom_filename = path_last_get(menu->load.rom_path);

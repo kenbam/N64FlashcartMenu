@@ -54,7 +54,12 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_file_info_init (menu_t *menu) {
-    path_t *path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
+    path_t *path = NULL;
+    if (menu->browser.entry && menu->browser.entry->path) {
+        path = path_create(menu->browser.entry->path);
+    } else {
+        path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
+    }
 
     if (stat(path_get(path), &st)) {
         menu_show_error(menu, "Couldn't obtain file information");
