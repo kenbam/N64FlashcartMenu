@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <mini.c/src/mini.h>
@@ -706,6 +707,23 @@ static rom_tv_type_t determine_tv_type (rom_destination_type_t rom_destination_c
 }
 
 static void extract_rom_info (match_t *match, rom_header_t *rom_header, rom_info_t *rom_info) {
+    if (rom_info->metadata.name) {
+        free(rom_info->metadata.name);
+        rom_info->metadata.name = NULL;
+    }
+    if (rom_info->metadata.author) {
+        free(rom_info->metadata.author);
+        rom_info->metadata.author = NULL;
+    }
+    if (rom_info->metadata.short_desc) {
+        free(rom_info->metadata.short_desc);
+        rom_info->metadata.short_desc = NULL;
+    }
+    if (rom_info->metadata.long_desc) {
+        free(rom_info->metadata.long_desc);
+        rom_info->metadata.long_desc = NULL;
+    }
+    rom_info->metadata.age_rating = -1;
     rom_info->cic_type = detect_cic_type(rom_header->ipl3);
 
     if (match->type == MATCH_TYPE_HOMEBREW_HEADER) {
@@ -758,6 +776,115 @@ static void extract_rom_info (match_t *match, rom_header_t *rom_header, rom_info
     rom_info->metadata.esrb_age_rating = ROM_ESRB_AGE_RATING_NONE;
     rom_info->settings.cheats_enabled = false;
     rom_info->settings.patches_enabled = false;
+}
+
+static char *read_text_file (char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    setbuf(f, NULL);
+    if (fseek(f, 0, SEEK_END)) {
+        fclose(f);
+        return NULL;
+    }
+    long size = ftell(f);
+    if (size < 0) {
+        fclose(f);
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_SET)) {
+        fclose(f);
+        return NULL;
+    }
+    char *buf = malloc((size_t)size + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t read = fread(buf, 1, (size_t)size, f);
+    fclose(f);
+    buf[read] = '\0';
+    return buf;
+}
+
+static void load_rom_metadata_from_directory (path_t *dir, rom_info_t *rom_info) {
+    path_t *meta_path = path_clone(dir);
+    path_push(meta_path, "metadata.ini");
+    if (!file_exists(path_get(meta_path))) {
+        path_free(meta_path);
+        return;
+    }
+
+    mini_t *meta_ini = mini_load(path_get(meta_path));
+    if (!meta_ini) {
+        path_free(meta_path);
+        return;
+    }
+
+    const char *name = mini_get_string(meta_ini, "meta", "name", NULL);
+    const char *author = mini_get_string(meta_ini, "meta", "author", NULL);
+    const char *short_desc = mini_get_string(meta_ini, "meta", "short-desc", NULL);
+    const char *long_desc = mini_get_string(meta_ini, "meta", "long-desc", NULL);
+    int age_rating = mini_get_int(meta_ini, "meta", "age-rating", -1);
+
+    if ((!rom_info->metadata.name) && name && name[0]) {
+        rom_info->metadata.name = strdup(name);
+    }
+    if ((!rom_info->metadata.author) && author && author[0]) {
+        rom_info->metadata.author = strdup(author);
+    }
+    if ((!rom_info->metadata.short_desc) && short_desc && short_desc[0]) {
+        rom_info->metadata.short_desc = strdup(short_desc);
+    }
+    if ((!rom_info->metadata.long_desc) && long_desc && long_desc[0]) {
+        path_t *desc_path = path_clone(dir);
+        path_push(desc_path, (char *)long_desc);
+        char *desc = read_text_file(path_get(desc_path));
+        if (desc) {
+            rom_info->metadata.long_desc = desc;
+        }
+        path_free(desc_path);
+    }
+    if ((rom_info->metadata.age_rating < 0) && (age_rating >= 0)) {
+        rom_info->metadata.age_rating = age_rating;
+    }
+
+    mini_free(meta_ini);
+    path_free(meta_path);
+}
+
+static void load_rom_metadata (path_t *rom_path, rom_info_t *rom_info) {
+    char *path = path_get(rom_path);
+    char *prefix_end = strstr(path, ":/");
+    if (!prefix_end) {
+        return;
+    }
+    char prefix[16];
+    size_t prefix_len = (size_t)(prefix_end - path) + 2;
+    if (prefix_len >= sizeof(prefix)) {
+        return;
+    }
+    memcpy(prefix, path, prefix_len);
+    prefix[prefix_len] = '\0';
+
+    char game_code[5] = {0};
+    memcpy(game_code, rom_info->game_code, 4);
+
+    path_t *meta_dir = path_init(prefix, "menu/metadata");
+    path_push(meta_dir, (char[]){ game_code[0], 0 });
+    path_push(meta_dir, (char[]){ game_code[1], 0 });
+    path_push(meta_dir, (char[]){ game_code[2], 0 });
+    path_push(meta_dir, (char[]){ game_code[3], 0 });
+
+    load_rom_metadata_from_directory(meta_dir, rom_info);
+
+    if (game_code[3] != '\0') {
+        path_pop(meta_dir);
+        load_rom_metadata_from_directory(meta_dir, rom_info);
+    }
+
+    path_free(meta_dir);
 }
 
 static void load_rom_config_from_file (path_t *path, rom_info_t *rom_info) {
@@ -957,6 +1084,7 @@ rom_err_t rom_config_load (path_t *path, rom_info_t *rom_info) {
     extract_rom_info(&match, &rom_header, rom_info);
 
     load_rom_config_from_file(path, rom_info);
+    load_rom_metadata(path, rom_info);
 
     return ROM_OK;
 }

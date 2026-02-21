@@ -17,6 +17,7 @@ static component_boxart_t *boxart;
 static char *rom_filename = NULL;
 static int details_scroll = 0;
 static int details_max_scroll = 0;
+static bool boxart_retry_pending = false;
 
 static int16_t current_metadata_image_index = 0;
 static const file_image_type_t metadata_image_filename_cache[] = {
@@ -100,9 +101,37 @@ static void scan_metadata_images(menu_t *menu) {
 }
 
 static const char *format_rom_description(menu_t *menu) {
-    char *rom_description = NULL;
+    if (menu->load.rom_info.metadata.long_desc && menu->load.rom_info.metadata.long_desc[0]) {
+        return menu->load.rom_info.metadata.long_desc;
+    }
+    if (menu->load.rom_info.metadata.short_desc && menu->load.rom_info.metadata.short_desc[0]) {
+        return menu->load.rom_info.metadata.short_desc;
+    }
+    return "No description available.";
+}
 
-    return rom_description ? rom_description : "No description available.";
+static void retry_boxart_load (menu_t *menu) {
+    if (!boxart_retry_pending || boxart != NULL) {
+        return;
+    }
+
+    scan_metadata_images(menu);
+
+    if (!metadata_image_available[current_metadata_image_index]) {
+        boxart_retry_pending = false;
+        return;
+    }
+
+    boxart = ui_components_boxart_init(
+        menu->storage_prefix,
+        menu->load.rom_info.game_code,
+        menu->load.rom_info.title,
+        metadata_image_filename_cache[current_metadata_image_index]
+    );
+
+    if (boxart != NULL) {
+        boxart_retry_pending = false;
+    }
 }
 
 static char *convert_error_message (rom_err_t err) {
@@ -534,7 +563,21 @@ static void draw (menu_t *menu, surface_t *d) {
         }
 
         char details[2048];
+        const char *publisher = menu->load.rom_info.metadata.author ? menu->load.rom_info.metadata.author : "Unknown";
+        const char *display_name = menu->load.rom_info.metadata.name ? menu->load.rom_info.metadata.name : rom_filename;
+        const char *esrb = format_esrb_age_rating(menu->load.rom_info.metadata.esrb_age_rating);
+        char age_buf[16];
+        if (menu->load.rom_info.metadata.age_rating >= 0) {
+            snprintf(age_buf, sizeof(age_buf), "%d+", (int)menu->load.rom_info.metadata.age_rating);
+        } else {
+            snprintf(age_buf, sizeof(age_buf), "Unknown");
+        }
+
         snprintf(details, sizeof(details),
+            "Title:\t\t\t%s\n"
+            "Publisher:\t\t%s\n"
+            "ESRB Rating:\t\t%s\n"
+            "Age Rating:\t\t%s\n\n"
             "Description:\n\t%.300s\n\n"
             "Datel Cheats:\t\t%s\n"
             "Patches:\t\t\t%s\n"
@@ -546,6 +589,10 @@ static void draw (menu_t *menu, surface_t *d) {
             "Playtime:\t\t%s\n"
             "Last session:\t\t%s\n"
             "Last played:\t\t%s\n",
+            display_name,
+            publisher,
+            esrb,
+            age_buf,
             format_rom_description(menu),
             format_boolean_type(menu->load.rom_info.settings.cheats_enabled),
             format_boolean_type(menu->load.rom_info.settings.patches_enabled),
@@ -736,6 +783,7 @@ static void deinit (void) {
     metadata_images_scanned = false;
     details_scroll = 0;
     details_max_scroll = 0;
+    boxart_retry_pending = false;
 
     // Clear availability cache
     for (uint16_t i = 0; i < metadata_image_filename_cache_length; i++) {
@@ -786,6 +834,7 @@ void view_load_rom_init (menu_t *menu) {
 #endif
         current_metadata_image_index = 0;
         boxart = ui_components_boxart_init(menu->storage_prefix, menu->load.rom_info.game_code, menu->load.rom_info.title, IMAGE_BOXART_FRONT);
+        boxart_retry_pending = (boxart == NULL);
         ui_components_context_menu_init(&options_context_menu);
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     }
@@ -795,6 +844,8 @@ void view_load_rom_init (menu_t *menu) {
 
 void view_load_rom_display (menu_t *menu, surface_t *display) {
     process(menu);
+
+    retry_boxart_load(menu);
 
     draw(menu, display);
 
