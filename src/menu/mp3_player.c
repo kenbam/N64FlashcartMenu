@@ -28,7 +28,7 @@ typedef struct {
     FILE *f; /**< File pointer */
     size_t file_size; /**< Size of the file */
     size_t data_start; /**< Start position of the data */
-    uint8_t buffer[16 * 1024]; /**< Buffer for reading data */
+    uint8_t buffer[64 * 1024]; /**< Buffer for reading data */
     uint8_t *buffer_ptr; /**< Pointer to the current position in the buffer */
     size_t buffer_left; /**< Amount of data left in the buffer */
 
@@ -153,6 +153,10 @@ void mp3player_mixer_init (void) {
  * @return mp3player_err_t Error code.
  */
 mp3player_err_t mp3player_init (void) {
+    if (p != NULL) {
+        mp3player_deinit();
+    }
+
     p = calloc(1, sizeof(mp3player_t));
 
     if (p == NULL) {
@@ -181,6 +185,10 @@ mp3player_err_t mp3player_init (void) {
  * @brief Deinitialize the MP3 player.
  */
 void mp3player_deinit (void) {
+    if (p == NULL) {
+        return;
+    }
+
     mp3player_unload();
     free(p);
     p = NULL;
@@ -193,6 +201,10 @@ void mp3player_deinit (void) {
  * @return mp3player_err_t Error code.
  */
 mp3player_err_t mp3player_load (char *path) {
+    if (p == NULL) {
+        return MP3PLAYER_ERR_NO_FILE;
+    }
+
     if (p->loaded) {
         mp3player_unload();
     }
@@ -260,6 +272,10 @@ mp3player_err_t mp3player_load (char *path) {
  * @brief Unload the MP3 file.
  */
 void mp3player_unload (void) {
+    if (p == NULL) {
+        return;
+    }
+
     mp3player_stop();
     if (p->loaded) {
         p->loaded = false;
@@ -273,6 +289,10 @@ void mp3player_unload (void) {
  * @return mp3player_err_t Error code.
  */
 mp3player_err_t mp3player_process (void) {
+    if ((p == NULL) || !p->loaded) {
+        return MP3PLAYER_OK;
+    }
+
     if (ferror(p->f)) {
         mp3player_unload();
         return MP3PLAYER_ERR_IO;
@@ -291,6 +311,10 @@ mp3player_err_t mp3player_process (void) {
  * @return true if playing, false otherwise.
  */
 bool mp3player_is_playing (void) {
+    if (p == NULL) {
+        return false;
+    }
+
     return mixer_ch_playing(SOUND_MP3_PLAYER_CHANNEL);
 }
 
@@ -300,6 +324,10 @@ bool mp3player_is_playing (void) {
  * @return true if finished, false otherwise.
  */
 bool mp3player_is_finished (void) {
+    if (p == NULL) {
+        return false;
+    }
+
     return p->loaded && feof(p->f) && (p->buffer_left == 0);
 }
 
@@ -309,6 +337,10 @@ bool mp3player_is_finished (void) {
  * @return mp3player_err_t Error code.
  */
 mp3player_err_t mp3player_play (void) {
+    if (p == NULL) {
+        return MP3PLAYER_ERR_NO_FILE;
+    }
+
     if (!p->loaded) {
         return MP3PLAYER_ERR_NO_FILE;
     }
@@ -364,6 +396,10 @@ void mp3player_mute (bool mute) {
  * @return mp3player_err_t Error code.
  */
 mp3player_err_t mp3player_seek (int seconds) {
+    if (p == NULL) {
+        return MP3PLAYER_ERR_NO_FILE;
+    }
+
     // NOTE: Rough approximation using average bitrate to calculate number of bytes to be skipped.
     //       Good enough but not very accurate for variable bitrate files.
 
@@ -403,7 +439,7 @@ mp3player_err_t mp3player_seek (int seconds) {
  * @return float Duration in seconds.
  */
 float mp3player_get_duration (void) {
-    if (!p->loaded) {
+    if ((p == NULL) || !p->loaded) {
         return 0.0f;
     }
 
@@ -416,7 +452,7 @@ float mp3player_get_duration (void) {
  * @return float Bitrate in kbps.
  */
 float mp3player_get_bitrate (void) {
-    if (!p->loaded) {
+    if ((p == NULL) || !p->loaded) {
         return 0.0f;
     }
 
@@ -429,7 +465,7 @@ float mp3player_get_bitrate (void) {
  * @return int Sample rate in Hz.
  */
 int mp3player_get_samplerate (void) {
-    if (!p->loaded) {
+    if ((p == NULL) || !p->loaded) {
         return 0;
     }
 
@@ -445,7 +481,7 @@ float mp3player_get_progress (void) {
     // NOTE: Rough approximation using file pointer instead of processed samples.
     //       Good enough but not very accurate for variable bitrate files.
 
-    if (!p->loaded) {
+    if ((p == NULL) || !p->loaded) {
         return 0.0f;
     }
 

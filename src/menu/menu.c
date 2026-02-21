@@ -31,6 +31,8 @@
 #define MENU_CUSTOM_FONT_FILE       "custom.font64"
 #define MENU_ROM_LOAD_HISTORY_FILE  "history.ini"
 #define MENU_ROM_PLAYTIME_FILE      "playtime.ini"
+#define MENU_BGM_MP3_FILE           "menu.mp3"
+#define MENU_BGM_MP3_FILE_FALLBACK  "bgm.mp3"
 
 #define MENU_CACHE_DIRECTORY        "cache"
 #define BACKGROUND_CACHE_FILE       "background.data"
@@ -47,6 +49,89 @@ extern int __boot_tvtype;
 /* -- */
 
 static bool interlaced = true;
+static bool menu_bgm_initialized = false;
+static bool menu_bgm_loaded = false;
+static bool menu_bgm_error = false;
+
+static mp3player_err_t menu_bgm_load_file (menu_t *menu, const char *file_name) {
+    path_t *path = path_init(menu->storage_prefix, "/");
+    path_push(path, (char *) file_name);
+
+    if (!file_exists(path_get(path))) {
+        path_free(path);
+        return MP3PLAYER_ERR_NO_FILE;
+    }
+
+    mp3player_err_t err = mp3player_load(path_get(path));
+    path_free(path);
+    return err;
+}
+
+static void menu_bgm_init (menu_t *menu) {
+    if (menu_bgm_initialized || menu_bgm_error) {
+        return;
+    }
+
+    mp3player_err_t err = mp3player_init();
+    if (err != MP3PLAYER_OK) {
+        menu_bgm_error = true;
+        debugf("Menu BGM disabled: mp3 init failed (%d)\n", err);
+        return;
+    }
+
+    menu_bgm_initialized = true;
+
+    err = menu_bgm_load_file(menu, MENU_BGM_MP3_FILE);
+    if (err == MP3PLAYER_ERR_NO_FILE) {
+        err = menu_bgm_load_file(menu, MENU_BGM_MP3_FILE_FALLBACK);
+    }
+
+    if (err == MP3PLAYER_OK) {
+        menu_bgm_loaded = true;
+    } else if (err != MP3PLAYER_ERR_NO_FILE) {
+        menu_bgm_error = true;
+        debugf("Menu BGM disabled: failed to load mp3 (%d)\n", err);
+    }
+}
+
+static void menu_bgm_poll (menu_t *menu) {
+    if (menu->mode == MENU_MODE_MUSIC_PLAYER) {
+        return;
+    }
+
+    menu_bgm_init(menu);
+    if (!menu_bgm_initialized || !menu_bgm_loaded || menu_bgm_error) {
+        return;
+    }
+
+    if (!mp3player_is_playing()) {
+        sound_init_mp3_playback();
+        mp3player_mute(false);
+        mp3player_err_t err = mp3player_play();
+        if (err != MP3PLAYER_OK) {
+            menu_bgm_error = true;
+            debugf("Menu BGM disabled: failed to start playback (%d)\n", err);
+            return;
+        }
+    }
+
+    mp3player_err_t err = mp3player_process();
+    if (err != MP3PLAYER_OK) {
+        menu_bgm_error = true;
+        debugf("Menu BGM disabled: playback error (%d)\n", err);
+    }
+}
+
+static void menu_bgm_deinit (void) {
+    if (!menu_bgm_initialized) {
+        return;
+    }
+
+    mp3player_deinit();
+    menu_bgm_initialized = false;
+    menu_bgm_loaded = false;
+    menu_bgm_error = false;
+}
 
 /**
  * @brief Initialize the menu system.
@@ -156,6 +241,8 @@ static void menu_deinit (menu_t *menu) {
     hdmi_send_game_id(menu->boot_params);
 
     ui_components_background_free();
+
+    menu_bgm_deinit();
 
     playtime_save(&menu->playtime);
     playtime_free(&menu->playtime);
@@ -270,6 +357,8 @@ void menu_run (boot_params_t *boot_params) {
 
             time(&menu->current_time);
         }
+
+        menu_bgm_poll(menu);
 
         sound_poll();
 

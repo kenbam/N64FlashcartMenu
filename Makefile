@@ -11,7 +11,11 @@ OUTPUT_DIR = output
 MENU_VERSION ?= "Rolling release"
 BUILD_TIMESTAMP = "$(shell TZ='UTC' date "+%Y-%m-%d %H:%M:%S %:z")"
 
-include $(N64_INST)/include/n64.mk
+N64_MK := $(firstword $(wildcard $(N64_INST)/include/n64.mk $(N64_INST)/n64.mk))
+ifeq ($(N64_MK),)
+$(error Could not find n64.mk under N64_INST='$(N64_INST)'. Expected '$(N64_INST)/include/n64.mk' or '$(N64_INST)/n64.mk')
+endif
+include $(N64_MK)
 
 N64_ROM_SAVETYPE = none
 N64_ROM_RTC = 1

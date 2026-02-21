@@ -10,7 +10,7 @@
 #include "sound.h"
 
 #define DEFAULT_FREQUENCY   (44100)
-#define NUM_BUFFERS         (4)
+#define NUM_BUFFERS         (8)
 #define NUM_CHANNELS        (16)
 
 static wav64_t sfx_cursor, sfx_error, sfx_enter, sfx_exit, sfx_setting;
