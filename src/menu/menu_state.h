@@ -78,6 +78,13 @@ typedef struct {
     int32_t index;
 } entry_t;
 
+/** @brief Browser sort mode */
+typedef enum {
+    BROWSER_SORT_CUSTOM,
+    BROWSER_SORT_AZ,
+    BROWSER_SORT_ZA,
+} browser_sort_t;
+
 typedef struct {
     path_t *disk_path;
     disk_info_t disk_info;
@@ -130,6 +137,7 @@ typedef struct {
         entry_t *entry;
         int32_t selected;
         path_t* select_file;
+        browser_sort_t sort_mode;
     } browser;
 
     struct {

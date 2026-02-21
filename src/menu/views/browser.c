@@ -156,6 +156,70 @@ static int compare_entry (const void *pa, const void *pb) {
     return strcasecmp((const char *) (a->name), (const char *) (b->name));
 }
 
+static int compare_entry_reverse (const void *pa, const void *pb) {
+    return compare_entry(pb, pa);
+}
+
+static void browser_apply_sort (menu_t *menu) {
+    if ((menu->browser.entries <= 1) || (menu->browser.list == NULL)) {
+        return;
+    }
+
+    entry_t *selected_entry = menu->browser.entry;
+    const char *selected_name = (selected_entry != NULL) ? selected_entry->name : NULL;
+    const char *selected_path = (selected_entry != NULL) ? selected_entry->path : NULL;
+    entry_type_t selected_type = (selected_entry != NULL) ? selected_entry->type : ENTRY_TYPE_OTHER;
+
+    switch (menu->browser.sort_mode) {
+        case BROWSER_SORT_AZ:
+            qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry);
+            break;
+        case BROWSER_SORT_ZA:
+            qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry_reverse);
+            break;
+        case BROWSER_SORT_CUSTOM:
+        default:
+            break;
+    }
+
+    if (selected_name == NULL) {
+        return;
+    }
+
+    for (int32_t i = 0; i < menu->browser.entries; i++) {
+        entry_t *entry = &menu->browser.list[i];
+        if (entry->type != selected_type) {
+            continue;
+        }
+        if (strcmp(entry->name, selected_name) != 0) {
+            continue;
+        }
+        if (((entry->path == NULL) && (selected_path == NULL)) ||
+            ((entry->path != NULL) && (selected_path != NULL) && strcmp(entry->path, selected_path) == 0)) {
+            menu->browser.selected = i;
+            menu->browser.entry = entry;
+            return;
+        }
+    }
+
+    if (menu->browser.selected >= menu->browser.entries) {
+        menu->browser.selected = menu->browser.entries - 1;
+    }
+    if (menu->browser.selected < 0) {
+        menu->browser.selected = 0;
+    }
+    menu->browser.entry = &menu->browser.list[menu->browser.selected];
+}
+
+static const char *browser_sort_mode_string (menu_t *menu) {
+    switch (menu->browser.sort_mode) {
+        case BROWSER_SORT_CUSTOM: return "Custom";
+        case BROWSER_SORT_AZ: return "A-Z";
+        case BROWSER_SORT_ZA: return "Z-A";
+        default: return "A-Z";
+    }
+}
+
 static void browser_list_free (menu_t *menu) {
     if (menu->browser.archive) {
         mz_zip_reader_end(&menu->browser.zip);
@@ -218,7 +282,7 @@ static bool load_archive (menu_t *menu) {
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
     }
 
-    qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry);
+    browser_apply_sort(menu);
 
     return false;
 }
@@ -320,6 +384,10 @@ static bool load_playlist (menu_t *menu) {
         menu->browser.selected = 0;
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
     }
+
+    // Preserve m3u order by default for playlist views.
+    menu->browser.sort_mode = BROWSER_SORT_CUSTOM;
+    browser_apply_sort(menu);
 
     return false;
 }
@@ -503,7 +571,7 @@ static bool load_directory (menu_t *menu) {
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
     }
 
-    qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry);
+    browser_apply_sort(menu);
 
     return false;
 }
@@ -643,11 +711,18 @@ static void set_default_directory (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void cycle_sort_mode (menu_t *menu, void *arg) {
+    (void)arg;
+    menu->browser.sort_mode = (browser_sort_t)(((int)menu->browser.sort_mode + 1) % 3);
+    browser_apply_sort(menu);
+}
+
 static component_context_menu_t entry_context_menu = {
     .list = {
         { .text = "Show entry properties", .action = show_properties },
         { .text = "Delete selected entry", .action = delete_entry },
         { .text = "Set current directory as default", .action = set_default_directory },
+        { .text = "Cycle sorting mode", .action = cycle_sort_mode },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -655,6 +730,7 @@ static component_context_menu_t entry_context_menu = {
 static component_context_menu_t playlist_context_menu = {
     .list = {
         { .text = "Show entry properties", .action = show_properties },
+        { .text = "Cycle sorting mode", .action = cycle_sort_mode },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -663,6 +739,7 @@ static component_context_menu_t archive_context_menu = {
     .list = {
         { .text = "Show entry properties", .action = show_properties },
         { .text = "Extract selected entry", .action = extract_entry },
+        { .text = "Cycle sorting mode", .action = cycle_sort_mode },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -849,6 +926,7 @@ static void draw (menu_t *menu, surface_t *d) {
         ALIGN_RIGHT, VALIGN_TOP,
         "^%02XStart: Settings^00\n"
         "^%02XR:  Options^00",
+        menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
         menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT
     );
 
@@ -856,16 +934,19 @@ static void draw (menu_t *menu, surface_t *d) {
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_CENTER, VALIGN_TOP,
-            "C-▼▲ Fast Scroll | ◀ Tabs ▶ \n"
+            "Sort: %s | C-▼▲ Fast Scroll | ◀ Tabs ▶ \n"
             "%s",
+            browser_sort_mode_string(menu),
             ctime(&menu->current_time)
         );
     } else {
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_CENTER, VALIGN_TOP,
-            "C-▼▲ Fast Scroll | ◀ Tabs ▶ \n"
+            "Sort: %s | C-▼▲ Fast Scroll | ◀ Tabs ▶ \n"
             "\n"
+            ,
+            browser_sort_mode_string(menu)
         );
     }
 
@@ -885,6 +966,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 void view_browser_init (menu_t *menu) {
     if (!menu->browser.valid) {
+        menu->browser.sort_mode = BROWSER_SORT_AZ;
         ui_components_context_menu_init(&entry_context_menu);
         ui_components_context_menu_init(&archive_context_menu);
         ui_components_context_menu_init(&playlist_context_menu);
