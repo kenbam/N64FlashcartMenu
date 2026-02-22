@@ -63,7 +63,25 @@ static const struct substr hidden_prefixes[] = {
 
 static uint32_t random_entry_state = 0x9E3779B9u;
 
+typedef enum {
+    RANDOM_MODE_ANY_GAME = 0,
+    RANDOM_MODE_UNPLAYED = 1,
+    RANDOM_MODE_UNDERPLAYED = 2,
+    RANDOM_MODE_FAVORITES = 3,
+} browser_random_mode_t;
+
+typedef struct {
+    int index;
+    uint64_t total_seconds;
+} random_candidate_t;
+
 static char *normalize_path (const char *path);
+static const char *format_clock_12h(time_t now, char *buffer, size_t buffer_len);
+static int random_candidate_compare(const void *a, const void *b);
+static bool browser_entry_is_game(const entry_t *entry);
+static char *browser_entry_path(menu_t *menu, int index);
+static bool path_is_favorite(menu_t *menu, const char *path);
+static int browser_pick_random_index(menu_t *menu);
 
 
 static bool path_is_hidden (path_t *path) {
@@ -218,6 +236,149 @@ static const char *browser_sort_mode_string (menu_t *menu) {
         case BROWSER_SORT_ZA: return "Z-A";
         default: return "A-Z";
     }
+}
+
+static int random_candidate_compare(const void *a, const void *b) {
+    const random_candidate_t *lhs = (const random_candidate_t *)a;
+    const random_candidate_t *rhs = (const random_candidate_t *)b;
+    if (lhs->total_seconds < rhs->total_seconds) return -1;
+    if (lhs->total_seconds > rhs->total_seconds) return 1;
+    return lhs->index - rhs->index;
+}
+
+static bool browser_entry_is_game(const entry_t *entry) {
+    if (!entry) {
+        return false;
+    }
+    return entry->type == ENTRY_TYPE_ROM || entry->type == ENTRY_TYPE_DISK || entry->type == ENTRY_TYPE_EMULATOR;
+}
+
+static char *browser_entry_path(menu_t *menu, int index) {
+    if (!menu || index < 0 || index >= menu->browser.entries) {
+        return NULL;
+    }
+
+    entry_t *entry = &menu->browser.list[index];
+    if (entry->path) {
+        return strdup(entry->path);
+    }
+    if (!entry->name) {
+        return NULL;
+    }
+
+    path_t *path = path_clone_push(menu->browser.directory, entry->name);
+    if (!path) {
+        return NULL;
+    }
+
+    char *resolved = strdup(path_get(path));
+    path_free(path);
+    return resolved;
+}
+
+static bool path_is_favorite(menu_t *menu, const char *path) {
+    if (!menu || !path) {
+        return false;
+    }
+
+    for (int i = 0; i < FAVORITES_COUNT; i++) {
+        bookkeeping_item_t *item = &menu->bookkeeping.favorite_items[i];
+        if (item->bookkeeping_type == BOOKKEEPING_TYPE_EMPTY || item->primary_path == NULL) {
+            continue;
+        }
+        if (strcmp(path_get(item->primary_path), path) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static int browser_pick_random_index(menu_t *menu) {
+    if (!menu || menu->browser.entries <= 0) {
+        return -1;
+    }
+
+    int mode = menu->settings.browser_random_mode;
+    if (mode < RANDOM_MODE_ANY_GAME || mode > RANDOM_MODE_FAVORITES) {
+        mode = RANDOM_MODE_ANY_GAME;
+    }
+
+    random_candidate_t *candidates = malloc((size_t)menu->browser.entries * sizeof(random_candidate_t));
+    if (!candidates) {
+        return -1;
+    }
+
+    int count = 0;
+    for (int i = 0; i < menu->browser.entries; i++) {
+        entry_t *entry = &menu->browser.list[i];
+        if (!browser_entry_is_game(entry)) {
+            continue;
+        }
+
+        char *entry_path = browser_entry_path(menu, i);
+        if (!entry_path) {
+            continue;
+        }
+
+        bool keep = false;
+        uint64_t total_seconds = 0;
+
+        if (mode == RANDOM_MODE_ANY_GAME) {
+            keep = true;
+        } else if (mode == RANDOM_MODE_UNPLAYED) {
+            playtime_entry_t *stat = playtime_get(&menu->playtime, entry_path);
+            keep = (stat == NULL || stat->play_count == 0);
+        } else if (mode == RANDOM_MODE_UNDERPLAYED) {
+            playtime_entry_t *stat = playtime_get(&menu->playtime, entry_path);
+            total_seconds = stat ? stat->total_seconds : 0;
+            keep = true;
+        } else if (mode == RANDOM_MODE_FAVORITES) {
+            keep = path_is_favorite(menu, entry_path);
+        }
+
+        if (keep) {
+            candidates[count].index = i;
+            candidates[count].total_seconds = total_seconds;
+            count++;
+        }
+
+        free(entry_path);
+    }
+
+    if (count == 0 && mode != RANDOM_MODE_ANY_GAME) {
+        menu->settings.browser_random_mode = RANDOM_MODE_ANY_GAME;
+        settings_save(&menu->settings);
+        free(candidates);
+        return browser_pick_random_index(menu);
+    }
+
+    int next = -1;
+    if (count > 0) {
+        random_entry_state = (random_entry_state * 1664525u) + 1013904223u + (uint32_t)menu->browser.selected + (uint32_t)menu->browser.entries + (uint32_t)mode;
+
+        if (mode == RANDOM_MODE_UNDERPLAYED) {
+            qsort(candidates, (size_t)count, sizeof(random_candidate_t), random_candidate_compare);
+            int pool = count / 4;
+            if (pool < 1) {
+                pool = 1;
+            }
+            next = candidates[(int)(random_entry_state % (uint32_t)pool)].index;
+        } else {
+            next = candidates[(int)(random_entry_state % (uint32_t)count)].index;
+        }
+
+        if (next == menu->browser.selected && count > 1) {
+            for (int i = 0; i < count; i++) {
+                if (candidates[i].index != menu->browser.selected) {
+                    next = candidates[i].index;
+                    break;
+                }
+            }
+        }
+    }
+
+    free(candidates);
+    return next;
 }
 
 static void browser_list_free (menu_t *menu) {
@@ -576,6 +737,20 @@ static bool load_directory (menu_t *menu) {
     return false;
 }
 
+static const char *format_clock_12h(time_t now, char *buffer, size_t buffer_len) {
+    if (!buffer || buffer_len == 0) {
+        return "";
+    }
+    struct tm *time_info = localtime(&now);
+    if (!time_info) {
+        return "";
+    }
+    if (strftime(buffer, buffer_len, "%m/%d %I:%M %p", time_info) == 0) {
+        return "";
+    }
+    return buffer;
+}
+
 static bool reload_directory (menu_t *menu) {
     int selected = menu->browser.selected;
 
@@ -719,12 +894,43 @@ static void cycle_sort_mode (menu_t *menu, void *arg) {
     browser_apply_sort(menu);
 }
 
+static void set_random_mode(menu_t *menu, void *arg) {
+    int mode = (int)(intptr_t)arg;
+    if (mode < RANDOM_MODE_ANY_GAME || mode > RANDOM_MODE_FAVORITES) {
+        mode = RANDOM_MODE_ANY_GAME;
+    }
+    menu->settings.browser_random_mode = mode;
+    settings_save(&menu->settings);
+}
+
+static int get_random_mode_selection(menu_t *menu) {
+    if (!menu) {
+        return 0;
+    }
+    if (menu->settings.browser_random_mode < RANDOM_MODE_ANY_GAME || menu->settings.browser_random_mode > RANDOM_MODE_FAVORITES) {
+        return 0;
+    }
+    return menu->settings.browser_random_mode;
+}
+
+static component_context_menu_t random_mode_context_menu = {
+    .get_default_selection = get_random_mode_selection,
+    .list = {
+        { .text = "Any game", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_ANY_GAME },
+        { .text = "Unplayed", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_UNPLAYED },
+        { .text = "Underplayed", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_UNDERPLAYED },
+        { .text = "Favorites", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_FAVORITES },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static component_context_menu_t entry_context_menu = {
     .list = {
         { .text = "Show entry properties", .action = show_properties },
         { .text = "Delete selected entry", .action = delete_entry },
         { .text = "Set current directory as default", .action = set_default_directory },
         { .text = "Cycle sorting mode", .action = cycle_sort_mode },
+        { .text = "Random mode...", .submenu = &random_mode_context_menu },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -733,6 +939,7 @@ static component_context_menu_t playlist_context_menu = {
     .list = {
         { .text = "Show entry properties", .action = show_properties },
         { .text = "Cycle sorting mode", .action = cycle_sort_mode },
+        { .text = "Random mode...", .submenu = &random_mode_context_menu },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -742,6 +949,7 @@ static component_context_menu_t archive_context_menu = {
         { .text = "Show entry properties", .action = show_properties },
         { .text = "Extract selected entry", .action = extract_entry },
         { .text = "Cycle sorting mode", .action = cycle_sort_mode },
+        { .text = "Random mode...", .submenu = &random_mode_context_menu },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -753,6 +961,7 @@ static void set_menu_next_mode (menu_t *menu, void *arg) {
 
 static component_context_menu_t settings_context_menu = {
     .list = {
+        { .text = "Random mode...", .submenu = &random_mode_context_menu },
         { .text = "Controller Pak manager", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_CONTROLLER_PAKFS) },
         { .text = "Menu settings", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_SETTINGS_EDITOR) },
         { .text = "Time (RTC) settings", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_RTC) },
@@ -799,16 +1008,12 @@ static void process (menu_t *menu) {
     }
 
     if (menu->actions.lz_context && menu->browser.entries > 1) {
-        random_entry_state = (random_entry_state * 1664525u) + 1013904223u + (uint32_t)menu->browser.selected + (uint32_t)menu->browser.entries;
-
-        int32_t next = (int32_t)(random_entry_state % (uint32_t)menu->browser.entries);
-        if (next == menu->browser.selected) {
-            next = (next + 1) % menu->browser.entries;
+        int next = browser_pick_random_index(menu);
+        if (next >= 0 && next < menu->browser.entries) {
+            menu->browser.selected = next;
+            menu->browser.entry = &menu->browser.list[menu->browser.selected];
+            sound_play_effect(SFX_CURSOR);
         }
-
-        menu->browser.selected = next;
-        menu->browser.entry = &menu->browser.list[menu->browser.selected];
-        sound_play_effect(SFX_CURSOR);
         return;
     }
 
@@ -917,7 +1122,7 @@ static void draw (menu_t *menu, surface_t *d) {
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
         "%s\n"
-        "^%02XB: Back^00 | ^%02XL/Z: Random^00",
+        "^%02XB: Back^00 | ^%02XL: Random^00",
         menu->browser.entries == 0 ? "" : action,
         path_is_root(menu->browser.directory) ? STL_GRAY : STL_DEFAULT,
         menu->browser.entries > 1 ? STL_DEFAULT : STL_GRAY
@@ -934,12 +1139,13 @@ static void draw (menu_t *menu, surface_t *d) {
     );
 
     if (menu->current_time >= 0) {
+        char datetime[32];
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_CENTER, VALIGN_TOP,
             "C-▼▲ Scroll | ◀ ▶ Tabs\n"
             "%s",
-            ctime(&menu->current_time)
+            format_clock_12h(menu->current_time, datetime, sizeof(datetime))
         );
     } else {
         ui_components_actions_bar_text_draw(

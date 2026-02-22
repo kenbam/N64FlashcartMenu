@@ -19,6 +19,7 @@ static settings_t init = {
     .use_saves_folder = true,
     .show_saves_folder = false,
     .browser_sort_mode = 1,
+    .browser_random_mode = 0,
     .text_panel_enabled = true,
     .text_panel_alpha = 112,
     .soundfx_enabled = false,
@@ -62,6 +63,7 @@ void settings_load (settings_t *settings) {
     settings->use_saves_folder = mini_get_bool(ini, "menu", "use_saves_folder", init.use_saves_folder);
     settings->show_saves_folder = mini_get_bool(ini, "menu", "show_saves_folder", init.show_saves_folder);
     settings->browser_sort_mode = mini_get_int(ini, "menu", "browser_sort_mode", init.browser_sort_mode);
+    settings->browser_random_mode = mini_get_int(ini, "menu", "browser_random_mode", init.browser_random_mode);
     settings->text_panel_enabled = mini_get_bool(ini, "menu", "text_panel_enabled", init.text_panel_enabled);
     int text_panel_alpha = mini_get_int(ini, "menu", "text_panel_alpha", init.text_panel_alpha);
     if (text_panel_alpha < 0) {
@@ -102,6 +104,7 @@ void settings_save (settings_t *settings) {
     mini_set_bool(ini, "menu", "use_saves_folder", settings->use_saves_folder);
     mini_set_bool(ini, "menu", "show_saves_folder", settings->show_saves_folder);
     mini_set_int(ini, "menu", "browser_sort_mode", settings->browser_sort_mode);
+    mini_set_int(ini, "menu", "browser_random_mode", settings->browser_random_mode);
     mini_set_bool(ini, "menu", "text_panel_enabled", settings->text_panel_enabled);
     mini_set_int(ini, "menu", "text_panel_alpha", settings->text_panel_alpha);
     mini_set_bool(ini, "menu", "soundfx_enabled", settings->soundfx_enabled);

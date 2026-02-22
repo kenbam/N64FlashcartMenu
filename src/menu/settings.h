@@ -42,6 +42,9 @@ typedef struct {
     /** @brief Browser sort mode (0=custom, 1=A-Z, 2=Z-A) */
     int browser_sort_mode;
 
+    /** @brief Smart random mode (0=any game, 1=unplayed, 2=underplayed, 3=favorites) */
+    int browser_random_mode;
+
     /** @brief Draw semi-transparent panel behind main content text areas */
     bool text_panel_enabled;
 
