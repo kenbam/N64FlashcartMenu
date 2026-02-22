@@ -246,6 +246,46 @@ void ui_components_background_replace_image(surface_t *image) {
     prepare_background(background);
 }
 
+void ui_components_background_replace_image_temporary(surface_t *image) {
+    if (!background) {
+        return;
+    }
+
+    if (background->image) {
+        surface_free(background->image);
+        free(background->image);
+        background->image = NULL;
+    }
+
+    if (background->image_display_list) {
+        rdpq_call_deferred(display_list_free, background->image_display_list);
+        background->image_display_list = NULL;
+    }
+
+    background->image = image;
+    prepare_background(background);
+}
+
+void ui_components_background_reload_cache(void) {
+    if (!background) {
+        return;
+    }
+
+    if (background->image) {
+        surface_free(background->image);
+        free(background->image);
+        background->image = NULL;
+    }
+
+    if (background->image_display_list) {
+        rdpq_call_deferred(display_list_free, background->image_display_list);
+        background->image_display_list = NULL;
+    }
+
+    load_from_cache(background);
+    prepare_background(background);
+}
+
 /**
  * @brief Draw the background image or clear the screen if not available.
  */

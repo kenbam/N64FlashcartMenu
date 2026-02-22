@@ -9,6 +9,7 @@
 
 #include "../cart_load.h"
 #include "../fonts.h"
+#include "../png_decoder.h"
 #include "utils/fs.h"
 #include "views.h"
 #include "../sound.h"
@@ -86,6 +87,20 @@ static bool browser_is_menu_music_picker_root(menu_t *menu);
 static bool browser_try_pick_menu_music_file(menu_t *menu);
 static bool browser_is_screensaver_logo_picker_root(menu_t *menu);
 static bool browser_try_pick_screensaver_logo_file(menu_t *menu);
+static void browser_restore_playlist_overrides(menu_t *menu);
+static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path);
+
+typedef struct {
+    bool active;
+    bool theme_applied;
+    int saved_theme;
+    bool bgm_applied;
+    bool background_applied;
+    bool background_loading;
+    char *background_path;
+} playlist_override_state_t;
+
+static playlist_override_state_t playlist_override = {0};
 
 
 static bool path_is_hidden (path_t *path) {
@@ -542,6 +557,201 @@ static char *trim_line (char *line) {
     return line;
 }
 
+static void playlist_background_callback (png_err_t err, surface_t *decoded_image, void *callback_data) {
+    (void)callback_data;
+    playlist_override.background_loading = false;
+
+    if (err != PNG_OK) {
+        if (decoded_image) {
+            surface_free(decoded_image);
+            free(decoded_image);
+        }
+        return;
+    }
+
+    if (!playlist_override.active) {
+        surface_free(decoded_image);
+        free(decoded_image);
+        return;
+    }
+
+    ui_components_background_replace_image_temporary(decoded_image);
+    playlist_override.background_applied = true;
+}
+
+static int playlist_theme_id_from_string(const char *value) {
+    if (!value || !value[0]) {
+        return -1;
+    }
+
+    char *end = NULL;
+    long parsed = strtol(value, &end, 10);
+    if (end && *end == '\0') {
+        if (parsed >= 0 && parsed < ui_components_theme_count()) {
+            return (int)parsed;
+        }
+    }
+
+    for (int i = 0; i < ui_components_theme_count(); i++) {
+        if (strcasecmp(value, ui_components_theme_name(i)) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static char *playlist_resolve_path(menu_t *menu, path_t *playlist_dir, const char *raw_path) {
+    if (!menu || !playlist_dir || !raw_path || !raw_path[0]) {
+        return NULL;
+    }
+
+    path_t *resolved = NULL;
+    if (strstr(raw_path, ":/") != NULL) {
+        resolved = path_create(raw_path);
+    } else if (raw_path[0] == '/') {
+        resolved = path_init(menu->storage_prefix, (char *)raw_path);
+    } else {
+        resolved = path_clone(playlist_dir);
+        path_push(resolved, (char *)raw_path);
+    }
+
+    char *normalized = normalize_path(path_get(resolved));
+    path_free(resolved);
+    return normalized;
+}
+
+static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path) {
+    (void)menu;
+    if (!line || line[0] != '#') {
+        return;
+    }
+
+    const char *prefix = "#SC64_";
+    if (strncasecmp(line, prefix, strlen(prefix)) != 0) {
+        return;
+    }
+
+    const char *body = line + strlen(prefix);
+    const char *sep = strchr(body, '=');
+    if (!sep) {
+        return;
+    }
+
+    size_t key_len = (size_t)(sep - body);
+    if (key_len == 0) {
+        return;
+    }
+
+    char key[32];
+    if (key_len >= sizeof(key)) {
+        key_len = sizeof(key) - 1;
+    }
+    memcpy(key, body, key_len);
+    key[key_len] = '\0';
+
+    char value_buf[1024];
+    snprintf(value_buf, sizeof(value_buf), "%s", sep + 1);
+    char *value = trim_line(value_buf);
+    if (!value || !value[0]) {
+        return;
+    }
+
+    if (strcasecmp(key, "THEME") == 0) {
+        free(*theme_name);
+        *theme_name = strdup(value);
+        return;
+    }
+
+    if (strcasecmp(key, "BGM") == 0 || strcasecmp(key, "MUSIC") == 0) {
+        char *resolved = playlist_resolve_path(menu, playlist_dir, value);
+        if (resolved) {
+            free(*bgm_path);
+            *bgm_path = resolved;
+        }
+        return;
+    }
+
+    if (strcasecmp(key, "BACKGROUND") == 0 || strcasecmp(key, "BG") == 0) {
+        char *resolved = playlist_resolve_path(menu, playlist_dir, value);
+        if (resolved) {
+            free(*bg_path);
+            *bg_path = resolved;
+        }
+        return;
+    }
+}
+
+static void browser_restore_playlist_overrides(menu_t *menu) {
+    if (!playlist_override.active) {
+        return;
+    }
+
+    if (playlist_override.background_loading) {
+        png_decoder_abort();
+        playlist_override.background_loading = false;
+    }
+    if (playlist_override.background_applied) {
+        ui_components_background_reload_cache();
+    }
+    if (playlist_override.theme_applied) {
+        ui_components_set_theme(playlist_override.saved_theme);
+    }
+    if (playlist_override.bgm_applied) {
+        free(menu->runtime_bgm_override_file);
+        menu->runtime_bgm_override_file = NULL;
+        menu->bgm_reload_requested = true;
+    }
+
+    free(playlist_override.background_path);
+    memset(&playlist_override, 0, sizeof(playlist_override));
+}
+
+static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path) {
+    if (!menu) {
+        return;
+    }
+
+    int theme_id = playlist_theme_id_from_string(theme_name);
+    bool want_theme = (theme_id >= 0);
+    bool want_bgm = (bgm_path && file_exists((char *)bgm_path));
+    bool want_bg = (bg_path && file_exists((char *)bg_path));
+    if (!want_theme && !want_bgm && !want_bg) {
+        return;
+    }
+
+    playlist_override.active = true;
+    playlist_override.saved_theme = ui_components_get_theme();
+
+    if (want_theme) {
+        ui_components_set_theme(theme_id);
+        playlist_override.theme_applied = true;
+    }
+
+    if (want_bgm) {
+        free(menu->runtime_bgm_override_file);
+        menu->runtime_bgm_override_file = strdup(bgm_path);
+        menu->bgm_reload_requested = true;
+        playlist_override.bgm_applied = (menu->runtime_bgm_override_file != NULL);
+    }
+
+    if (want_bg) {
+        free(playlist_override.background_path);
+        playlist_override.background_path = strdup(bg_path);
+        if (playlist_override.background_path && !png_decoder_is_busy()) {
+            png_err_t err = png_decoder_start(
+                playlist_override.background_path,
+                640,
+                480,
+                playlist_background_callback,
+                NULL
+            );
+            if (err == PNG_OK) {
+                playlist_override.background_loading = true;
+            }
+        }
+    }
+}
+
 static bool load_playlist (menu_t *menu) {
     browser_list_free(menu);
 
@@ -554,11 +764,18 @@ static bool load_playlist (menu_t *menu) {
 
     path_t *playlist_dir = path_clone(menu->browser.directory);
     path_pop(playlist_dir);
+    char *playlist_theme = NULL;
+    char *playlist_bgm = NULL;
+    char *playlist_bg = NULL;
 
     char line[1024];
     while (fgets(line, sizeof(line), f) != NULL) {
         char *trimmed = trim_line(line);
-        if (trimmed == NULL || trimmed[0] == '\0' || trimmed[0] == '#') {
+        if (trimmed == NULL || trimmed[0] == '\0') {
+            continue;
+        }
+        if (trimmed[0] == '#') {
+            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg);
             continue;
         }
 
@@ -576,6 +793,9 @@ static bool load_playlist (menu_t *menu) {
         if (!normalized) {
             path_free(entry_path);
             fclose(f);
+            free(playlist_theme);
+            free(playlist_bgm);
+            free(playlist_bg);
             browser_list_free(menu);
             return true;
         }
@@ -594,6 +814,9 @@ static bool load_playlist (menu_t *menu) {
             free(normalized);
             path_free(entry_path);
             fclose(f);
+            free(playlist_theme);
+            free(playlist_bgm);
+            free(playlist_bg);
             browser_list_free(menu);
             return true;
         }
@@ -603,6 +826,9 @@ static bool load_playlist (menu_t *menu) {
             free(normalized);
             path_free(entry_path);
             fclose(f);
+            free(playlist_theme);
+            free(playlist_bgm);
+            free(playlist_bg);
             browser_list_free(menu);
             return true;
         }
@@ -614,9 +840,6 @@ static bool load_playlist (menu_t *menu) {
         path_free(entry_path);
     }
 
-    path_free(playlist_dir);
-    fclose(f);
-
     if (menu->browser.entries > 0) {
         menu->browser.selected = 0;
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
@@ -625,6 +848,13 @@ static bool load_playlist (menu_t *menu) {
     // Preserve m3u order by default for playlist views.
     menu->browser.sort_mode = BROWSER_SORT_CUSTOM;
     browser_apply_sort(menu);
+
+    browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg);
+    path_free(playlist_dir);
+    fclose(f);
+    free(playlist_theme);
+    free(playlist_bgm);
+    free(playlist_bg);
 
     return false;
 }
@@ -723,6 +953,10 @@ static char *normalize_path (const char *path) {
 static bool load_directory (menu_t *menu) {
     int result;
     dir_t info;
+
+    if (menu->browser.playlist || playlist_override.active) {
+        browser_restore_playlist_overrides(menu);
+    }
 
     browser_list_free(menu);
 
@@ -1049,6 +1283,17 @@ static component_context_menu_t settings_context_menu = {
 };
 
 static void process (menu_t *menu) {
+    if (playlist_override.active &&
+        playlist_override.background_path &&
+        !playlist_override.background_applied &&
+        !playlist_override.background_loading &&
+        !png_decoder_is_busy()) {
+        png_err_t err = png_decoder_start(playlist_override.background_path, 640, 480, playlist_background_callback, NULL);
+        if (err == PNG_OK) {
+            playlist_override.background_loading = true;
+        }
+    }
+
     component_context_menu_t *active_context_menu = &entry_context_menu;
     if (menu->browser.archive) {
         active_context_menu = &archive_context_menu;

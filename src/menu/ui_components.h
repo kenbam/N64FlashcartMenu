@@ -233,6 +233,8 @@ void ui_components_background_free(void);
  * @param image New background image.
  */
 void ui_components_background_replace_image(surface_t *image);
+void ui_components_background_replace_image_temporary(surface_t *image);
+void ui_components_background_reload_cache(void);
 
 /**
  * @brief Draw the background component.

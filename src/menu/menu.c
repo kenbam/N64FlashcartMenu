@@ -513,7 +513,9 @@ static void menu_bgm_init (menu_t *menu) {
 
     menu_bgm_initialized = true;
 
-    if (menu->settings.bgm_file && menu->settings.bgm_file[0] != '\0') {
+    if (menu->runtime_bgm_override_file && menu->runtime_bgm_override_file[0] != '\0') {
+        err = menu_bgm_load_file(menu, menu->runtime_bgm_override_file);
+    } else if (menu->settings.bgm_file && menu->settings.bgm_file[0] != '\0') {
         err = menu_bgm_load_file(menu, menu->settings.bgm_file);
     } else {
         err = MP3PLAYER_ERR_NO_FILE;
@@ -732,6 +734,7 @@ static void menu_deinit (menu_t *menu) {
 
     path_free(menu->load.disk_slots.primary.disk_path);
     path_free(menu->load.rom_path);
+    free(menu->runtime_bgm_override_file);
     for (int i = 0; i < menu->browser.entries; i++) {
         free(menu->browser.list[i].name);
     }

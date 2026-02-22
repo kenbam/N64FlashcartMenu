@@ -119,6 +119,7 @@ typedef struct {
     time_t current_time;
     bool bgm_reload_requested;
     bool screensaver_logo_reload_requested;
+    char *runtime_bgm_override_file;
 
     struct {
         bool go_up;
