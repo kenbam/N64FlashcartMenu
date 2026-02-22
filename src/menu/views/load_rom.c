@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
 
 static bool show_extra_info_message = false;
 static component_boxart_t *boxart;
@@ -518,6 +519,112 @@ static void format_last_played (char *out, size_t out_len, int64_t ts) {
     snprintf(out, out_len, "%.*s", (int)len, s);
 }
 
+static size_t get_expected_save_size(rom_save_type_t save_type) {
+    switch (save_type) {
+        case SAVE_TYPE_EEPROM_4KBIT: return 512;
+        case SAVE_TYPE_EEPROM_16KBIT: return 2 * 1024;
+        case SAVE_TYPE_SRAM_256KBIT: return 32 * 1024;
+        case SAVE_TYPE_SRAM_BANKED: return 96 * 1024;
+        case SAVE_TYPE_SRAM_1MBIT: return 128 * 1024;
+        case SAVE_TYPE_FLASHRAM_1MBIT: return 128 * 1024;
+        case SAVE_TYPE_FLASHRAM_PKST2: return 128 * 1024;
+        default: return 0;
+    }
+}
+
+static const char *format_save_backend(rom_save_type_t save_type, bool supports_cpak) {
+    if (save_type == SAVE_TYPE_NONE) {
+        return supports_cpak ? "Controller Pak only (game-managed)" : "No persistent save";
+    }
+    return "SD-backed .sav via flashcart";
+}
+
+static const char *format_save_writeback_status(bool save_expected) {
+    if (!save_expected) {
+        return "N/A";
+    }
+    return flashcart_has_feature(FLASHCART_FEATURE_SAVE_WRITEBACK) ? "Enabled" : "Unavailable";
+}
+
+static bool get_save_file_path(menu_t *menu, char *out, size_t out_len) {
+    if (!menu || !menu->load.rom_path || !out || out_len == 0) {
+        return false;
+    }
+
+    path_t *save_path = path_clone(menu->load.rom_path);
+    path_ext_replace(save_path, "sav");
+    if (menu->settings.use_saves_folder) {
+        path_push_subdir(save_path, SAVE_DIRECTORY_NAME);
+    }
+
+    snprintf(out, out_len, "%s", strip_fs_prefix(path_get(save_path)));
+    path_free(save_path);
+    return true;
+}
+
+static void format_save_health(char *out, size_t out_len, const char *save_path, size_t expected_size) {
+    if (!out || out_len == 0) {
+        return;
+    }
+    out[0] = '\0';
+
+    if (!save_path || save_path[0] == '\0') {
+        snprintf(out, out_len, "Unknown");
+        return;
+    }
+
+    path_t *path = path_create(save_path);
+    char *full_path = path_get(path);
+
+    if (!file_exists(full_path)) {
+        snprintf(out, out_len, "Missing (created on first load)");
+        path_free(path);
+        return;
+    }
+
+    int64_t actual_size = file_get_size(full_path);
+    if (actual_size < 0) {
+        snprintf(out, out_len, "Present (size unavailable)");
+        path_free(path);
+        return;
+    }
+
+    if (expected_size > 0 && (size_t)actual_size != expected_size) {
+        snprintf(out, out_len, "Size mismatch (%lld vs %u bytes)", (long long)actual_size, (unsigned int)expected_size);
+    } else {
+        snprintf(out, out_len, "OK");
+    }
+
+    path_free(path);
+}
+
+static void format_save_last_modified(char *out, size_t out_len, const char *save_path) {
+    if (!out || out_len == 0) {
+        return;
+    }
+    out[0] = '\0';
+
+    if (!save_path || save_path[0] == '\0') {
+        snprintf(out, out_len, "Unknown");
+        return;
+    }
+
+    struct stat st;
+    path_t *path = path_create(save_path);
+    int err = stat(path_get(path), &st);
+    path_free(path);
+    if (err != 0) {
+        snprintf(out, out_len, "Not created");
+        return;
+    }
+
+    time_t modified = st.st_mtime;
+    struct tm *time_info = localtime(&modified);
+    if (!time_info || strftime(out, out_len, "%m/%d %I:%M %p", time_info) == 0) {
+        snprintf(out, out_len, "Unknown");
+    }
+}
+
 static void format_recent_sessions (char *out, size_t out_len, const playtime_entry_t *pt) {
     if (out_len == 0) {
         return;
@@ -646,7 +753,7 @@ static void draw (menu_t *menu, surface_t *d) {
             snprintf(recent_sessions_buf, sizeof(recent_sessions_buf), "\tNone");
         }
 
-        char details[4096];
+        char details[4608];
         const char *display_name = (menu->load.rom_info.metadata.name[0] != '\0') ? menu->load.rom_info.metadata.name : rom_filename;
         const char *publisher = (menu->load.rom_info.metadata.author[0] != '\0') ? menu->load.rom_info.metadata.author : "Unknown";
         char age_rating[16];
@@ -654,6 +761,22 @@ static void draw (menu_t *menu, surface_t *d) {
             snprintf(age_rating, sizeof(age_rating), "%d+", (int)menu->load.rom_info.metadata.age_rating);
         } else {
             snprintf(age_rating, sizeof(age_rating), "Unknown");
+        }
+
+        rom_save_type_t effective_save_type = rom_info_get_save_type(&menu->load.rom_info);
+        bool save_expected = (effective_save_type != SAVE_TYPE_NONE);
+        bool supports_cpak = menu->load.rom_info.features.controller_pak;
+        char save_path[512];
+        char save_health[96];
+        char save_last_modified[64];
+        size_t expected_save_size = get_expected_save_size(effective_save_type);
+        if (save_expected && get_save_file_path(menu, save_path, sizeof(save_path))) {
+            format_save_health(save_health, sizeof(save_health), save_path, expected_save_size);
+            format_save_last_modified(save_last_modified, sizeof(save_last_modified), save_path);
+        } else {
+            snprintf(save_path, sizeof(save_path), "N/A");
+            snprintf(save_health, sizeof(save_health), "N/A");
+            snprintf(save_last_modified, sizeof(save_last_modified), "N/A");
         }
 
         snprintf(details, sizeof(details),
@@ -669,6 +792,11 @@ static void draw (menu_t *menu, surface_t *d) {
             "Rumble PAK:\t\t%s\n"
             "Transfer PAK:\t\t%s\n"
             "Save type:\t\t%s\n"
+            "Save backend:\t\t%s\n"
+            "Save writeback:\t%s\n"
+            "Save file:\t\t%s\n"
+            "Save health:\t\t%s\n"
+            "Save modified:\t\t%s\n"
             "Playtime:\t\t%s\n"
             "Last session:\t\t%s\n"
             "Last played:\t\t%s\n"
@@ -684,7 +812,12 @@ static void draw (menu_t *menu, surface_t *d) {
             format_rom_expansion_pak_info(menu->load.rom_info.features.expansion_pak),
             format_rom_pak_feature_info(menu->load.rom_info.features.rumble_pak),
             format_rom_pak_feature_info(menu->load.rom_info.features.transfer_pak),
-            format_rom_save_type(rom_info_get_save_type(&menu->load.rom_info), menu->load.rom_info.features.controller_pak),
+            format_rom_save_type(effective_save_type, supports_cpak),
+            format_save_backend(effective_save_type, supports_cpak),
+            format_save_writeback_status(save_expected),
+            save_path,
+            save_health,
+            save_last_modified,
             total_buf,
             last_session_buf,
             last_played_buf,
