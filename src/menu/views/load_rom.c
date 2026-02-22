@@ -518,6 +518,37 @@ static void format_last_played (char *out, size_t out_len, int64_t ts) {
     snprintf(out, out_len, "%.*s", (int)len, s);
 }
 
+static void format_recent_sessions (char *out, size_t out_len, const playtime_entry_t *pt) {
+    if (out_len == 0) {
+        return;
+    }
+
+    out[0] = '\0';
+
+    if (!pt || pt->recent_sessions_count == 0) {
+        snprintf(out, out_len, "\tNone");
+        return;
+    }
+
+    for (uint32_t i = 0; i < pt->recent_sessions_count; i++) {
+        char when_buf[64];
+        char dur_buf[64];
+
+        format_last_played(when_buf, sizeof(when_buf), pt->recent_sessions[i].ended_at);
+        format_duration(dur_buf, sizeof(dur_buf), pt->recent_sessions[i].duration_seconds);
+
+        size_t used = strlen(out);
+        if (used >= out_len - 1) {
+            break;
+        }
+
+        snprintf(out + used, out_len - used, "\t- %s (%s)%s",
+            when_buf,
+            dur_buf,
+            (i + 1 < pt->recent_sessions_count) ? "\n" : "");
+    }
+}
+
 static void paragraph_builder_add_text(const char *text) {
     const char *start = text;
     const char *p = text;
@@ -602,14 +633,17 @@ static void draw (menu_t *menu, surface_t *d) {
         char total_buf[64];
         char last_session_buf[64];
         char last_played_buf[64];
+        char recent_sessions_buf[512];
         if (pt) {
             format_duration(total_buf, sizeof(total_buf), pt->total_seconds);
             format_duration(last_session_buf, sizeof(last_session_buf), pt->last_session_seconds);
             format_last_played(last_played_buf, sizeof(last_played_buf), pt->last_played);
+            format_recent_sessions(recent_sessions_buf, sizeof(recent_sessions_buf), pt);
         } else {
             snprintf(total_buf, sizeof(total_buf), "0s");
             snprintf(last_session_buf, sizeof(last_session_buf), "0s");
             snprintf(last_played_buf, sizeof(last_played_buf), "Never");
+            snprintf(recent_sessions_buf, sizeof(recent_sessions_buf), "\tNone");
         }
 
         char details[4096];
@@ -637,7 +671,8 @@ static void draw (menu_t *menu, surface_t *d) {
             "Save type:\t\t%s\n"
             "Playtime:\t\t%s\n"
             "Last session:\t\t%s\n"
-            "Last played:\t\t%s\n",
+            "Last played:\t\t%s\n"
+            "Recent sessions:\n%s\n",
             display_name,
             publisher,
             format_esrb_age_rating(menu->load.rom_info.metadata.esrb_age_rating),
@@ -652,7 +687,8 @@ static void draw (menu_t *menu, surface_t *d) {
             format_rom_save_type(rom_info_get_save_type(&menu->load.rom_info), menu->load.rom_info.features.controller_pak),
             total_buf,
             last_session_buf,
-            last_played_buf
+            last_played_buf,
+            recent_sessions_buf
         );
 
         int base_x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;

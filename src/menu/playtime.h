@@ -11,6 +11,13 @@
 #include <stdint.h>
 #include <time.h>
 
+#define PLAYTIME_RECENT_SESSIONS_MAX 5
+
+typedef struct {
+    uint64_t duration_seconds;
+    int64_t ended_at;
+} playtime_session_t;
+
 typedef struct {
     char *path;
     uint64_t total_seconds;
@@ -19,6 +26,8 @@ typedef struct {
     int64_t active_start;
     uint32_t play_count;
     bool active;
+    playtime_session_t recent_sessions[PLAYTIME_RECENT_SESSIONS_MAX];
+    uint32_t recent_sessions_count;
 } playtime_entry_t;
 
 typedef struct {

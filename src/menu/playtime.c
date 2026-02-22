@@ -52,7 +52,25 @@ static void playtime_add_entry(playtime_db_t *db, const char *path) {
     entry->active_start = 0;
     entry->play_count = 0;
     entry->active = false;
+    entry->recent_sessions_count = 0;
     db->count++;
+}
+
+static void playtime_push_recent_session(playtime_entry_t *entry, uint64_t duration_seconds, int64_t ended_at) {
+    if (!entry || duration_seconds == 0 || ended_at <= 0) {
+        return;
+    }
+
+    for (int i = PLAYTIME_RECENT_SESSIONS_MAX - 1; i > 0; i--) {
+        entry->recent_sessions[i] = entry->recent_sessions[i - 1];
+    }
+
+    entry->recent_sessions[0].duration_seconds = duration_seconds;
+    entry->recent_sessions[0].ended_at = ended_at;
+
+    if (entry->recent_sessions_count < PLAYTIME_RECENT_SESSIONS_MAX) {
+        entry->recent_sessions_count++;
+    }
 }
 
 playtime_entry_t *playtime_get (playtime_db_t *db, const char *path) {
@@ -112,6 +130,22 @@ void playtime_load (playtime_db_t *db) {
 
         sprintf(key, "%lld_play_count", (long long)i);
         entry->play_count = (uint32_t)mini_get_int(ini, "stats", key, 0);
+
+        sprintf(key, "%lld_recent_count", (long long)i);
+        int64_t recent_count = mini_get_int(ini, "stats", key, 0);
+        if (recent_count < 0) {
+            recent_count = 0;
+        }
+        if (recent_count > PLAYTIME_RECENT_SESSIONS_MAX) {
+            recent_count = PLAYTIME_RECENT_SESSIONS_MAX;
+        }
+        entry->recent_sessions_count = (uint32_t)recent_count;
+        for (uint32_t j = 0; j < entry->recent_sessions_count; j++) {
+            sprintf(key, "%lld_recent_%u_duration", (long long)i, (unsigned int)j);
+            entry->recent_sessions[j].duration_seconds = (uint64_t)mini_get_int(ini, "stats", key, 0);
+            sprintf(key, "%lld_recent_%u_ended_at", (long long)i, (unsigned int)j);
+            entry->recent_sessions[j].ended_at = (int64_t)mini_get_int(ini, "stats", key, 0);
+        }
     }
 
     mini_free(ini);
@@ -150,6 +184,15 @@ void playtime_save (playtime_db_t *db) {
 
         sprintf(key, "%u_play_count", (unsigned int)i);
         mini_set_int(ini, "stats", key, (long long)entry->play_count);
+
+        sprintf(key, "%u_recent_count", (unsigned int)i);
+        mini_set_int(ini, "stats", key, (long long)entry->recent_sessions_count);
+        for (uint32_t j = 0; j < entry->recent_sessions_count; j++) {
+            sprintf(key, "%u_recent_%u_duration", (unsigned int)i, (unsigned int)j);
+            mini_set_int(ini, "stats", key, (long long)entry->recent_sessions[j].duration_seconds);
+            sprintf(key, "%u_recent_%u_ended_at", (unsigned int)i, (unsigned int)j);
+            mini_set_int(ini, "stats", key, (long long)entry->recent_sessions[j].ended_at);
+        }
     }
 
     mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
@@ -172,6 +215,7 @@ void playtime_finalize_active (playtime_db_t *db, time_t now) {
             uint64_t delta = (uint64_t)(now - entry->active_start);
             entry->total_seconds += delta;
             entry->last_session_seconds = delta;
+            playtime_push_recent_session(entry, delta, (int64_t)now);
             changed = true;
         }
 
