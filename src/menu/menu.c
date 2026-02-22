@@ -95,11 +95,10 @@ static void menu_bgm_init (menu_t *menu) {
 }
 
 static void menu_bgm_poll (menu_t *menu) {
+    bool decoder_busy = png_decoder_is_busy();
     bool loading_or_booting =
         (menu->mode == MENU_MODE_MUSIC_PLAYER) ||
-        (menu->mode == MENU_MODE_LOAD_ROM) ||
-        (menu->mode == MENU_MODE_LOAD_DISK) ||
-        (menu->mode == MENU_MODE_LOAD_EMULATOR) ||
+        decoder_busy ||
         (menu->mode == MENU_MODE_BOOT) ||
         (menu->next_mode == MENU_MODE_BOOT);
 

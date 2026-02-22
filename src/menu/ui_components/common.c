@@ -53,14 +53,21 @@ static void ui_components_text_panel_draw (int y0) {
         return;
     }
 
-    int x0 = VISIBLE_AREA_X0 + BORDER_THICKNESS;
-    int x1 = VISIBLE_AREA_X1 - BORDER_THICKNESS;
-    int y1 = LAYOUT_ACTIONS_SEPARATOR_Y;
+    int x0 = VISIBLE_AREA_X0;
+    int x1 = VISIBLE_AREA_X1;
+    int y1 = LAYOUT_ACTIONS_SEPARATOR_Y + BORDER_THICKNESS;
     if (y0 >= y1) {
         return;
     }
 
-    ui_components_box_draw(x0, y0, x1, y1, RGBA32(0x00, 0x00, 0x00, text_panel_alpha));
+    // Fill mode ignores alpha blending. Use standard mode + blender for proper translucency.
+    rdpq_mode_push();
+        rdpq_set_mode_standard();
+        rdpq_mode_combiner(RDPQ_COMBINER_FLAT);
+        rdpq_mode_blender(RDPQ_BLENDER_MULTIPLY);
+        rdpq_set_prim_color(RGBA32(0x00, 0x00, 0x00, text_panel_alpha));
+        rdpq_fill_rectangle(x0, y0, x1, y1);
+    rdpq_mode_pop();
 }
 
 void ui_components_set_text_panel (bool enabled, uint8_t alpha) {
