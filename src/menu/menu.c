@@ -700,6 +700,7 @@ static void menu_init (boot_params_t *boot_params) {
     path_push(path, BACKGROUND_CACHE_FILE);
     ui_components_background_init(path_get(path));
     ui_components_background_set_visualizer(menu->settings.background_visualizer_enabled);
+    ui_components_background_set_visualizer_style(menu->settings.background_visualizer_style);
     path_pop(path);
 
     screensaver_logo_try_load(menu);

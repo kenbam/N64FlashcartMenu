@@ -23,6 +23,7 @@ typedef struct {
     surface_t *image;          /**< Pointer to the loaded image surface. */
     rspq_block_t *image_display_list; /**< Display list for rendering the image. */
     bool visualizer_enabled;   /**< Draw animated visualizer instead of image. */
+    int visualizer_style;      /**< Visualizer style enum. */
     float vis_bars[14];        /**< Smoothed visualizer bar values. */
     float vis_trail_1[14];     /**< First trail buffer (recent). */
     float vis_caps[14];        /**< Peak hold caps. */
@@ -40,6 +41,13 @@ typedef struct {
 } cache_metadata_t;
 
 static component_background_t *background = NULL;
+
+static void visualizer_reset_state(component_background_t *c) {
+    if (!c) return;
+    memset(c->vis_bars, 0, sizeof(c->vis_bars));
+    memset(c->vis_trail_1, 0, sizeof(c->vis_trail_1));
+    memset(c->vis_caps, 0, sizeof(c->vis_caps));
+}
 
 static uint8_t u8_clamp(int v) {
     if (v < 0) return 0;
@@ -76,7 +84,22 @@ static color_t hsv_to_rgba(float h, float s, float v, uint8_t a) {
                   a);
 }
 
-static void draw_visualizer_background(component_background_t *c) {
+static bool visualizer_get_meter(component_background_t *c, float *out_base, float *out_peak) {
+    (void)c;
+    mp3player_meter_t meter = {0};
+    bool have_meter = mp3player_get_meter(&meter) && mp3player_is_playing();
+    float base = 0.0f;
+    float peak = 0.0f;
+    if (have_meter) {
+        base = (meter.avg_l + meter.avg_r) * 0.5f;
+        peak = (meter.peak_l + meter.peak_r) * 0.5f;
+    }
+    if (out_base) *out_base = base;
+    if (out_peak) *out_peak = peak;
+    return have_meter;
+}
+
+static void draw_visualizer_bars_overlay(component_background_t *c) {
     if (!c) {
         rdpq_clear(BACKGROUND_EMPTY_COLOR);
         return;
@@ -86,14 +109,9 @@ static void draw_visualizer_background(component_background_t *c) {
         rdpq_clear(BACKGROUND_EMPTY_COLOR);
     }
 
-    mp3player_meter_t meter = {0};
-    bool have_meter = mp3player_get_meter(&meter) && mp3player_is_playing();
     float base = 0.0f;
     float peak = 0.0f;
-    if (have_meter) {
-        base = (meter.avg_l + meter.avg_r) * 0.5f;
-        peak = (meter.peak_l + meter.peak_r) * 0.5f;
-    }
+    bool have_meter = visualizer_get_meter(c, &base, &peak);
 
     c->vis_tick++;
 
@@ -197,6 +215,115 @@ static void draw_visualizer_background(component_background_t *c) {
         ui_components_box_draw(x, cap_y - 1, x + bar_w, cap_y + 2, RGBA32(0x00, 0x00, 0x00, 0x50));
         ui_components_box_draw(x + 1, cap_y, x + bar_w - 1, cap_y + 1, cap_col);
     }
+}
+
+static void draw_visualizer_pulse_wash(component_background_t *c) {
+    if (!c) {
+        rdpq_clear(BACKGROUND_EMPTY_COLOR);
+        return;
+    }
+    if (!c->image_display_list) {
+        rdpq_clear(BACKGROUND_EMPTY_COLOR);
+    }
+
+    float base = 0.0f, peak = 0.0f;
+    bool have_meter = visualizer_get_meter(c, &base, &peak);
+    c->vis_tick++;
+
+    float energy = (peak * 0.75f) + (base * 0.25f);
+    if (!have_meter) {
+        energy = 0.08f + 0.04f * (float)((c->vis_tick % 60)) / 59.0f;
+    }
+    if (energy > 1.0f) energy = 1.0f;
+
+    float hue = (float)((c->vis_tick * 2) % 512) / 512.0f;
+    color_t wash_a = hsv_to_rgba(hue, 0.85f, 0.75f + 0.20f * energy, (uint8_t)(28 + (int)(energy * 50.0f)));
+    color_t wash_b = hsv_to_rgba(hue + 0.33f, 0.65f, 0.55f + 0.20f * energy, (uint8_t)(20 + (int)(energy * 36.0f)));
+    color_t wash_c = hsv_to_rgba(hue + 0.66f, 0.75f, 0.45f + 0.25f * energy, (uint8_t)(16 + (int)(energy * 30.0f)));
+
+    // Full-screen layered pulse wash (few large quads = cheap).
+    ui_components_box_draw(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, RGBA32(0x03, 0x05, 0x08, 0x30));
+    ui_components_box_draw(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT / 2, wash_a);
+    ui_components_box_draw(0, DISPLAY_HEIGHT / 2, DISPLAY_WIDTH, DISPLAY_HEIGHT, wash_b);
+
+    int cx = DISPLAY_WIDTH / 2;
+    int cy = DISPLAY_HEIGHT / 2;
+    int spread = 70 + (int)(energy * 120.0f);
+    ui_components_box_draw(cx - spread, cy - (18 + spread / 5), cx + spread, cy + (18 + spread / 5), wash_c);
+    ui_components_box_draw(cx - (12 + spread / 4), cy - spread, cx + (12 + spread / 4), cy + spread, wash_a);
+
+    // Moving color bands.
+    for (int i = 0; i < 4; i++) {
+        int band_h = 16 + (i * 6);
+        int y = (int)((c->vis_tick * (2 + i) + i * 53) % (DISPLAY_HEIGHT + band_h)) - band_h;
+        color_t band = hsv_to_rgba(hue + (float)i * 0.12f, 0.9f, 0.9f, (uint8_t)(14 + (int)(energy * 24.0f)));
+        ui_components_box_draw(0, y, DISPLAY_WIDTH, y + band_h, band);
+    }
+}
+
+static void draw_visualizer_sunburst(component_background_t *c) {
+    if (!c) {
+        rdpq_clear(BACKGROUND_EMPTY_COLOR);
+        return;
+    }
+    if (!c->image_display_list) {
+        rdpq_clear(BACKGROUND_EMPTY_COLOR);
+    }
+
+    float base = 0.0f, peak = 0.0f;
+    bool have_meter = visualizer_get_meter(c, &base, &peak);
+    c->vis_tick++;
+
+    float energy = (peak * 0.8f) + (base * 0.2f);
+    if (!have_meter) {
+        energy = 0.10f;
+    }
+    if (energy > 1.0f) energy = 1.0f;
+
+    int cx = DISPLAY_WIDTH / 2;
+    int cy = (DISPLAY_HEIGHT / 2) - 8;
+    float hue = (float)((c->vis_tick * 3) % 512) / 512.0f;
+
+    // Dim center field to help rays pop without killing background visibility.
+    ui_components_box_draw(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, RGBA32(0x02, 0x03, 0x06, 0x16));
+
+    // Expanding pulse rings (axis-aligned rectangles).
+    for (int r = 0; r < 3; r++) {
+        int phase = ((int)c->vis_tick * (3 + r)) + (r * 41);
+        int radius = 20 + (phase % 180) + (int)(energy * 30.0f);
+        int thick = 2 + r;
+        color_t ring = hsv_to_rgba(hue + 0.08f * r, 0.85f, 0.95f, (uint8_t)(18 + (int)(energy * 28.0f)));
+        ui_components_box_draw(cx - radius, cy - radius, cx + radius, cy - radius + thick, ring);
+        ui_components_box_draw(cx - radius, cy + radius - thick, cx + radius, cy + radius, ring);
+        ui_components_box_draw(cx - radius, cy - radius, cx - radius + thick, cy + radius, ring);
+        ui_components_box_draw(cx + radius - thick, cy - radius, cx + radius, cy + radius, ring);
+    }
+
+    // Cardinal and diagonal "rays" approximated with rectangles / stepped quads.
+    int ray = 50 + (int)(energy * 170.0f);
+    color_t ray1 = hsv_to_rgba(hue, 0.95f, 1.0f, (uint8_t)(22 + (int)(energy * 40.0f)));
+    color_t ray2 = hsv_to_rgba(hue + 0.18f, 0.90f, 0.95f, (uint8_t)(18 + (int)(energy * 30.0f)));
+    color_t core = hsv_to_rgba(hue + 0.08f, 0.35f, 1.0f, (uint8_t)(44 + (int)(energy * 70.0f)));
+
+    ui_components_box_draw(cx - 10, cy - ray, cx + 10, cy + ray, ray1);
+    ui_components_box_draw(cx - ray, cy - 8, cx + ray, cy + 8, ray1);
+
+    for (int s = 0; s < 5; s++) {
+        int step = 12 + s * 14;
+        int width = 10 - s;
+        if (width < 3) width = 3;
+        int len = ray - (s * 18);
+        if (len < 12) len = 12;
+        ui_components_box_draw(cx + step, cy - step - width, cx + step + len/4, cy - step + width, ray2);
+        ui_components_box_draw(cx - step - len/4, cy - step - width, cx - step, cy - step + width, ray2);
+        ui_components_box_draw(cx + step, cy + step - width, cx + step + len/4, cy + step + width, ray2);
+        ui_components_box_draw(cx - step - len/4, cy + step - width, cx - step, cy + step + width, ray2);
+    }
+
+    // Center orb pulse.
+    int core_r = 12 + (int)(energy * 22.0f);
+    ui_components_box_draw(cx - core_r - 2, cy - core_r - 2, cx + core_r + 2, cy + core_r + 2, RGBA32(0x00, 0x00, 0x00, 0x30));
+    ui_components_box_draw(cx - core_r, cy - core_r, cx + core_r, cy + core_r, core);
 }
 
 /**
@@ -457,9 +584,20 @@ void ui_components_background_set_visualizer(bool enabled) {
     }
     background->visualizer_enabled = enabled;
     if (enabled) {
-        memset(background->vis_bars, 0, sizeof(background->vis_bars));
-        memset(background->vis_trail_1, 0, sizeof(background->vis_trail_1));
-        memset(background->vis_caps, 0, sizeof(background->vis_caps));
+        visualizer_reset_state(background);
+    }
+}
+
+void ui_components_background_set_visualizer_style(int style) {
+    if (!background) {
+        return;
+    }
+    if (style < UI_BACKGROUND_VISUALIZER_BARS || style > UI_BACKGROUND_VISUALIZER_SUNBURST) {
+        style = UI_BACKGROUND_VISUALIZER_BARS;
+    }
+    if (background->visualizer_style != style) {
+        background->visualizer_style = style;
+        visualizer_reset_state(background);
     }
 }
 
@@ -470,10 +608,32 @@ void ui_components_background_draw(void) {
     if (background && background->image_display_list) {
         rspq_block_run(background->image_display_list);
         if (background->visualizer_enabled) {
-            draw_visualizer_background(background);
+            switch (background->visualizer_style) {
+                case UI_BACKGROUND_VISUALIZER_PULSE_WASH:
+                    draw_visualizer_pulse_wash(background);
+                    break;
+                case UI_BACKGROUND_VISUALIZER_SUNBURST:
+                    draw_visualizer_sunburst(background);
+                    break;
+                case UI_BACKGROUND_VISUALIZER_BARS:
+                default:
+                    draw_visualizer_bars_overlay(background);
+                    break;
+            }
         }
     } else if (background && background->visualizer_enabled) {
-        draw_visualizer_background(background);
+        switch (background->visualizer_style) {
+            case UI_BACKGROUND_VISUALIZER_PULSE_WASH:
+                draw_visualizer_pulse_wash(background);
+                break;
+            case UI_BACKGROUND_VISUALIZER_SUNBURST:
+                draw_visualizer_sunburst(background);
+                break;
+            case UI_BACKGROUND_VISUALIZER_BARS:
+            default:
+                draw_visualizer_bars_overlay(background);
+                break;
+        }
     } else {
         rdpq_clear(BACKGROUND_EMPTY_COLOR);
     }

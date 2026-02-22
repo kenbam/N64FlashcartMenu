@@ -236,6 +236,12 @@ void ui_components_background_replace_image(surface_t *image);
 void ui_components_background_replace_image_temporary(surface_t *image);
 void ui_components_background_reload_cache(void);
 
+typedef enum {
+    UI_BACKGROUND_VISUALIZER_BARS = 0,
+    UI_BACKGROUND_VISUALIZER_PULSE_WASH = 1,
+    UI_BACKGROUND_VISUALIZER_SUNBURST = 2,
+} ui_background_visualizer_style_t;
+
 /**
  * @brief Enable or disable animated visualizer background mode.
  *
@@ -244,6 +250,7 @@ void ui_components_background_reload_cache(void);
  * @param enabled True to enable visualizer background mode.
  */
 void ui_components_background_set_visualizer(bool enabled);
+void ui_components_background_set_visualizer_style(int style);
 
 /**
  * @brief Draw the background component.

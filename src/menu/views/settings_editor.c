@@ -202,6 +202,12 @@ static void set_background_visualizer_enabled_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_background_visualizer_style_type (menu_t *menu, void *arg) {
+    menu->settings.background_visualizer_style = (int)(uintptr_t)(arg);
+    ui_components_background_set_visualizer_style(menu->settings.background_visualizer_style);
+    settings_save(&menu->settings);
+}
+
 #ifdef BETA_SETTINGS
 static void set_pal60_type (menu_t *menu, void *arg) {
     menu->settings.pal60_enabled = (bool)(uintptr_t)(arg);
@@ -512,6 +518,23 @@ static component_context_menu_t set_background_visualizer_enabled_type_context_m
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_background_visualizer_style_current_selection (menu_t *menu) {
+    int style = menu->settings.background_visualizer_style;
+    if (style < 0 || style > 2) {
+        return 0;
+    }
+    return style;
+}
+
+static component_context_menu_t set_background_visualizer_style_context_menu = {
+    .get_default_selection = get_background_visualizer_style_current_selection,
+    .list = {
+        {.text = "Bars", .action = set_background_visualizer_style_type, .arg = (void *)(uintptr_t)(0) },
+        {.text = "Pulse Wash", .action = set_background_visualizer_style_type, .arg = (void *)(uintptr_t)(1) },
+        {.text = "Sunburst", .action = set_background_visualizer_style_type, .arg = (void *)(uintptr_t)(2) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 #ifdef BETA_SETTINGS
 static int get_rumble_enabled_current_selection (menu_t *menu) {
     return menu->settings.rumble_enabled ? 0 : 1;
@@ -543,6 +566,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Text Panel Strength", .submenu = &set_text_panel_alpha_context_menu },
     { .text = "Theme Preset", .submenu = &set_ui_theme_context_menu },
     { .text = "Visualizer Background", .submenu = &set_background_visualizer_enabled_type_context_menu },
+    { .text = "Visualizer Style", .submenu = &set_background_visualizer_style_context_menu },
     { .text = "Pick Background Image", .action = open_background_picker },
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     { .text = "ROM Loading Bar", .submenu = &set_loading_progress_bar_enabled_context_menu },
@@ -598,6 +622,12 @@ static void draw (menu_t *menu, surface_t *d) {
         screensaver_logo_label = file_basename(menu->settings.screensaver_logo_file);
     }
     const char *screensaver_smooth_label = menu->settings.screensaver_smooth_mode ? "On (60)" : "Off (30)";
+    const char *visualizer_style_label = "Bars";
+    switch (menu->settings.background_visualizer_style) {
+        case 1: visualizer_style_label = "Pulse Wash"; break;
+        case 2: visualizer_style_label = "Sunburst"; break;
+        default: break;
+    }
 
     rdpq_attach(d, NULL);
 
@@ -632,6 +662,7 @@ ui_components_main_text_draw(
         "     Text Panel Str    : %d\n"
         "     Theme Preset      : %s\n"
         "     Visualizer BG     : %s\n"
+        "     Visualizer Style  : %s\n"
         "     Background Picker : Use A menu\n"
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         "  Autoload ROM      : %s\n\n"
@@ -667,6 +698,7 @@ ui_components_main_text_draw(
         (int)menu->settings.text_panel_alpha,
         ui_components_theme_name(menu->settings.ui_theme),
         format_switch(menu->settings.background_visualizer_enabled),
+        visualizer_style_label,
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         format_switch(menu->settings.rom_autoload_enabled),
         format_switch(menu->settings.loading_progress_bar_enabled)

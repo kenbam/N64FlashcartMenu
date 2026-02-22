@@ -44,7 +44,7 @@ static settings_t init = {
     .show_browser_rom_tags = true,
     .bgm_enabled = true,
     .background_visualizer_enabled = false,
-    .bgm_enabled = true,
+    .background_visualizer_style = 0,
     .rumble_enabled = false,
 };
 
@@ -122,6 +122,10 @@ void settings_load (settings_t *settings) {
         mini_get_bool(ini, "menu_beta_flag", "bgm_enabled", init.bgm_enabled)
     );
     settings->background_visualizer_enabled = mini_get_bool(ini, "menu_beta_flag", "background_visualizer_enabled", init.background_visualizer_enabled);
+    settings->background_visualizer_style = mini_get_int(ini, "menu_beta_flag", "background_visualizer_style", init.background_visualizer_style);
+    if (settings->background_visualizer_style < 0 || settings->background_visualizer_style > 2) {
+        settings->background_visualizer_style = init.background_visualizer_style;
+    }
     settings->rumble_enabled = mini_get_bool(ini, "menu_beta_flag", "rumble_enabled", init.rumble_enabled);
 
     mini_free(ini);
@@ -168,6 +172,7 @@ void settings_save (settings_t *settings) {
     // mini_set_bool(ini, "menu", "show_browser_rom_tags", settings->show_browser_rom_tags);
     // mini_set_bool(ini, "menu_beta_flag", "bgm_enabled", settings->bgm_enabled);
     mini_set_bool(ini, "menu_beta_flag", "background_visualizer_enabled", settings->background_visualizer_enabled);
+    mini_set_int(ini, "menu_beta_flag", "background_visualizer_style", settings->background_visualizer_style);
     // mini_set_bool(ini, "menu_beta_flag", "rumble_enabled", settings->rumble_enabled);
 
     mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);

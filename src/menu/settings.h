@@ -79,6 +79,8 @@ typedef struct {
 
     /** @brief Use an animated bar visualizer instead of static background image */
     bool background_visualizer_enabled;
+    /** @brief Visualizer style (0=bars, 1=pulse wash, 2=sunburst) */
+    int background_visualizer_style;
 
     /** @brief Enable Sound effects within the menu */
     bool soundfx_enabled;
