@@ -19,8 +19,13 @@ Supported directives:
 - `#SC64_THEME=<theme name or theme id>`
 - `#SC64_BACKGROUND=<path to png>`
 - `#SC64_BG=<path to png>` (alias)
-- `#SC64_BGM=<path to mp3>`
-- `#SC64_MUSIC=<path to mp3>` (alias)
+- `#SC64_BGM=<path to mp3|wav64>`
+- `#SC64_MUSIC=<path to mp3|wav64>` (alias)
+- `#SC64_VIZ_STYLE=<Bars|Pulse Wash|Sunburst|Oscilloscope|id>`
+- `#SC64_VIZ_INTENSITY=<Subtle|Normal|Full|0..2>`
+- `#SC64_TEXT_PANEL=<On|Off>`
+- `#SC64_TEXT_PANEL_ALPHA=<0..255>`
+- `#SC64_SCREENSAVER_LOGO=<path to png>`
 
 Notes:
 - Relative directive paths are resolved from the playlist folder.
@@ -31,7 +36,10 @@ Example:
 ```m3u
 #SC64_THEME=Retrowave
 #SC64_BACKGROUND=/menu/backgrounds/Countach.png
-#SC64_BGM=/menu/music/Need For Speed 4 High Stakes Soundtrack - Quantum Singularity (HD 1080p).mp3
+#SC64_BGM=/menu/music/Need For Speed 4 High Stakes Soundtrack - Quantum Singularity (HD 1080p).wav64
+#SC64_VIZ_STYLE=Oscilloscope
+#SC64_VIZ_INTENSITY=Subtle
+#SC64_TEXT_PANEL_ALPHA=160
 ../../N64 - USA/Mario Kart 64 (USA).z64
 ../../N64 - USA/F-Zero X (USA).z64
 ```
@@ -62,14 +70,28 @@ Example:
 - Theme presets can be selected in Menu Settings.
 - Background image can be changed from Menu Settings (without removing the SD card).
 - Text panel overlay can be enabled and its opacity adjusted to improve readability over bright or detailed backgrounds.
+- Playlist background overrides now use a cache-first path after the first load (decoded background surfaces are cached under `sd:/menu/cache/` for faster re-open).
 
 ### Menu Background Music (BGM)
 - Menu BGM autoplay is supported.
 - BGM can be enabled/disabled in Menu Settings.
 - Menu music file can be selected from `sd:/menu/music/`.
+- Menu BGM supports both `MP3` and `WAV64` (WAV64 preferred if selected/available).
+- `WAV64` (ADPCM) is recommended if you prioritize playback stability over file size.
 - Recommended menu MP3 settings for smooth playback:
   - `32 kHz`
   - `48 kbps` stereo (use `64 kbps` for denser tracks)
+
+### Visualizers
+- Optional animated visualizer background modes are available in Menu Settings.
+- Visualizers are audio-reactive for both MP3 and WAV64 menu BGM.
+- Supported styles:
+  - `Bars`
+  - `Pulse Wash`
+  - `Sunburst`
+  - `Oscilloscope`
+- Visualizer intensity can be set to `Subtle`, `Normal`, or `Full`.
+- Selected row text shimmer (theme-colored rainbow cycle) can be toggled in Menu Settings.
 
 ### Screensaver
 - Idle DVD-logo screensaver is available.

@@ -88,13 +88,18 @@ static bool browser_try_pick_menu_music_file(menu_t *menu);
 static bool browser_is_screensaver_logo_picker_root(menu_t *menu);
 static bool browser_try_pick_screensaver_logo_file(menu_t *menu);
 static void browser_restore_playlist_overrides(menu_t *menu);
-static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity);
+static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity, int text_panel_enabled, int text_panel_alpha, const char *screensaver_logo_path);
 
 typedef struct {
     bool active;
     bool theme_applied;
     int saved_theme;
     bool bgm_applied;
+    bool text_panel_applied;
+    bool saved_text_panel_enabled;
+    uint8_t saved_text_panel_alpha;
+    bool screensaver_logo_applied;
+    char *saved_screensaver_logo_file;
     bool viz_style_applied;
     int saved_viz_style;
     bool viz_intensity_applied;
@@ -627,7 +632,7 @@ static char *playlist_resolve_path(menu_t *menu, path_t *playlist_dir, const cha
     return normalized;
 }
 
-static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path, int *viz_style, int *viz_intensity) {
+static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path, int *viz_style, int *viz_intensity, int *text_panel_enabled, int *text_panel_alpha, char **screensaver_logo_path) {
     (void)menu;
     if (!line || line[0] != '#') {
         return;
@@ -687,6 +692,35 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
         return;
     }
 
+    if (strcasecmp(key, "TEXT_PANEL") == 0 || strcasecmp(key, "TEXT_OVERLAY") == 0) {
+        if (strcasecmp(value, "ON") == 0 || strcasecmp(value, "TRUE") == 0 || strcmp(value, "1") == 0) {
+            *text_panel_enabled = 1;
+        } else if (strcasecmp(value, "OFF") == 0 || strcasecmp(value, "FALSE") == 0 || strcmp(value, "0") == 0) {
+            *text_panel_enabled = 0;
+        }
+        return;
+    }
+
+    if (strcasecmp(key, "TEXT_PANEL_ALPHA") == 0 || strcasecmp(key, "TEXT_ALPHA") == 0) {
+        char *end = NULL;
+        long parsed = strtol(value, &end, 10);
+        if (end && *end == '\0') {
+            if (parsed < 0) parsed = 0;
+            if (parsed > 255) parsed = 255;
+            *text_panel_alpha = (int)parsed;
+        }
+        return;
+    }
+
+    if (strcasecmp(key, "SCREENSAVER_LOGO") == 0 || strcasecmp(key, "SAVER_LOGO") == 0) {
+        char *resolved = playlist_resolve_path(menu, playlist_dir, value);
+        if (resolved) {
+            free(*screensaver_logo_path);
+            *screensaver_logo_path = resolved;
+        }
+        return;
+    }
+
     if (strcasecmp(key, "VIZ_STYLE") == 0 || strcasecmp(key, "VISUALIZER_STYLE") == 0) {
         if (strcasecmp(value, "BARS") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_BARS;
         else if (strcasecmp(value, "PULSE") == 0 || strcasecmp(value, "PULSE_WASH") == 0 || strcasecmp(value, "PULSEWASH") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_PULSE_WASH;
@@ -737,6 +771,16 @@ static void browser_restore_playlist_overrides(menu_t *menu) {
         menu->runtime_bgm_override_file = NULL;
         menu->bgm_reload_requested = true;
     }
+    if (playlist_override.text_panel_applied) {
+        ui_components_set_text_panel(playlist_override.saved_text_panel_enabled, playlist_override.saved_text_panel_alpha);
+    }
+    if (playlist_override.screensaver_logo_applied) {
+        if (menu->settings.screensaver_logo_file) {
+            free(menu->settings.screensaver_logo_file);
+        }
+        menu->settings.screensaver_logo_file = playlist_override.saved_screensaver_logo_file ? strdup(playlist_override.saved_screensaver_logo_file) : strdup("");
+        menu->screensaver_logo_reload_requested = true;
+    }
     if (playlist_override.viz_style_applied) {
         ui_components_background_set_visualizer_style(playlist_override.saved_viz_style);
     }
@@ -745,10 +789,11 @@ static void browser_restore_playlist_overrides(menu_t *menu) {
     }
 
     free(playlist_override.background_path);
+    free(playlist_override.saved_screensaver_logo_file);
     memset(&playlist_override, 0, sizeof(playlist_override));
 }
 
-static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity) {
+static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity, int text_panel_enabled, int text_panel_alpha, const char *screensaver_logo_path) {
     if (!menu) {
         return;
     }
@@ -759,7 +804,10 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
     bool want_bg = (bg_path && file_exists((char *)bg_path));
     bool want_viz_style = (viz_style >= 0 && viz_style <= UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE);
     bool want_viz_intensity = (viz_intensity >= 0 && viz_intensity <= 2);
-    if (!want_theme && !want_bgm && !want_bg && !want_viz_style && !want_viz_intensity) {
+    bool want_text_panel_enabled = (text_panel_enabled == 0 || text_panel_enabled == 1);
+    bool want_text_panel_alpha = (text_panel_alpha >= 0 && text_panel_alpha <= 255);
+    bool want_screensaver_logo = (screensaver_logo_path && file_exists((char *)screensaver_logo_path));
+    if (!want_theme && !want_bgm && !want_bg && !want_viz_style && !want_viz_intensity && !want_text_panel_enabled && !want_text_panel_alpha && !want_screensaver_logo) {
         return;
     }
 
@@ -767,6 +815,9 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
     playlist_override.saved_theme = ui_components_get_theme();
     playlist_override.saved_viz_style = menu->settings.background_visualizer_style;
     playlist_override.saved_viz_intensity = menu->settings.background_visualizer_intensity;
+    playlist_override.saved_text_panel_enabled = menu->settings.text_panel_enabled;
+    playlist_override.saved_text_panel_alpha = menu->settings.text_panel_alpha;
+    playlist_override.saved_screensaver_logo_file = strdup(menu->settings.screensaver_logo_file ? menu->settings.screensaver_logo_file : "");
 
     if (want_theme) {
         ui_components_set_theme(theme_id);
@@ -778,6 +829,22 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
         menu->runtime_bgm_override_file = strdup(bgm_path);
         menu->bgm_reload_requested = true;
         playlist_override.bgm_applied = (menu->runtime_bgm_override_file != NULL);
+    }
+    if (want_text_panel_enabled || want_text_panel_alpha) {
+        bool enabled = want_text_panel_enabled ? (text_panel_enabled != 0) : menu->settings.text_panel_enabled;
+        uint8_t alpha = want_text_panel_alpha ? (uint8_t)text_panel_alpha : menu->settings.text_panel_alpha;
+        ui_components_set_text_panel(enabled, alpha);
+        playlist_override.text_panel_applied = true;
+    }
+    if (want_screensaver_logo) {
+        if (menu->settings.screensaver_logo_file) {
+            free(menu->settings.screensaver_logo_file);
+        }
+        menu->settings.screensaver_logo_file = strdup(strip_fs_prefix((char *)screensaver_logo_path));
+        if (menu->settings.screensaver_logo_file) {
+            menu->screensaver_logo_reload_requested = true;
+            playlist_override.screensaver_logo_applied = true;
+        }
     }
 
     if (want_viz_style) {
@@ -826,6 +893,9 @@ static bool load_playlist (menu_t *menu) {
     char *playlist_bg = NULL;
     int playlist_viz_style = -1;
     int playlist_viz_intensity = -1;
+    int playlist_text_panel_enabled = -1;
+    int playlist_text_panel_alpha = -1;
+    char *playlist_screensaver_logo = NULL;
 
     char line[1024];
     while (fgets(line, sizeof(line), f) != NULL) {
@@ -834,7 +904,7 @@ static bool load_playlist (menu_t *menu) {
             continue;
         }
         if (trimmed[0] == '#') {
-            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg, &playlist_viz_style, &playlist_viz_intensity);
+            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg, &playlist_viz_style, &playlist_viz_intensity, &playlist_text_panel_enabled, &playlist_text_panel_alpha, &playlist_screensaver_logo);
             continue;
         }
 
@@ -908,12 +978,13 @@ static bool load_playlist (menu_t *menu) {
     menu->browser.sort_mode = BROWSER_SORT_CUSTOM;
     browser_apply_sort(menu);
 
-    browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity);
+    browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo);
     path_free(playlist_dir);
     fclose(f);
     free(playlist_theme);
     free(playlist_bgm);
     free(playlist_bg);
+    free(playlist_screensaver_logo);
 
     return false;
 }
