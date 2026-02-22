@@ -131,12 +131,27 @@ typedef struct {
     component_boxart_t *boxart;
 } playlist_grid_thumb_slot_t;
 
-#define PLAYLIST_GRID_THUMB_SLOTS 12
+#define PLAYLIST_GRID_VISIBLE_SLOTS 12
+#define PLAYLIST_GRID_THUMB_SLOTS 13
 static playlist_grid_thumb_slot_t playlist_grid_slots[PLAYLIST_GRID_THUMB_SLOTS];
 static int playlist_grid_slots_page_start = -1;
 static entry_t *playlist_grid_slots_list = NULL;
 static uint32_t playlist_grid_draw_tick = 0;
 static int playlist_grid_prepare_phase = 0;
+static int playlist_grid_prefetch_phase = 0;
+
+typedef struct {
+    bool valid;
+    bool rom_info_loaded;
+    uint32_t last_used_tick;
+    char *entry_path;
+    char game_code[4];
+    char rom_title[21];
+} playlist_grid_meta_cache_entry_t;
+
+#define PLAYLIST_GRID_META_CACHE_ENTRIES 64
+static playlist_grid_meta_cache_entry_t playlist_grid_meta_cache[PLAYLIST_GRID_META_CACHE_ENTRIES];
+static uint32_t playlist_grid_meta_cache_tick = 1;
 
 static void playlist_grid_slots_clear(void) {
     for (int i = 0; i < PLAYLIST_GRID_THUMB_SLOTS; i++) {
@@ -150,6 +165,98 @@ static void playlist_grid_slots_clear(void) {
     playlist_grid_slots_page_start = -1;
     playlist_grid_slots_list = NULL;
     playlist_grid_prepare_phase = 0;
+    playlist_grid_prefetch_phase = 0;
+}
+
+static playlist_grid_meta_cache_entry_t *playlist_grid_meta_cache_find(const char *entry_path) {
+    if (!entry_path) {
+        return NULL;
+    }
+    for (int i = 0; i < PLAYLIST_GRID_META_CACHE_ENTRIES; i++) {
+        playlist_grid_meta_cache_entry_t *e = &playlist_grid_meta_cache[i];
+        if (!e->valid || !e->entry_path) {
+            continue;
+        }
+        if (strcmp(e->entry_path, entry_path) == 0) {
+            e->last_used_tick = ++playlist_grid_meta_cache_tick;
+            return e;
+        }
+    }
+    return NULL;
+}
+
+static playlist_grid_meta_cache_entry_t *playlist_grid_meta_cache_alloc(const char *entry_path) {
+    if (!entry_path) {
+        return NULL;
+    }
+
+    playlist_grid_meta_cache_entry_t *empty = NULL;
+    playlist_grid_meta_cache_entry_t *oldest = &playlist_grid_meta_cache[0];
+    for (int i = 0; i < PLAYLIST_GRID_META_CACHE_ENTRIES; i++) {
+        playlist_grid_meta_cache_entry_t *e = &playlist_grid_meta_cache[i];
+        if (!e->valid) {
+            empty = e;
+            break;
+        }
+        if (e->last_used_tick < oldest->last_used_tick) {
+            oldest = e;
+        }
+    }
+
+    playlist_grid_meta_cache_entry_t *slot = empty ? empty : oldest;
+    free(slot->entry_path);
+    memset(slot, 0, sizeof(*slot));
+    slot->entry_path = strdup(entry_path);
+    if (!slot->entry_path) {
+        return NULL;
+    }
+    slot->valid = true;
+    slot->last_used_tick = ++playlist_grid_meta_cache_tick;
+    return slot;
+}
+
+static bool playlist_grid_get_boxart_meta(const char *entry_path, char game_code_out[4], char rom_title_out[21]) {
+    if (!entry_path || !game_code_out || !rom_title_out) {
+        return false;
+    }
+
+    playlist_grid_meta_cache_entry_t *cached = playlist_grid_meta_cache_find(entry_path);
+    if (cached) {
+        if (!cached->rom_info_loaded) {
+            return false;
+        }
+        memcpy(game_code_out, cached->game_code, 4);
+        memcpy(rom_title_out, cached->rom_title, 21);
+        return true;
+    }
+
+    path_t *rom_path = path_create(entry_path);
+    if (!rom_path) {
+        return false;
+    }
+
+    rom_info_t rom_info = {0};
+    bool ok = (rom_config_load(rom_path, &rom_info) == ROM_OK);
+    path_free(rom_path);
+
+    playlist_grid_meta_cache_entry_t *slot = playlist_grid_meta_cache_alloc(entry_path);
+    if (!slot) {
+        return false;
+    }
+
+    if (!ok) {
+        slot->rom_info_loaded = false;
+        return false;
+    }
+
+    slot->rom_info_loaded = true;
+    memcpy(slot->game_code, rom_info.game_code, 4);
+    memcpy(slot->rom_title, rom_info.title, 20);
+    slot->rom_title[20] = '\0';
+
+    memcpy(game_code_out, slot->game_code, 4);
+    memcpy(rom_title_out, slot->rom_title, 21);
+    return true;
 }
 
 static const char *browser_grid_display_name(const char *name, char *buffer, size_t buffer_size) {
@@ -206,19 +313,11 @@ static void playlist_grid_slot_prepare(menu_t *menu, int slot_index, int entry_i
         return;
     }
 
-    path_t *rom_path = path_create(entry->path);
-    if (!rom_path) {
-        return;
+    char game_code[4];
+    char safe_title[21];
+    if (playlist_grid_get_boxart_meta(entry->path, game_code, safe_title)) {
+        slot->boxart = ui_components_boxart_init(menu->storage_prefix, game_code, safe_title, IMAGE_BOXART_FRONT);
     }
-
-    rom_info_t rom_info = {0};
-    if (rom_config_load(rom_path, &rom_info) == ROM_OK) {
-        char safe_title[21];
-        memcpy(safe_title, rom_info.title, 20);
-        safe_title[20] = '\0';
-        slot->boxart = ui_components_boxart_init(menu->storage_prefix, rom_info.game_code, safe_title, IMAGE_BOXART_FRONT);
-    }
-    path_free(rom_path);
 }
 
 
@@ -766,6 +865,36 @@ static void browser_playlist_grid_draw(menu_t *menu) {
             continue;
         }
         playlist_grid_slot_prepare(menu, i, page_start + i);
+    }
+
+    // Lightweight neighbor-page prefetch after current page work.
+    // This warms metadata + thumbnail caches for next/prev page without blocking current page.
+    if (!menu->actions.go_up && !menu->actions.go_down && !menu->actions.go_left && !menu->actions.go_right) {
+        const int prefetch_pages[2] = { page_start + page_size, page_start - page_size };
+        const int prefetch_budget = 1;
+        for (int n = 0; n < prefetch_budget; n++) {
+            int page_sel = playlist_grid_prefetch_phase & 1;
+            int base = prefetch_pages[page_sel];
+            playlist_grid_prefetch_phase++;
+            if (base < 0 || base >= entries) {
+                continue;
+            }
+            int rem = entries - base;
+            int page_visible = rem > page_size ? page_size : rem;
+            if (page_visible <= 0) {
+                continue;
+            }
+            int idx_in_page = (playlist_grid_prefetch_phase / 2) % page_visible;
+            int entry_index = base + idx_in_page;
+            if (entry_index < 0 || entry_index >= entries) {
+                continue;
+            }
+
+            // Reuse a temp off-page slot so prefetch can use the same prep path/queue/cache.
+            int temp_slot = PLAYLIST_GRID_VISIBLE_SLOTS; // reserved off-page prefetch slot
+            playlist_grid_slot_prepare(menu, temp_slot, entry_index);
+            break;
+        }
     }
 
     // panel backing for grid area
