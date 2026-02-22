@@ -135,6 +135,8 @@ typedef struct {
 static playlist_grid_thumb_slot_t playlist_grid_slots[PLAYLIST_GRID_THUMB_SLOTS];
 static int playlist_grid_slots_page_start = -1;
 static entry_t *playlist_grid_slots_list = NULL;
+static uint32_t playlist_grid_draw_tick = 0;
+static int playlist_grid_prepare_phase = 0;
 
 static void playlist_grid_slots_clear(void) {
     for (int i = 0; i < PLAYLIST_GRID_THUMB_SLOTS; i++) {
@@ -147,6 +149,34 @@ static void playlist_grid_slots_clear(void) {
     }
     playlist_grid_slots_page_start = -1;
     playlist_grid_slots_list = NULL;
+    playlist_grid_prepare_phase = 0;
+}
+
+static const char *browser_grid_display_name(const char *name, char *buffer, size_t buffer_size) {
+    if (!name || !buffer || buffer_size == 0) {
+        return "";
+    }
+    snprintf(buffer, buffer_size, "%s", name);
+
+    char *dot = strrchr(buffer, '.');
+    if (dot) {
+        *dot = '\0';
+    }
+
+    for (char *p = buffer; *p; p++) {
+        if (*p == '_') {
+            *p = ' ';
+        }
+    }
+
+    // If the filename starts with an article marker or long region suffixes, leave them; just trim double spaces.
+    for (char *p = buffer; *p; p++) {
+        if (*p == ' ' && p[1] == ' ') {
+            memmove(p, p + 1, strlen(p));
+            p--;
+        }
+    }
+    return buffer;
 }
 
 static void playlist_grid_slot_prepare(menu_t *menu, int slot_index, int entry_index) {
@@ -689,6 +719,8 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         return;
     }
 
+    playlist_grid_draw_tick++;
+
     const int cols = 4;
     const int tile_w = 128;
     const int tile_h = 120;
@@ -720,6 +752,22 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         playlist_grid_slots_page_start = page_start;
     }
 
+    // Throttle thumbnail/metadata prep to reduce page-change spikes.
+    // Prioritize selected tile, then spread work across the page over subsequent frames.
+    int selected_slot = selected - page_start;
+    if (selected_slot >= 0 && selected_slot < visible) {
+        playlist_grid_slot_prepare(menu, selected_slot, selected);
+    }
+    int prep_budget = menu->actions.go_fast ? 1 : 2;
+    for (int n = 0; n < prep_budget && visible > 0; n++) {
+        int i = playlist_grid_prepare_phase % visible;
+        playlist_grid_prepare_phase = (playlist_grid_prepare_phase + 1) % (visible > 0 ? visible : 1);
+        if (i == selected_slot) {
+            continue;
+        }
+        playlist_grid_slot_prepare(menu, i, page_start + i);
+    }
+
     // panel backing for grid area
     ui_components_box_draw(grid_x - 8, grid_y - 8, grid_x + total_w + 8, grid_bottom + 8, RGBA32(0x00, 0x00, 0x00, 0x54));
 
@@ -733,9 +781,12 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         int x1 = x0 + tile_w;
         int y1 = y0 + tile_h;
         bool is_selected = (entry_index == selected);
+        int pulse = 20 + (int)((playlist_grid_draw_tick + (uint32_t)(i * 7)) % 24);
+        if (pulse > 31) pulse = 62 - pulse;
+        if (pulse < 0) pulse = 0;
 
         color_t frame = is_selected ? ui_components_file_list_highlight_color() : RGBA32(0x5A, 0x6A, 0x7A, 0xB0);
-        color_t card_bg = RGBA32(0x07, 0x0B, 0x11, is_selected ? 0xD4 : 0xA8);
+        color_t card_bg = RGBA32(0x07, 0x0B, 0x11, is_selected ? 0xDC : 0xA8);
         color_t art_bg = RGBA32(0x12, 0x18, 0x22, 0xE8);
         color_t accent;
         switch (entry->type) {
@@ -748,6 +799,10 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         ui_components_box_draw(x0, y0, x1, y1, card_bg);
         ui_components_border_draw(x0, y0, x1, y1);
         ui_components_box_draw(x0, y0, x1, y0 + 2, frame);
+        if (is_selected) {
+            ui_components_box_draw(x0 - 2, y0 - 2, x1 + 2, y0, RGBA32(0xFF, 0xFF, 0xFF, 0x18 + pulse));
+            ui_components_box_draw(x0 - 2, y1, x1 + 2, y1 + 2, RGBA32(0xFF, 0xFF, 0xFF, 0x10 + pulse / 2));
+        }
         ui_components_box_draw(x0 + 4, y0 + 4, x1 - 4, y0 + 86, art_bg);
         ui_components_box_draw(x0 + 4, y0 + 84, x1 - 4, y0 + 86, accent);
 
@@ -788,6 +843,8 @@ static void browser_playlist_grid_draw(menu_t *menu) {
             ui_components_box_draw(x0 + 12, y0 + 30, x1 - 28, y0 + 38, RGBA32(0xFF, 0xFF, 0xFF, 0x10));
             ui_components_box_draw(x0 + 12, y0 + 44, x1 - 18, y0 + 52, RGBA32(0xFF, 0xFF, 0xFF, 0x0E));
             ui_components_box_draw(x0 + 12, y0 + 58, x1 - 36, y0 + 66, RGBA32(0xFF, 0xFF, 0xFF, 0x0C));
+            rdpq_text_printf(&(rdpq_textparms_t){ .width = x1 - x0 - 12, .height = 12, .align = ALIGN_CENTER },
+                             FNT_DEFAULT, x0 + 6, y0 + 69, "%s", (slot->boxart && slot->boxart->loading) ? "Loading..." : "No Art");
         }
 
         if (is_selected) {
@@ -796,12 +853,13 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         }
 
         rdpq_set_scissor(x0 + 6, y0 + 90, x1 - 6, y1 - 4);
+        char title_buf[96];
         ui_components_main_text_draw(
             is_selected ? STL_BLUE : STL_DEFAULT,
             ALIGN_LEFT, VALIGN_TOP,
             "@%d,%d\n%s",
             x0 + 8, y0 + 92,
-            entry->name
+            browser_grid_display_name(entry->name, title_buf, sizeof(title_buf))
         );
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
     }
@@ -814,12 +872,13 @@ static void browser_playlist_grid_draw(menu_t *menu) {
     ui_components_box_draw(32, footer_y0, screen_w - 32, footer_y1, RGBA32(0x00, 0x00, 0x00, 0x66));
     ui_components_border_draw(32, footer_y0, screen_w - 32, footer_y1);
     entry_t *sel = (selected >= 0 && selected < entries) ? &menu->browser.list[selected] : NULL;
+    char caption_buf[128];
     ui_components_main_text_draw(
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
         "@40,%d\n%s",
         footer_y0 + 4,
-        sel ? sel->name : ""
+        sel ? browser_grid_display_name(sel->name, caption_buf, sizeof(caption_buf)) : ""
     );
     ui_components_main_text_draw(
         STL_GRAY,
