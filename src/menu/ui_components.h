@@ -327,6 +327,7 @@ void ui_components_context_menu_draw(component_context_menu_t *cm);
 typedef struct {
     bool loading; /**< Flag to indicate if the box art is loading */
     surface_t *image; /**< Pointer to the box art image */
+    void *load_context; /**< Internal async load context (PNG decode callback data) */
 } component_boxart_t;
 
 /**
