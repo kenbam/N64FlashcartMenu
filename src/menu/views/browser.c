@@ -124,6 +124,7 @@ typedef struct {
 
 static playlist_toast_t playlist_toast = {0};
 static bool playlist_grid_view_enabled = false;
+static int playlist_grid_runtime_override = -1; // -1=playlist/default, 0=list, 1=grid
 
 typedef struct {
     int entry_index;
@@ -810,6 +811,9 @@ static bool browser_use_playlist_grid(menu_t *menu) {
     if (menu->browser.picker != BROWSER_PICKER_NONE) {
         return false;
     }
+    if (playlist_grid_runtime_override == 0 || playlist_grid_runtime_override == 1) {
+        return (playlist_grid_runtime_override == 1);
+    }
     return playlist_grid_view_enabled;
 }
 
@@ -1300,6 +1304,7 @@ static void browser_restore_playlist_overrides(menu_t *menu) {
     if (playlist_override.grid_view_applied) {
         playlist_grid_view_enabled = playlist_override.saved_grid_view_enabled;
     }
+    playlist_grid_runtime_override = -1;
     playlist_grid_slots_clear();
 
     free(playlist_override.background_path);
@@ -1375,6 +1380,7 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
     if (want_grid_view) {
         playlist_grid_view_enabled = (grid_view_enabled == 1);
         playlist_override.grid_view_applied = true;
+        playlist_grid_runtime_override = -1;
         playlist_grid_slots_clear();
     }
 
@@ -2011,6 +2017,14 @@ static void process (menu_t *menu) {
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
     }
 
+    if (menu->actions.toggle_view && menu->browser.playlist && menu->browser.picker == BROWSER_PICKER_NONE) {
+        bool currently_grid = browser_use_playlist_grid(menu);
+        playlist_grid_runtime_override = currently_grid ? 0 : 1;
+        playlist_grid_slots_clear();
+        sound_play_effect(SFX_SETTING);
+        return;
+    }
+
     if (menu->actions.lz_context && menu->browser.entries > 1) {
         int next = browser_pick_random_index(menu);
         if (next >= 0 && next < menu->browser.entries) {
@@ -2144,10 +2158,11 @@ static void draw (menu_t *menu, surface_t *d) {
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
         "%s\n"
-        "^%02XB: Back^00 | ^%02XL: Random^00",
+        "^%02XB: Back^00 | ^%02XL: %s^00",
         menu->browser.entries == 0 ? "" : action,
         path_is_root(menu->browser.directory) ? STL_GRAY : STL_DEFAULT,
-        menu->browser.entries > 1 ? STL_DEFAULT : STL_GRAY
+        menu->browser.entries > 1 ? STL_DEFAULT : STL_GRAY,
+        "Random"
     );
 
     ui_components_actions_bar_text_draw(

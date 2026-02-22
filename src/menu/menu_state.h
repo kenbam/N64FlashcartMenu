@@ -133,6 +133,7 @@ typedef struct {
         bool options;
         bool settings;
         bool lz_context;
+        bool toggle_view;
     } actions;
 
     struct {

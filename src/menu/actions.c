@@ -22,6 +22,7 @@ static void actions_clear (menu_t *menu) {
     menu->actions.options = false;
     menu->actions.settings = false;
     menu->actions.lz_context = false;
+    menu->actions.toggle_view = false;
 }
 
 static void actions_update_direction (menu_t *menu) {
@@ -99,7 +100,9 @@ static void actions_update_buttons (menu_t *menu) {
         }
     }
 
-    if (pressed.a) {
+    if (pressed.z && menu->actions.go_left && menu->actions.go_fast) {
+        menu->actions.toggle_view = true;
+    } else if (pressed.a) {
         menu->actions.enter = true;
     } else if (pressed.b) {
         menu->actions.back = true;
