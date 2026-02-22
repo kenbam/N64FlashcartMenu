@@ -54,6 +54,7 @@ static int format_file_size(char *buffer, int64_t size) {
  * @param selected Index of the currently selected entry.
  */
 void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
+    const int nominal_row_height = 19;
     int starting_position = 0;
     int list_x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
     int list_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL;
@@ -63,14 +64,35 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
         list_height = 0;
     }
 
-    if (entries > LIST_ENTRIES && selected >= (LIST_ENTRIES / 2)) {
-        starting_position = selected - (LIST_ENTRIES / 2);
-        if (starting_position >= entries - LIST_ENTRIES) {
-            starting_position = entries - LIST_ENTRIES;
+    if (selected < 0) {
+        selected = 0;
+    } else if (selected >= entries && entries > 0) {
+        selected = entries - 1;
+    }
+
+    int max_visible_entries = list_height / nominal_row_height;
+    if (max_visible_entries < 1) {
+        max_visible_entries = 1;
+    } else if (max_visible_entries > LIST_ENTRIES) {
+        max_visible_entries = LIST_ENTRIES;
+    }
+
+    if (entries > max_visible_entries && selected >= (max_visible_entries / 2)) {
+        starting_position = selected - (max_visible_entries / 2);
+        if (starting_position >= entries - max_visible_entries) {
+            starting_position = entries - max_visible_entries;
         }
     }
 
-    ui_components_list_scrollbar_draw(selected, entries, LIST_ENTRIES);
+    int visible_entries = entries - starting_position;
+    if (visible_entries > max_visible_entries) {
+        visible_entries = max_visible_entries;
+    }
+    if (visible_entries < 0) {
+        visible_entries = 0;
+    }
+
+    ui_components_list_scrollbar_draw(selected, entries, max_visible_entries);
 
     if (entries == 0) {
         ui_components_main_text_draw(
@@ -90,7 +112,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
         for (int i = 0; i < LIST_ENTRIES; i++) {
             int entry_index = starting_position + i;
 
-            if (entry_index >= entries) {
+            if (i >= visible_entries || entry_index >= entries) {
                 name_lengths[i] = 0;
             } else {
                 size_t length = strlen(list[entry_index].name);
@@ -114,9 +136,8 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
             file_list_layout
         );
 
-        for (int i = 0; i < LIST_ENTRIES; i++) {
+        for (int i = 0; i < visible_entries; i++) {
             int entry_index = starting_position + i;
-
             entry_t *entry = &list[entry_index];
 
             menu_font_style_t style;
@@ -141,7 +162,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
             rdpq_paragraph_builder_span(entry->name, name_lengths[i]);
 
-            if ((entry_index + 1) >= entries) {
+            if ((i + 1) >= visible_entries) {
                 break;
             }
 
@@ -150,8 +171,21 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
         layout = rdpq_paragraph_builder_end();
 
-        int highlight_height = (layout->bbox.y1 - layout->bbox.y0) / layout->nlines;
-        int highlight_y = VISIBLE_AREA_Y0 + TAB_HEIGHT + TEXT_MARGIN_VERTICAL + TEXT_OFFSET_VERTICAL + ((selected - starting_position) * highlight_height);
+        int lines = layout->nlines > 0 ? layout->nlines : visible_entries;
+        if (lines < 1) {
+            lines = 1;
+        }
+        int highlight_height = (layout->bbox.y1 - layout->bbox.y0) / lines;
+        if (highlight_height < 1) {
+            highlight_height = nominal_row_height;
+        }
+        int selected_row = selected - starting_position;
+        if (selected_row < 0) {
+            selected_row = 0;
+        } else if (selected_row >= lines) {
+            selected_row = lines - 1;
+        }
+        int highlight_y = list_y + (selected_row * highlight_height);
 
         rdpq_set_scissor(list_x, list_y, VISIBLE_AREA_X1 - TEXT_MARGIN_HORIZONTAL, list_bottom);
         ui_components_box_draw(
@@ -184,8 +218,9 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
         char file_size[16];
 
-        for (int i = starting_position; i < entries; i++) {
-            entry_t *entry = &list[i];
+        for (int i = 0; i < visible_entries; i++) {
+            int entry_index = starting_position + i;
+            entry_t *entry = &list[entry_index];
 
             if (entry->type != ENTRY_TYPE_DIR) {
                 // TODO: add option to use font icons instead of file sizes.
@@ -195,7 +230,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
                 rdpq_paragraph_builder_span(directory_icon, 5);
             }
 
-            if ((i + 1) == (starting_position + LIST_ENTRIES)) {
+            if ((i + 1) >= visible_entries) {
                 break;
             }
 
