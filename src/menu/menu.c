@@ -34,6 +34,8 @@
 #define MENU_ROM_PLAYTIME_FILE      "playtime.ini"
 #define MENU_BGM_MP3_FILE           "/menu/music/menu.mp3"
 #define MENU_BGM_MP3_FILE_FALLBACK  "/menu/music/bgm.mp3"
+#define MENU_BGM_WAV64_FILE         "/menu/music/menu.wav64"
+#define MENU_BGM_WAV64_FILE_FALLBACK "/menu/music/bgm.wav64"
 
 #define MENU_CACHE_DIRECTORY        "cache"
 #define BACKGROUND_CACHE_FILE       "background.data"
@@ -63,6 +65,22 @@ static bool interlaced = true;
 static bool menu_bgm_initialized = false;
 static bool menu_bgm_loaded = false;
 static bool menu_bgm_error = false;
+static bool menu_bgm_mp3_open = false;
+typedef enum {
+    MENU_BGM_BACKEND_NONE = 0,
+    MENU_BGM_BACKEND_MP3,
+    MENU_BGM_BACKEND_WAV64,
+} menu_bgm_backend_t;
+static menu_bgm_backend_t menu_bgm_backend = MENU_BGM_BACKEND_NONE;
+static wav64_t menu_bgm_wav64;
+static bool menu_bgm_wav64_open = false;
+typedef struct {
+    waveform_t wave;
+    WaveformRead inner_read;
+    WaveformStart inner_start;
+    void *inner_ctx;
+} menu_bgm_wav64_meter_wrap_t;
+static menu_bgm_wav64_meter_wrap_t menu_bgm_wav64_wrap;
 static int screensaver_fps_mode_applied = -1;
 static struct {
     bool active;
@@ -486,9 +504,108 @@ static void screensaver_draw (surface_t *display) {
     rdpq_detach_show();
 }
 
-static mp3player_err_t menu_bgm_load_file (menu_t *menu, const char *file_name) {
+static bool path_has_ext_ci(const char *path, const char *ext) {
+    if (!path || !ext) {
+        return false;
+    }
+    size_t path_len = strlen(path);
+    size_t ext_len = strlen(ext);
+    if (path_len < ext_len) {
+        return false;
+    }
+    return strcasecmp(path + (path_len - ext_len), ext) == 0;
+}
+
+static void menu_bgm_set_meter_from_pcm(const void *samples_ptr, int samples, int channels, int bits) {
+    if (!samples_ptr || samples <= 0 || channels <= 0) {
+        sound_bgm_meter_reset();
+        return;
+    }
+
+    sound_bgm_meter_t meter = {0};
+    if (bits == 16) {
+        const int16_t *buffer = (const int16_t *)samples_ptr;
+        uint32_t sum_abs_l = 0, sum_abs_r = 0;
+        int16_t peak_l = 0, peak_r = 0;
+        for (int i = 0; i < samples; i++) {
+            int16_t sl = buffer[i * channels];
+            int16_t al = (sl < 0) ? (int16_t)(-sl) : sl;
+            if (al > peak_l) peak_l = al;
+            sum_abs_l += (uint16_t)al;
+
+            int16_t sr = (channels > 1) ? buffer[i * channels + 1] : sl;
+            int16_t ar = (sr < 0) ? (int16_t)(-sr) : sr;
+            if (ar > peak_r) peak_r = ar;
+            sum_abs_r += (uint16_t)ar;
+        }
+        const float inv_max = 1.0f / 32768.0f;
+        meter.peak_l = peak_l * inv_max;
+        meter.peak_r = peak_r * inv_max;
+        meter.avg_l = ((float)sum_abs_l / (float)samples) * inv_max;
+        meter.avg_r = ((float)sum_abs_r / (float)samples) * inv_max;
+        meter.valid = true;
+    } else if (bits == 8) {
+        const int8_t *buffer = (const int8_t *)samples_ptr;
+        uint32_t sum_abs_l = 0, sum_abs_r = 0;
+        int16_t peak_l = 0, peak_r = 0;
+        for (int i = 0; i < samples; i++) {
+            int16_t sl = (int16_t)buffer[i * channels];
+            int16_t al = (sl < 0) ? (int16_t)(-sl) : sl;
+            if (al > peak_l) peak_l = al;
+            sum_abs_l += (uint16_t)al;
+            int16_t sr = (channels > 1) ? (int16_t)buffer[i * channels + 1] : sl;
+            int16_t ar = (sr < 0) ? (int16_t)(-sr) : sr;
+            if (ar > peak_r) peak_r = ar;
+            sum_abs_r += (uint16_t)ar;
+        }
+        const float inv_max = 1.0f / 128.0f;
+        meter.peak_l = peak_l * inv_max;
+        meter.peak_r = peak_r * inv_max;
+        meter.avg_l = ((float)sum_abs_l / (float)samples) * inv_max;
+        meter.avg_r = ((float)sum_abs_r / (float)samples) * inv_max;
+        meter.valid = true;
+    }
+
+    sound_bgm_meter_set(&meter);
+}
+
+static void menu_bgm_wav64_meter_start(void *ctx, samplebuffer_t *sbuf) {
+    menu_bgm_wav64_meter_wrap_t *w = (menu_bgm_wav64_meter_wrap_t *)ctx;
+    sound_bgm_meter_reset();
+    if (w && w->inner_start) {
+        w->inner_start(w->inner_ctx, sbuf);
+    }
+}
+
+static void menu_bgm_wav64_meter_read(void *ctx, samplebuffer_t *sbuf, int wpos, int wlen, bool seeking) {
+    menu_bgm_wav64_meter_wrap_t *w = (menu_bgm_wav64_meter_wrap_t *)ctx;
+    if (!w || !w->inner_read) {
+        return;
+    }
+
+    int before_widx = sbuf->widx;
+    w->inner_read(w->inner_ctx, sbuf, wpos, wlen, seeking);
+    int after_widx = sbuf->widx;
+    int appended = after_widx - before_widx;
+    if (appended <= 0) {
+        return;
+    }
+
+    int bps = 1 << SAMPLES_BPS_SHIFT(sbuf);
+    int channels = w->wave.channels > 0 ? w->wave.channels : 2;
+    int bits = (bps / (channels > 0 ? channels : 1)) * 8;
+    if (bits != 8 && bits != 16) {
+        return;
+    }
+
+    uint8_t *base = (uint8_t *)SAMPLES_PTR(sbuf);
+    void *ptr = base + (before_widx * bps);
+    menu_bgm_set_meter_from_pcm(ptr, appended, channels, bits);
+}
+
+static char *menu_bgm_resolve_path (menu_t *menu, const char *file_name) {
     if (!menu || !file_name || file_name[0] == '\0') {
-        return MP3PLAYER_ERR_NO_FILE;
+        return NULL;
     }
 
     path_t *path = NULL;
@@ -498,17 +615,107 @@ static mp3player_err_t menu_bgm_load_file (menu_t *menu, const char *file_name) 
         path = path_init(menu->storage_prefix, (char *)file_name);
     }
     if (!path) {
-        return MP3PLAYER_ERR_NO_FILE;
+        return NULL;
     }
 
     if (!file_exists(path_get(path))) {
         path_free(path);
+        return NULL;
+    }
+
+    char *resolved = strdup(path_get(path));
+    path_free(path);
+    return resolved;
+}
+
+static bool menu_bgm_is_playing (void) {
+    switch (menu_bgm_backend) {
+        case MENU_BGM_BACKEND_MP3:
+            return mp3player_is_playing();
+        case MENU_BGM_BACKEND_WAV64:
+            return mixer_ch_playing(SOUND_MP3_PLAYER_CHANNEL);
+        default:
+            return false;
+    }
+}
+
+static void menu_bgm_stop_playback (void) {
+    switch (menu_bgm_backend) {
+        case MENU_BGM_BACKEND_MP3:
+            if (mp3player_is_playing()) {
+                mp3player_stop();
+            }
+            break;
+        case MENU_BGM_BACKEND_WAV64:
+            mixer_ch_stop(SOUND_MP3_PLAYER_CHANNEL);
+            break;
+        default:
+            break;
+    }
+}
+
+static mp3player_err_t menu_bgm_load_mp3_file (menu_t *menu, const char *file_name) {
+    if (!menu_bgm_mp3_open) {
+        mp3player_err_t init_err = mp3player_init();
+        if (init_err != MP3PLAYER_OK) {
+            debugf("Menu BGM MP3 init failed (%d)\n", init_err);
+            return init_err;
+        }
+        menu_bgm_mp3_open = true;
+    }
+
+    char *resolved = menu_bgm_resolve_path(menu, file_name);
+    if (!resolved) {
         return MP3PLAYER_ERR_NO_FILE;
     }
 
-    mp3player_err_t err = mp3player_load(path_get(path));
-    path_free(path);
+    mp3player_err_t err = mp3player_load(resolved);
+    free(resolved);
+    if (err == MP3PLAYER_OK) {
+        menu_bgm_backend = MENU_BGM_BACKEND_MP3;
+    }
     return err;
+}
+
+static bool menu_bgm_load_wav64_file (menu_t *menu, const char *file_name) {
+    char *resolved = menu_bgm_resolve_path(menu, file_name);
+    if (!resolved) {
+        return false;
+    }
+
+    wav64_open(&menu_bgm_wav64, resolved);
+    wav64_set_loop(&menu_bgm_wav64, true);
+    memset(&menu_bgm_wav64_wrap, 0, sizeof(menu_bgm_wav64_wrap));
+    menu_bgm_wav64_wrap.wave = menu_bgm_wav64.wave;
+    menu_bgm_wav64_wrap.inner_read = menu_bgm_wav64.wave.read;
+    menu_bgm_wav64_wrap.inner_start = menu_bgm_wav64.wave.start;
+    menu_bgm_wav64_wrap.inner_ctx = menu_bgm_wav64.wave.ctx;
+    menu_bgm_wav64_wrap.wave.read = menu_bgm_wav64_meter_read;
+    menu_bgm_wav64_wrap.wave.start = menu_bgm_wav64_meter_start;
+    menu_bgm_wav64_wrap.wave.ctx = &menu_bgm_wav64_wrap;
+    menu_bgm_wav64_open = true;
+    menu_bgm_backend = MENU_BGM_BACKEND_WAV64;
+    sound_bgm_meter_reset();
+    free(resolved);
+    return true;
+}
+
+static mp3player_err_t menu_bgm_try_load_any (menu_t *menu, const char *file_name) {
+    if (!file_name || !file_name[0]) {
+        return MP3PLAYER_ERR_NO_FILE;
+    }
+
+    if (path_has_ext_ci(file_name, ".wav64")) {
+        return menu_bgm_load_wav64_file(menu, file_name) ? MP3PLAYER_OK : MP3PLAYER_ERR_NO_FILE;
+    }
+    if (path_has_ext_ci(file_name, ".mp3")) {
+        return menu_bgm_load_mp3_file(menu, file_name);
+    }
+
+    if (menu_bgm_load_wav64_file(menu, file_name)) {
+        return MP3PLAYER_OK;
+    }
+    return menu_bgm_load_mp3_file(menu, file_name);
 }
 
 static void menu_bgm_init (menu_t *menu) {
@@ -516,35 +723,36 @@ static void menu_bgm_init (menu_t *menu) {
         return;
     }
 
-    mp3player_err_t err = mp3player_init();
-    if (err != MP3PLAYER_OK) {
-        menu_bgm_error = true;
-        debugf("Menu BGM disabled: mp3 init failed (%d)\n", err);
-        return;
-    }
-
     menu_bgm_initialized = true;
+    menu_bgm_backend = MENU_BGM_BACKEND_NONE;
+    mp3player_err_t err = MP3PLAYER_ERR_NO_FILE;
 
     if (menu->runtime_bgm_override_file && menu->runtime_bgm_override_file[0] != '\0') {
-        err = menu_bgm_load_file(menu, menu->runtime_bgm_override_file);
+        err = menu_bgm_try_load_any(menu, menu->runtime_bgm_override_file);
     } else if (menu->settings.bgm_file && menu->settings.bgm_file[0] != '\0') {
-        err = menu_bgm_load_file(menu, menu->settings.bgm_file);
+        err = menu_bgm_try_load_any(menu, menu->settings.bgm_file);
     } else {
         err = MP3PLAYER_ERR_NO_FILE;
     }
 
     if (err == MP3PLAYER_ERR_NO_FILE) {
-        err = menu_bgm_load_file(menu, MENU_BGM_MP3_FILE);
+        err = menu_bgm_try_load_any(menu, MENU_BGM_WAV64_FILE);
     }
     if (err == MP3PLAYER_ERR_NO_FILE) {
-        err = menu_bgm_load_file(menu, MENU_BGM_MP3_FILE_FALLBACK);
+        err = menu_bgm_try_load_any(menu, MENU_BGM_MP3_FILE);
+    }
+    if (err == MP3PLAYER_ERR_NO_FILE) {
+        err = menu_bgm_try_load_any(menu, MENU_BGM_WAV64_FILE_FALLBACK);
+    }
+    if (err == MP3PLAYER_ERR_NO_FILE) {
+        err = menu_bgm_try_load_any(menu, MENU_BGM_MP3_FILE_FALLBACK);
     }
 
     if (err == MP3PLAYER_OK) {
         menu_bgm_loaded = true;
     } else if (err != MP3PLAYER_ERR_NO_FILE) {
         menu_bgm_error = true;
-        debugf("Menu BGM disabled: failed to load mp3 (%d)\n", err);
+        debugf("Menu BGM disabled: failed to load BGM (%d)\n", err);
     }
 }
 
@@ -555,9 +763,10 @@ static void menu_bgm_poll (menu_t *menu) {
     }
 
     if (!menu->settings.bgm_enabled) {
-        if (menu_bgm_initialized && mp3player_is_playing()) {
-            mp3player_stop();
+        if (menu_bgm_initialized) {
+            menu_bgm_stop_playback();
         }
+        sound_bgm_meter_reset();
         return;
     }
 
@@ -569,9 +778,10 @@ static void menu_bgm_poll (menu_t *menu) {
         (menu->next_mode == MENU_MODE_BOOT);
 
     if (loading_or_booting) {
-        if (menu_bgm_initialized && mp3player_is_playing()) {
-            mp3player_stop();
+        if (menu_bgm_initialized) {
+            menu_bgm_stop_playback();
         }
+        sound_bgm_meter_reset();
         return;
     }
 
@@ -580,21 +790,42 @@ static void menu_bgm_poll (menu_t *menu) {
         return;
     }
 
-    if (!mp3player_is_playing()) {
-        sound_init_mp3_playback();
-        mp3player_mute(false);
-        mp3player_err_t err = mp3player_play();
-        if (err != MP3PLAYER_OK) {
-            menu_bgm_error = true;
-            debugf("Menu BGM disabled: failed to start playback (%d)\n", err);
-            return;
+    if (menu_bgm_backend == MENU_BGM_BACKEND_WAV64) {
+        if (!menu_bgm_is_playing()) {
+            sound_init_default();
+            mixer_ch_play(SOUND_MP3_PLAYER_CHANNEL, &menu_bgm_wav64_wrap.wave);
+            mixer_ch_set_vol(SOUND_MP3_PLAYER_CHANNEL, 0.8f, 0.8f);
         }
+        return;
     }
 
-    mp3player_err_t err = mp3player_process();
-    if (err != MP3PLAYER_OK) {
-        menu_bgm_error = true;
-        debugf("Menu BGM disabled: playback error (%d)\n", err);
+    if (menu_bgm_backend == MENU_BGM_BACKEND_MP3) {
+        if (!mp3player_is_playing()) {
+            sound_init_mp3_playback();
+            mp3player_mute(false);
+            mp3player_err_t err = mp3player_play();
+            if (err != MP3PLAYER_OK) {
+                menu_bgm_error = true;
+                debugf("Menu BGM disabled: failed to start playback (%d)\n", err);
+                return;
+            }
+        }
+
+        mp3player_err_t err = mp3player_process();
+        if (err != MP3PLAYER_OK) {
+            menu_bgm_error = true;
+            debugf("Menu BGM disabled: playback error (%d)\n", err);
+        } else {
+            mp3player_meter_t m = {0};
+            if (mp3player_get_meter(&m)) {
+                sound_bgm_meter_t sm = {
+                    .peak_l = m.peak_l, .peak_r = m.peak_r,
+                    .avg_l = m.avg_l, .avg_r = m.avg_r,
+                    .valid = m.valid,
+                };
+                sound_bgm_meter_set(&sm);
+            }
+        }
     }
 }
 
@@ -603,7 +834,17 @@ static void menu_bgm_deinit (void) {
         return;
     }
 
-    mp3player_deinit();
+    menu_bgm_stop_playback();
+    if (menu_bgm_mp3_open) {
+        mp3player_deinit();
+        menu_bgm_mp3_open = false;
+    }
+    if (menu_bgm_backend == MENU_BGM_BACKEND_WAV64 && menu_bgm_wav64_open) {
+        wav64_close(&menu_bgm_wav64);
+        menu_bgm_wav64_open = false;
+    }
+    menu_bgm_backend = MENU_BGM_BACKEND_NONE;
+    sound_bgm_meter_reset();
     menu_bgm_initialized = false;
     menu_bgm_loaded = false;
     menu_bgm_error = false;

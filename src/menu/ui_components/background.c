@@ -7,9 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "../ui_components.h"
-#include "../mp3_player.h"
+#include "../sound.h"
 #include "constants.h"
 #include "utils/fs.h"
 
@@ -49,6 +50,112 @@ static void visualizer_reset_state(component_background_t *c) {
     memset(c->vis_caps, 0, sizeof(c->vis_caps));
 }
 
+static uint64_t fnv1a64_str(const char *s) {
+    uint64_t h = 1469598103934665603ULL;
+    if (!s) return h;
+    while (*s) {
+        h ^= (uint8_t)(*s++);
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static char *make_variant_cache_path(const char *base_cache_location, const char *source_path) {
+    if (!base_cache_location || !source_path) {
+        return NULL;
+    }
+
+    const char *slash = strrchr(base_cache_location, '/');
+    size_t dir_len = slash ? (size_t)(slash - base_cache_location) : 0;
+    uint64_t hash = fnv1a64_str(source_path);
+
+    size_t out_len = (dir_len ? dir_len : 1) + 1 + 3 + 16 + 6 + 1; // dir + / + bg_ + hash + .cache + NUL
+    char *out = malloc(out_len);
+    if (!out) {
+        return NULL;
+    }
+
+    if (dir_len > 0) {
+        memcpy(out, base_cache_location, dir_len);
+        out[dir_len] = '\0';
+    } else {
+        strcpy(out, ".");
+        dir_len = 1;
+    }
+
+    snprintf(out + dir_len, out_len - dir_len, "/bg_%016" PRIx64 ".cache", hash);
+    return out;
+}
+
+static surface_t *load_surface_from_cache_file(const char *cache_path) {
+    if (!cache_path) {
+        return NULL;
+    }
+
+    FILE *f = fopen(cache_path, "rb");
+    if (!f) {
+        return NULL;
+    }
+
+    cache_metadata_t cache_metadata;
+    if (fread(&cache_metadata, sizeof(cache_metadata), 1, f) != 1) {
+        fclose(f);
+        return NULL;
+    }
+
+    if (cache_metadata.magic != CACHE_METADATA_MAGIC || cache_metadata.width > DISPLAY_WIDTH || cache_metadata.height > DISPLAY_HEIGHT) {
+        fclose(f);
+        return NULL;
+    }
+
+    surface_t *image = calloc(1, sizeof(surface_t));
+    if (!image) {
+        fclose(f);
+        return NULL;
+    }
+    *image = surface_alloc(FMT_RGBA16, cache_metadata.width, cache_metadata.height);
+
+    if (image->buffer == NULL || cache_metadata.size != (image->height * image->stride)) {
+        if (image->buffer) {
+            surface_free(image);
+        }
+        free(image);
+        fclose(f);
+        return NULL;
+    }
+
+    if (fread(image->buffer, cache_metadata.size, 1, f) != 1) {
+        surface_free(image);
+        free(image);
+        image = NULL;
+    }
+
+    fclose(f);
+    return image;
+}
+
+static void save_surface_to_cache_file(const char *cache_path, surface_t *image) {
+    if (!cache_path || !image) {
+        return;
+    }
+
+    FILE *f = fopen(cache_path, "wb");
+    if (!f) {
+        return;
+    }
+
+    cache_metadata_t cache_metadata = {
+        .magic = CACHE_METADATA_MAGIC,
+        .width = image->width,
+        .height = image->height,
+        .size = (image->height * image->stride),
+    };
+
+    fwrite(&cache_metadata, sizeof(cache_metadata), 1, f);
+    fwrite(image->buffer, cache_metadata.size, 1, f);
+    fclose(f);
+}
+
 static uint8_t u8_clamp(int v) {
     if (v < 0) return 0;
     if (v > 255) return 255;
@@ -86,8 +193,8 @@ static color_t hsv_to_rgba(float h, float s, float v, uint8_t a) {
 
 static bool visualizer_get_meter(component_background_t *c, float *out_base, float *out_peak) {
     (void)c;
-    mp3player_meter_t meter = {0};
-    bool have_meter = mp3player_get_meter(&meter) && mp3player_is_playing();
+    sound_bgm_meter_t meter = {0};
+    bool have_meter = sound_bgm_meter_get(&meter);
     float base = 0.0f;
     float peak = 0.0f;
     if (have_meter) {
@@ -335,43 +442,7 @@ static void load_from_cache(component_background_t *c) {
     if (!c->cache_location) {
         return;
     }
-
-    FILE *f;
-
-    if ((f = fopen(c->cache_location, "rb")) == NULL) {
-        return;
-    }
-
-    cache_metadata_t cache_metadata;
-
-    if (fread(&cache_metadata, sizeof(cache_metadata), 1, f) != 1) {
-        fclose(f);
-        return;
-    }
-
-    if (cache_metadata.magic != CACHE_METADATA_MAGIC || cache_metadata.width > DISPLAY_WIDTH || cache_metadata.height > DISPLAY_HEIGHT) {
-        fclose(f);
-        return;
-    }
-
-    c->image = calloc(1, sizeof(surface_t));
-    *c->image = surface_alloc(FMT_RGBA16, cache_metadata.width, cache_metadata.height);
-
-    if (cache_metadata.size != (c->image->height * c->image->stride)) {
-        surface_free(c->image);
-        free(c->image);
-        c->image = NULL;
-        fclose(f);
-        return;
-    }
-
-    if (fread(c->image->buffer, cache_metadata.size, 1, f) != 1) {
-        surface_free(c->image);
-        free(c->image);
-        c->image = NULL;
-    }
-
-    fclose(f);
+    c->image = load_surface_from_cache_file(c->cache_location);
 }
 
 /**
@@ -383,24 +454,7 @@ static void save_to_cache(component_background_t *c) {
     if (!c->cache_location || !c->image) {
         return;
     }
-
-    FILE *f;
-
-    if ((f = fopen(c->cache_location, "wb")) == NULL) {
-        return;
-    }
-
-    cache_metadata_t cache_metadata = {
-        .magic = CACHE_METADATA_MAGIC,
-        .width = c->image->width,
-        .height = c->image->height,
-        .size = (c->image->height * c->image->stride),
-    };
-
-    fwrite(&cache_metadata, sizeof(cache_metadata), 1, f);
-    fwrite(c->image->buffer, cache_metadata.size, 1, f);
-
-    fclose(f);
+    save_surface_to_cache_file(c->cache_location, c->image);
 }
 
 /**
@@ -556,6 +610,39 @@ void ui_components_background_replace_image_temporary(surface_t *image) {
 
     background->image = image;
     prepare_background(background);
+}
+
+bool ui_components_background_load_temporary_cached(const char *source_path) {
+    if (!background || !background->cache_location || !source_path) {
+        return false;
+    }
+
+    char *cache_path = make_variant_cache_path(background->cache_location, source_path);
+    if (!cache_path) {
+        return false;
+    }
+
+    surface_t *image = load_surface_from_cache_file(cache_path);
+    free(cache_path);
+    if (!image) {
+        return false;
+    }
+
+    ui_components_background_replace_image_temporary(image);
+    return true;
+}
+
+void ui_components_background_save_temporary_cache(const char *source_path) {
+    if (!background || !background->cache_location || !source_path || !background->image) {
+        return;
+    }
+
+    char *cache_path = make_variant_cache_path(background->cache_location, source_path);
+    if (!cache_path) {
+        return;
+    }
+    save_surface_to_cache_file(cache_path, background->image);
+    free(cache_path);
 }
 
 void ui_components_background_reload_cache(void) {

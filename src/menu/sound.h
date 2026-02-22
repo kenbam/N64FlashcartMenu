@@ -27,6 +27,14 @@ typedef enum {
     SFX_SETTING, /**< Sound effect for changing a setting */
 } sound_effect_t;
 
+typedef struct {
+    float peak_l;
+    float peak_r;
+    float avg_l;
+    float avg_r;
+    bool valid;
+} sound_bgm_meter_t;
+
 /**
  * @brief Initialize the default sound system.
  * 
@@ -79,5 +87,8 @@ void sound_deinit(void);
  * This function polls the sound system, updating its state as necessary.
  */
 void sound_poll(void);
+void sound_bgm_meter_reset(void);
+void sound_bgm_meter_set(const sound_bgm_meter_t *meter);
+bool sound_bgm_meter_get(sound_bgm_meter_t *meter);
 
 #endif /* SOUND_H__ */

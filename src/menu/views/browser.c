@@ -576,6 +576,9 @@ static void playlist_background_callback (png_err_t err, surface_t *decoded_imag
     }
 
     ui_components_background_replace_image_temporary(decoded_image);
+    if (playlist_override.background_path) {
+        ui_components_background_save_temporary_cache(playlist_override.background_path);
+    }
     playlist_override.background_applied = true;
 }
 
@@ -737,7 +740,9 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
     if (want_bg) {
         free(playlist_override.background_path);
         playlist_override.background_path = strdup(bg_path);
-        if (playlist_override.background_path && !png_decoder_is_busy()) {
+        if (playlist_override.background_path && ui_components_background_load_temporary_cached(playlist_override.background_path)) {
+            playlist_override.background_applied = true;
+        } else if (playlist_override.background_path && !png_decoder_is_busy()) {
             png_err_t err = png_decoder_start(
                 playlist_override.background_path,
                 640,

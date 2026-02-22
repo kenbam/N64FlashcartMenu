@@ -14,6 +14,7 @@
 #define NUM_CHANNELS        (16)
 
 static wav64_t sfx_cursor, sfx_error, sfx_enter, sfx_exit, sfx_setting;
+static sound_bgm_meter_t bgm_meter = {0};
 
 static bool sound_initialized = false;
 static bool sfx_enabled = false;
@@ -140,4 +141,28 @@ void sound_poll (void) {
         // frame to perform mixing.
         mixer_try_play();
     }
+}
+
+void sound_bgm_meter_reset(void) {
+    bgm_meter.peak_l = 0.0f;
+    bgm_meter.peak_r = 0.0f;
+    bgm_meter.avg_l = 0.0f;
+    bgm_meter.avg_r = 0.0f;
+    bgm_meter.valid = false;
+}
+
+void sound_bgm_meter_set(const sound_bgm_meter_t *meter) {
+    if (!meter) {
+        sound_bgm_meter_reset();
+        return;
+    }
+    bgm_meter = *meter;
+}
+
+bool sound_bgm_meter_get(sound_bgm_meter_t *meter) {
+    if (!meter || !bgm_meter.valid) {
+        return false;
+    }
+    *meter = bgm_meter;
+    return true;
 }

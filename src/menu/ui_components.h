@@ -234,6 +234,8 @@ void ui_components_background_free(void);
  */
 void ui_components_background_replace_image(surface_t *image);
 void ui_components_background_replace_image_temporary(surface_t *image);
+bool ui_components_background_load_temporary_cached(const char *source_path);
+void ui_components_background_save_temporary_cache(const char *source_path);
 void ui_components_background_reload_cache(void);
 
 typedef enum {
