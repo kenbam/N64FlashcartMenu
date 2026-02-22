@@ -183,6 +183,7 @@ static void menu_init (boot_params_t *boot_params) {
     path_push(path, MENU_SETTINGS_FILE);
     settings_init(path_get(path));
     settings_load(&menu->settings);
+    ui_components_set_text_panel(menu->settings.text_panel_enabled, menu->settings.text_panel_alpha);
     path_pop(path);
 
     path_push(path, MENU_ROM_LOAD_HISTORY_FILE);

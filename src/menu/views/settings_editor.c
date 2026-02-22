@@ -44,6 +44,18 @@ static void set_soundfx_enabled_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_text_panel_enabled_type (menu_t *menu, void *arg) {
+    menu->settings.text_panel_enabled = (bool)(uintptr_t)(arg);
+    ui_components_set_text_panel(menu->settings.text_panel_enabled, menu->settings.text_panel_alpha);
+    settings_save(&menu->settings);
+}
+
+static void set_text_panel_alpha_type (menu_t *menu, void *arg) {
+    menu->settings.text_panel_alpha = (uint8_t)(uintptr_t)(arg);
+    ui_components_set_text_panel(menu->settings.text_panel_enabled, menu->settings.text_panel_alpha);
+    settings_save(&menu->settings);
+}
+
 #ifndef FEATURE_AUTOLOAD_ROM_ENABLED
 static void set_use_rom_fast_reboot_enabled_type (menu_t *menu, void *arg) {
     menu->settings.rom_fast_reboot_enabled = (bool)(uintptr_t)(arg);
@@ -124,6 +136,37 @@ static component_context_menu_t set_soundfx_enabled_type_context_menu = {
     .list = {
         {.text = "On", .action = set_soundfx_enabled_type, .arg = (void *)(uintptr_t)(true) },
         {.text = "Off", .action = set_soundfx_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_text_panel_enabled_current_selection (menu_t *menu) {
+    return menu->settings.text_panel_enabled ? 0 : 1;
+}
+
+static component_context_menu_t set_text_panel_enabled_type_context_menu = {
+    .get_default_selection = get_text_panel_enabled_current_selection,
+    .list = {
+        {.text = "On", .action = set_text_panel_enabled_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_text_panel_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_text_panel_alpha_current_selection (menu_t *menu) {
+    if (menu->settings.text_panel_alpha <= 48) return 0;
+    if (menu->settings.text_panel_alpha <= 80) return 1;
+    if (menu->settings.text_panel_alpha <= 112) return 2;
+    if (menu->settings.text_panel_alpha <= 144) return 3;
+    return 4;
+}
+
+static component_context_menu_t set_text_panel_alpha_context_menu = {
+    .get_default_selection = get_text_panel_alpha_current_selection,
+    .list = {
+        {.text = "Very Low", .action = set_text_panel_alpha_type, .arg = (void *)(uintptr_t)(48) },
+        {.text = "Low", .action = set_text_panel_alpha_type, .arg = (void *)(uintptr_t)(80) },
+        {.text = "Medium", .action = set_text_panel_alpha_type, .arg = (void *)(uintptr_t)(112) },
+        {.text = "High", .action = set_text_panel_alpha_type, .arg = (void *)(uintptr_t)(144) },
+        {.text = "Very High", .action = set_text_panel_alpha_type, .arg = (void *)(uintptr_t)(176) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -244,6 +287,8 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Sound Effects", .submenu = &set_soundfx_enabled_type_context_menu },
     { .text = "Use Saves Folder", .submenu = &set_use_saves_folder_type_context_menu },
     { .text = "Show Saves Folder", .submenu = &set_show_saves_folder_type_context_menu },
+    { .text = "Text Panel Overlay", .submenu = &set_text_panel_enabled_type_context_menu },
+    { .text = "Text Panel Strength", .submenu = &set_text_panel_alpha_context_menu },
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     { .text = "ROM Loading Bar", .submenu = &set_loading_progress_bar_enabled_context_menu },
 #else
@@ -303,7 +348,7 @@ static void draw (menu_t *menu, surface_t *d) {
         "\n"
     );
 
-    ui_components_main_text_draw(
+ui_components_main_text_draw(
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
         "\n\n"
@@ -313,6 +358,8 @@ static void draw (menu_t *menu, surface_t *d) {
         "     Sound Effects     : %s\n"
         "     Use Saves folder  : %s\n"
         "     Show Saves folder : %s\n"
+        "     Text Panel Overlay: %s\n"
+        "     Text Panel Str    : %d\n"
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         "  Autoload ROM      : %s\n\n"
         "    ROM Loading Bar   : %s\n"
@@ -336,6 +383,8 @@ static void draw (menu_t *menu, surface_t *d) {
         format_switch(menu->settings.soundfx_enabled),
         format_switch(menu->settings.use_saves_folder),
         format_switch(menu->settings.show_saves_folder),
+        format_switch(menu->settings.text_panel_enabled),
+        (int)menu->settings.text_panel_alpha,
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         format_switch(menu->settings.rom_autoload_enabled),
         format_switch(menu->settings.loading_progress_bar_enabled)

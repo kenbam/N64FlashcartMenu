@@ -79,6 +79,14 @@ void ui_components_layout_draw_tabbed(void);
 void ui_components_layout_draw(void);
 
 /**
+ * @brief Configure semi-transparent panel drawn behind the main content area.
+ *
+ * @param enabled Whether the panel is enabled.
+ * @param alpha Alpha value (0-255).
+ */
+void ui_components_set_text_panel(bool enabled, uint8_t alpha);
+
+/**
  * @brief Draw a progress bar component.
  * 
  * @param x0 Starting x-coordinate.

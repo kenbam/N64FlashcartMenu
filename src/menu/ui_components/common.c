@@ -10,6 +10,9 @@
 #include "../fonts.h"
 #include "constants.h"
 
+static bool text_panel_enabled = true;
+static uint8_t text_panel_alpha = 112;
+
 /**
  * @brief Draw a box with the specified color.
  * 
@@ -45,6 +48,26 @@ static void ui_components_border_draw_internal (int x0, int y0, int x1, int y1, 
     rdpq_mode_pop();
 }
 
+static void ui_components_text_panel_draw (int y0) {
+    if (!text_panel_enabled || text_panel_alpha == 0) {
+        return;
+    }
+
+    int x0 = VISIBLE_AREA_X0 + BORDER_THICKNESS;
+    int x1 = VISIBLE_AREA_X1 - BORDER_THICKNESS;
+    int y1 = LAYOUT_ACTIONS_SEPARATOR_Y;
+    if (y0 >= y1) {
+        return;
+    }
+
+    ui_components_box_draw(x0, y0, x1, y1, RGBA32(0x00, 0x00, 0x00, text_panel_alpha));
+}
+
+void ui_components_set_text_panel (bool enabled, uint8_t alpha) {
+    text_panel_enabled = enabled;
+    text_panel_alpha = alpha;
+}
+
 /**
  * @brief Draw a border with the default border color.
  * 
@@ -61,6 +84,8 @@ void ui_components_border_draw (int x0, int y0, int x1, int y1) {
  * @brief Draw the layout with tabs.
  */
 void ui_components_layout_draw_tabbed (void) {
+    ui_components_text_panel_draw(VISIBLE_AREA_Y0 + TAB_HEIGHT + BORDER_THICKNESS);
+
     ui_components_border_draw(
         VISIBLE_AREA_X0,
         VISIBLE_AREA_Y0 + TAB_HEIGHT + BORDER_THICKNESS,
@@ -81,6 +106,8 @@ void ui_components_layout_draw_tabbed (void) {
  * @brief Draw the layout.
  */
 void ui_components_layout_draw (void) {
+    ui_components_text_panel_draw(VISIBLE_AREA_Y0 + BORDER_THICKNESS);
+
     ui_components_border_draw(
         VISIBLE_AREA_X0,
         VISIBLE_AREA_Y0,

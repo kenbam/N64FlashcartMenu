@@ -7,6 +7,8 @@
 #ifndef SETTINGS_H__
 #define SETTINGS_H__
 
+#include <stdint.h>
+
 
 /** @brief Settings Structure */
 typedef struct {
@@ -39,6 +41,12 @@ typedef struct {
 
     /** @brief Browser sort mode (0=custom, 1=A-Z, 2=Z-A) */
     int browser_sort_mode;
+
+    /** @brief Draw semi-transparent panel behind main content text areas */
+    bool text_panel_enabled;
+
+    /** @brief Alpha for text panel (0-255) */
+    uint8_t text_panel_alpha;
 
     /** @brief Hide rom file extensions */    
     bool show_browser_file_extensions;
