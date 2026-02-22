@@ -58,6 +58,17 @@ static void set_text_panel_alpha_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_ui_theme_type(menu_t *menu, void *arg) {
+    int theme = (int)(uintptr_t)arg;
+    int max_theme = ui_components_theme_count() - 1;
+    if (theme < 0 || theme > max_theme) {
+        theme = 0;
+    }
+    menu->settings.ui_theme = theme;
+    ui_components_set_theme(menu->settings.ui_theme);
+    settings_save(&menu->settings);
+}
+
 static void open_background_picker (menu_t *menu, void *arg) {
     (void)arg;
 
@@ -193,6 +204,25 @@ static component_context_menu_t set_text_panel_alpha_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_ui_theme_current_selection(menu_t *menu) {
+    int max_theme = ui_components_theme_count() - 1;
+    if (menu->settings.ui_theme < 0 || menu->settings.ui_theme > max_theme) {
+        return 0;
+    }
+    return menu->settings.ui_theme;
+}
+
+static component_context_menu_t set_ui_theme_context_menu = {
+    .get_default_selection = get_ui_theme_current_selection,
+    .list = {
+        {.text = "Classic", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(0) },
+        {.text = "Solarized", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(1) },
+        {.text = "Gruvbox", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(2) },
+        {.text = "CRT Green", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(3) },
+        {.text = "Retrowave", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(4) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static int get_use_saves_folder_current_selection (menu_t *menu) {
     return menu->settings.use_saves_folder ? 0 : 1;
 }
@@ -312,6 +342,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Show Saves Folder", .submenu = &set_show_saves_folder_type_context_menu },
     { .text = "Text Panel Overlay", .submenu = &set_text_panel_enabled_type_context_menu },
     { .text = "Text Panel Strength", .submenu = &set_text_panel_alpha_context_menu },
+    { .text = "Theme Preset", .submenu = &set_ui_theme_context_menu },
     { .text = "Pick Background Image", .action = open_background_picker },
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     { .text = "ROM Loading Bar", .submenu = &set_loading_progress_bar_enabled_context_menu },
@@ -384,6 +415,7 @@ ui_components_main_text_draw(
         "     Show Saves folder : %s\n"
         "     Text Panel Overlay: %s\n"
         "     Text Panel Str    : %d\n"
+        "     Theme Preset      : %s\n"
         "     Background Picker : Use A menu\n"
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         "  Autoload ROM      : %s\n\n"
@@ -410,6 +442,7 @@ ui_components_main_text_draw(
         format_switch(menu->settings.show_saves_folder),
         format_switch(menu->settings.text_panel_enabled),
         (int)menu->settings.text_panel_alpha,
+        ui_components_theme_name(menu->settings.ui_theme),
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         format_switch(menu->settings.rom_autoload_enabled),
         format_switch(menu->settings.loading_progress_bar_enabled)

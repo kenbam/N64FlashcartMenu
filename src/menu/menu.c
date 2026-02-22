@@ -39,6 +39,10 @@
 #define BACKGROUND_IMAGES_DIRECTORY "backgrounds"
 
 #define FPS_LIMIT                   (30.0f)
+#define SCREENSAVER_IDLE_SECONDS    (60)
+#define SCREENSAVER_LOGO_WIDTH      (96)
+#define SCREENSAVER_LOGO_HEIGHT     (28)
+#define SCREENSAVER_LOGO_FILE       "/menu/DVD_video_logo.png"
 
 static menu_t *menu;
 
@@ -53,6 +57,194 @@ static bool interlaced = true;
 static bool menu_bgm_initialized = false;
 static bool menu_bgm_loaded = false;
 static bool menu_bgm_error = false;
+static struct {
+    bool active;
+    int idle_frames;
+    float x;
+    float y;
+    float vx;
+    float vy;
+    uint8_t color_index;
+} screensaver = {
+    .active = false,
+    .idle_frames = 0,
+    .x = 64.0f,
+    .y = 64.0f,
+    .vx = 2.0f,
+    .vy = 2.0f,
+    .color_index = 0,
+};
+
+static const color_t screensaver_palette[] = {
+    RGBA32(0xFF, 0xFF, 0xFF, 0xFF),
+    RGBA32(0xFF, 0x5E, 0x5E, 0xFF),
+    RGBA32(0x55, 0xE8, 0xFF, 0xFF),
+    RGBA32(0xFF, 0xD3, 0x55, 0xFF),
+    RGBA32(0x7B, 0xFF, 0x83, 0xFF),
+    RGBA32(0xFF, 0x7B, 0xF1, 0xFF),
+};
+
+static surface_t *screensaver_logo_image = NULL;
+static bool screensaver_logo_loading = false;
+
+static void screensaver_logo_callback(png_err_t err, surface_t *decoded_image, void *callback_data) {
+    (void)callback_data;
+    screensaver_logo_loading = false;
+    if (err == PNG_OK) {
+        screensaver_logo_image = decoded_image;
+    } else if (decoded_image) {
+        surface_free(decoded_image);
+        free(decoded_image);
+    }
+}
+
+static void screensaver_get_logo_size(int *width, int *height) {
+    if (screensaver_logo_image) {
+        *width = screensaver_logo_image->width;
+        *height = screensaver_logo_image->height;
+        return;
+    }
+    *width = SCREENSAVER_LOGO_WIDTH;
+    *height = SCREENSAVER_LOGO_HEIGHT;
+}
+
+static bool menu_has_any_input (menu_t *menu) {
+    return menu->actions.go_up ||
+        menu->actions.go_down ||
+        menu->actions.go_left ||
+        menu->actions.go_right ||
+        menu->actions.go_fast ||
+        menu->actions.enter ||
+        menu->actions.back ||
+        menu->actions.options ||
+        menu->actions.settings ||
+        menu->actions.lz_context;
+}
+
+static bool screensaver_mode_allowed (menu_mode_t mode) {
+    switch (mode) {
+        case MENU_MODE_BROWSER:
+        case MENU_MODE_HISTORY:
+        case MENU_MODE_FAVORITE:
+        case MENU_MODE_PLAYTIME:
+        case MENU_MODE_SETTINGS_EDITOR:
+        case MENU_MODE_SYSTEM_INFO:
+        case MENU_MODE_FLASHCART:
+        case MENU_MODE_CREDITS:
+        case MENU_MODE_CONTROLLER_PAKFS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void screensaver_cycle_color (void) {
+    uint8_t count = (uint8_t)(sizeof(screensaver_palette) / sizeof(screensaver_palette[0]));
+    screensaver.color_index = (screensaver.color_index + 1) % count;
+}
+
+static void screensaver_reset (void) {
+    screensaver.active = false;
+    screensaver.idle_frames = 0;
+}
+
+static void screensaver_activate (void) {
+    int logo_width, logo_height;
+    screensaver_get_logo_size(&logo_width, &logo_height);
+
+    screensaver.active = true;
+    screensaver.idle_frames = 0;
+    screensaver.x = (display_get_width() - logo_width) / 2.0f;
+    screensaver.y = (display_get_height() - logo_height) / 2.0f;
+    screensaver.vx = 2.0f;
+    screensaver.vy = 2.0f;
+}
+
+static void screensaver_update_state (menu_t *menu) {
+    if (!screensaver_mode_allowed(menu->mode) || (menu->next_mode != menu->mode)) {
+        screensaver_reset();
+        return;
+    }
+
+    if (menu_has_any_input(menu)) {
+        screensaver_reset();
+        return;
+    }
+
+    if (!screensaver.active) {
+        screensaver.idle_frames++;
+        if (screensaver.idle_frames >= (SCREENSAVER_IDLE_SECONDS * (int)FPS_LIMIT)) {
+            screensaver_activate();
+        }
+    }
+}
+
+static void screensaver_draw (surface_t *display) {
+    int logo_width, logo_height;
+    screensaver_get_logo_size(&logo_width, &logo_height);
+
+    rdpq_attach_clear(display, NULL);
+
+    screensaver.x += screensaver.vx;
+    screensaver.y += screensaver.vy;
+
+    float max_x = display_get_width() - logo_width;
+    float max_y = display_get_height() - logo_height;
+    if (screensaver.x <= 0.0f) {
+        screensaver.x = 0.0f;
+        screensaver.vx = -screensaver.vx;
+        screensaver_cycle_color();
+    } else if (screensaver.x >= max_x) {
+        screensaver.x = max_x;
+        screensaver.vx = -screensaver.vx;
+        screensaver_cycle_color();
+    }
+    if (screensaver.y <= 0.0f) {
+        screensaver.y = 0.0f;
+        screensaver.vy = -screensaver.vy;
+        screensaver_cycle_color();
+    } else if (screensaver.y >= max_y) {
+        screensaver.y = max_y;
+        screensaver.vy = -screensaver.vy;
+        screensaver_cycle_color();
+    }
+
+    if (screensaver_logo_image) {
+        rdpq_mode_push();
+            rdpq_set_mode_standard();
+            rdpq_tex_blit(screensaver_logo_image, (int)screensaver.x, (int)screensaver.y, NULL);
+        rdpq_mode_pop();
+    } else {
+        ui_components_box_draw(
+            (int)screensaver.x,
+            (int)screensaver.y,
+            (int)screensaver.x + SCREENSAVER_LOGO_WIDTH,
+            (int)screensaver.y + SCREENSAVER_LOGO_HEIGHT,
+            RGBA32(0x00, 0x00, 0x00, 0xFF)
+        );
+        ui_components_border_draw(
+            (int)screensaver.x,
+            (int)screensaver.y,
+            (int)screensaver.x + SCREENSAVER_LOGO_WIDTH,
+            (int)screensaver.y + SCREENSAVER_LOGO_HEIGHT
+        );
+        rdpq_text_print(
+            &(rdpq_textparms_t){
+                .style_id = STL_DEFAULT,
+                .width = SCREENSAVER_LOGO_WIDTH,
+                .height = SCREENSAVER_LOGO_HEIGHT,
+                .align = ALIGN_CENTER,
+                .valign = VALIGN_CENTER,
+            },
+            FNT_DEFAULT,
+            (int)screensaver.x,
+            (int)screensaver.y,
+            "DVD"
+        );
+    }
+
+    rdpq_detach_show();
+}
 
 static mp3player_err_t menu_bgm_load_file (menu_t *menu, const char *file_name) {
     path_t *path = path_init(menu->storage_prefix, "/");
@@ -183,6 +375,11 @@ static void menu_init (boot_params_t *boot_params) {
     path_push(path, MENU_SETTINGS_FILE);
     settings_init(path_get(path));
     settings_load(&menu->settings);
+    int max_theme = ui_components_theme_count() - 1;
+    if (menu->settings.ui_theme < 0 || menu->settings.ui_theme > max_theme) {
+        menu->settings.ui_theme = 0;
+    }
+    ui_components_set_theme(menu->settings.ui_theme);
     ui_components_set_text_panel(menu->settings.text_panel_enabled, menu->settings.text_panel_alpha);
     path_pop(path);
 
@@ -230,6 +427,17 @@ static void menu_init (boot_params_t *boot_params) {
     path_push(path, BACKGROUND_CACHE_FILE);
     ui_components_background_init(path_get(path));
     path_pop(path);
+
+    if (!screensaver_logo_image && !screensaver_logo_loading) {
+        path_t *logo_path = path_init(menu->storage_prefix, SCREENSAVER_LOGO_FILE);
+        if (file_exists(path_get(logo_path))) {
+            png_err_t png_err = png_decoder_start(path_get(logo_path), 256, 128, screensaver_logo_callback, NULL);
+            if (png_err == PNG_OK) {
+                screensaver_logo_loading = true;
+            }
+        }
+        path_free(logo_path);
+    }
     path_pop(path);
 
     path_push(path, BACKGROUND_IMAGES_DIRECTORY);
@@ -269,6 +477,16 @@ static void menu_deinit (menu_t *menu) {
 
     playtime_save(&menu->playtime);
     playtime_free(&menu->playtime);
+
+    if (screensaver_logo_loading) {
+        png_decoder_abort();
+        screensaver_logo_loading = false;
+    }
+    if (screensaver_logo_image) {
+        surface_free(screensaver_logo_image);
+        free(screensaver_logo_image);
+        screensaver_logo_image = NULL;
+    }
 
     path_free(menu->load.disk_slots.primary.disk_path);
     path_free(menu->load.rom_path);
@@ -356,6 +574,13 @@ void menu_run (boot_params_t *boot_params) {
 
         if (display != NULL) {
             actions_update(menu);
+            screensaver_update_state(menu);
+
+            if (screensaver.active) {
+                screensaver_draw(display);
+                time(&menu->current_time);
+                continue;
+            }
 
             view_t *view = menu_get_view(menu->mode);
             if (view && view->show) {

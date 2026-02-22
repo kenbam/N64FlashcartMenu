@@ -45,6 +45,9 @@ typedef struct {
     /** @brief Smart random mode (0=any game, 1=unplayed, 2=underplayed, 3=favorites) */
     int browser_random_mode;
 
+    /** @brief UI theme preset (see ui_components_theme_name()) */
+    int ui_theme;
+
     /** @brief Draw semi-transparent panel behind main content text areas */
     bool text_panel_enabled;
 

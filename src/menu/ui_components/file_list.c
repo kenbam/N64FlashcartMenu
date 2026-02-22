@@ -193,7 +193,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
             highlight_y,
             FILE_LIST_HIGHLIGHT_X + FILE_LIST_HIGHLIGHT_WIDTH,
             highlight_y + highlight_height,
-            FILE_LIST_HIGHLIGHT_COLOR
+            ui_components_file_list_highlight_color()
         );
 
         rdpq_paragraph_render(
