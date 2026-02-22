@@ -655,15 +655,24 @@ static void draw (menu_t *menu, surface_t *d) {
             last_played_buf
         );
 
+        int base_x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
         int base_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TEXT_OFFSET_VERTICAL + 18;
-        int visible_height = LAYOUT_ACTIONS_SEPARATOR_Y - base_y - (TEXT_MARGIN_VERTICAL * 2);
+        int text_right_limit = BOXART_X - 12;
+        int text_width = text_right_limit - base_x;
+        if (text_width < 180) {
+            text_width = 180;
+        }
+
+        int clip_y0 = base_y;
+        int clip_y1 = LAYOUT_ACTIONS_SEPARATOR_Y - TEXT_MARGIN_VERTICAL;
+        int visible_height = clip_y1 - clip_y0;
         if (visible_height < 0) {
             visible_height = 0;
         }
 
         rdpq_paragraph_builder_begin(
             &(rdpq_textparms_t) {
-                .width = VISIBLE_AREA_WIDTH - (TEXT_MARGIN_HORIZONTAL * 2),
+                .width = text_width,
                 .height = 10000,
                 .wrap = WRAP_WORD,
                 .line_spacing = TEXT_LINE_SPACING_ADJUST,
@@ -684,11 +693,9 @@ static void draw (menu_t *menu, surface_t *d) {
             details_scroll = 0;
         }
 
-        rdpq_paragraph_render(
-            layout,
-            VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL,
-            base_y - details_scroll
-        );
+        rdpq_set_scissor(base_x, clip_y0, base_x + text_width, clip_y1);
+        rdpq_paragraph_render(layout, base_x, base_y - details_scroll);
+        rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         rdpq_paragraph_free(layout);
 
         ui_components_actions_bar_text_draw(

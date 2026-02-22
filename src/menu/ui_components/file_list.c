@@ -55,6 +55,13 @@ static int format_file_size(char *buffer, int64_t size) {
  */
 void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
     int starting_position = 0;
+    int list_x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
+    int list_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL;
+    int list_bottom = LAYOUT_ACTIONS_SEPARATOR_Y - TEXT_MARGIN_VERTICAL;
+    int list_height = list_bottom - list_y;
+    if (list_height < 0) {
+        list_height = 0;
+    }
 
     if (entries > LIST_ENTRIES && selected >= (LIST_ENTRIES / 2)) {
         starting_position = selected - (LIST_ENTRIES / 2);
@@ -99,7 +106,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
         rdpq_paragraph_builder_begin(
             &(rdpq_textparms_t) {
                 .width = FILE_LIST_MAX_WIDTH - (TEXT_MARGIN_HORIZONTAL * 2),
-                .height = LAYOUT_ACTIONS_SEPARATOR_Y - VISIBLE_AREA_Y0  - (TEXT_MARGIN_VERTICAL * 2),
+                .height = list_height,
                 .wrap = WRAP_ELLIPSES,
                 .line_spacing = TEXT_LINE_SPACING_ADJUST,
             },
@@ -146,6 +153,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
         int highlight_height = (layout->bbox.y1 - layout->bbox.y0) / layout->nlines;
         int highlight_y = VISIBLE_AREA_Y0 + TAB_HEIGHT + TEXT_MARGIN_VERTICAL + TEXT_OFFSET_VERTICAL + ((selected - starting_position) * highlight_height);
 
+        rdpq_set_scissor(list_x, list_y, VISIBLE_AREA_X1 - TEXT_MARGIN_HORIZONTAL, list_bottom);
         ui_components_box_draw(
             FILE_LIST_HIGHLIGHT_X,
             highlight_y,
@@ -156,8 +164,8 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
         rdpq_paragraph_render(
             layout,
-            VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL,
-            VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL
+            list_x,
+            list_y
         );
 
         rdpq_paragraph_free(layout);
@@ -165,7 +173,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
         rdpq_paragraph_builder_begin(
             &(rdpq_textparms_t) {
                 .width = VISIBLE_AREA_WIDTH - LIST_SCROLLBAR_WIDTH - (TEXT_MARGIN_HORIZONTAL * 2),
-                .height = LAYOUT_ACTIONS_SEPARATOR_Y - VISIBLE_AREA_Y0  - (TEXT_MARGIN_VERTICAL * 2),
+                .height = list_height,
                 .align = ALIGN_RIGHT,
                 .wrap = WRAP_ELLIPSES,
                 .line_spacing = TEXT_LINE_SPACING_ADJUST,
@@ -196,11 +204,8 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
         layout = rdpq_paragraph_builder_end();
 
-        rdpq_paragraph_render(
-            layout,
-            VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL,
-            VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL
-        );
+        rdpq_paragraph_render(layout, list_x, list_y);
+        rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
         rdpq_paragraph_free(layout);
     }

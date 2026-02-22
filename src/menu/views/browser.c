@@ -925,28 +925,26 @@ static void draw (menu_t *menu, surface_t *d) {
         STL_DEFAULT,
         ALIGN_RIGHT, VALIGN_TOP,
         "^%02XStart: Settings^00\n"
-        "^%02XR:  Options^00",
+        "^%02XR: Options^00 | Sort:%s",
         menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
-        menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT
+        menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+        browser_sort_mode_string(menu)
     );
 
     if (menu->current_time >= 0) {
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_CENTER, VALIGN_TOP,
-            "Sort: %s | C-▼▲ Fast Scroll | ◀ Tabs ▶ \n"
+            "C-▼▲ Scroll | ◀ ▶ Tabs\n"
             "%s",
-            browser_sort_mode_string(menu),
             ctime(&menu->current_time)
         );
     } else {
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_CENTER, VALIGN_TOP,
-            "Sort: %s | C-▼▲ Fast Scroll | ◀ Tabs ▶ \n"
+            "C-▼▲ Scroll | ◀ ▶ Tabs\n"
             "\n"
-            ,
-            browser_sort_mode_string(menu)
         );
     }
 
