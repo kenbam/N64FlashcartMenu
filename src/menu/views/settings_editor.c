@@ -396,6 +396,14 @@ static component_context_menu_t set_ui_theme_context_menu = {
         {.text = "Gruvbox", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(2) },
         {.text = "CRT Green", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(3) },
         {.text = "Retrowave", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(4) },
+        {.text = "Nord", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(5) },
+        {.text = "Dracula", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(6) },
+        {.text = "Amber Terminal", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(7) },
+        {.text = "Ocean Teal", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(8) },
+        {.text = "Monokai", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(9) },
+        {.text = "One Dark", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(10) },
+        {.text = "Tokyo Night", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(11) },
+        {.text = "Catppuccin", .action = set_ui_theme_type, .arg = (void *)(uintptr_t)(12) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
