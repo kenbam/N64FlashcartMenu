@@ -111,6 +111,14 @@ typedef struct {
 
 static playlist_override_state_t playlist_override = {0};
 
+typedef struct {
+    int frames_left;
+    char line1[64];
+    char line2[128];
+} playlist_toast_t;
+
+static playlist_toast_t playlist_toast = {0};
+
 
 static bool path_is_hidden (path_t *path) {
     char *stripped_path = strip_fs_prefix(path_get(path));
@@ -591,6 +599,77 @@ static void playlist_background_callback (png_err_t err, surface_t *decoded_imag
     playlist_override.background_applied = true;
 }
 
+static const char *viz_style_name_short(int style) {
+    switch (style) {
+        case UI_BACKGROUND_VISUALIZER_PULSE_WASH: return "Pulse";
+        case UI_BACKGROUND_VISUALIZER_SUNBURST: return "Sunburst";
+        case UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE: return "Scope";
+        case UI_BACKGROUND_VISUALIZER_BARS:
+        default: return "Bars";
+    }
+}
+
+static const char *viz_intensity_name_short(int intensity) {
+    switch (intensity) {
+        case 0: return "Subtle";
+        case 2: return "Full";
+        default: return "Normal";
+    }
+}
+
+static void playlist_toast_show(menu_t *menu, bool theme, bool bgm, bool bg, bool viz_style, bool viz_intensity) {
+    if (!menu) return;
+
+    const char *title = menu->browser.directory ? file_basename(path_get(menu->browser.directory)) : "Playlist";
+    snprintf(playlist_toast.line1, sizeof(playlist_toast.line1), "%s", title ? title : "Playlist");
+
+    char *p = playlist_toast.line2;
+    size_t rem = sizeof(playlist_toast.line2);
+    p[0] = '\0';
+
+    if (theme) {
+        int n = snprintf(p, rem, "Theme:%s", ui_components_theme_name(ui_components_get_theme()));
+        if (n > 0 && (size_t)n < rem) { p += n; rem -= (size_t)n; }
+    }
+    if (bgm) {
+        const char *bgm_name = menu->runtime_bgm_override_file ? file_basename(menu->runtime_bgm_override_file) : "BGM";
+        int n = snprintf(p, rem, "%sBGM:%s", p == playlist_toast.line2 ? "" : " | ", bgm_name ? bgm_name : "BGM");
+        if (n > 0 && (size_t)n < rem) { p += n; rem -= (size_t)n; }
+    }
+    if (viz_style || viz_intensity) {
+        int n = snprintf(p, rem, "%sViz:%s/%s", p == playlist_toast.line2 ? "" : " | ",
+            viz_style_name_short(menu->settings.background_visualizer_style),
+            viz_intensity_name_short(menu->settings.background_visualizer_intensity));
+        if (n > 0 && (size_t)n < rem) { p += n; rem -= (size_t)n; }
+    }
+    if (bg) {
+        snprintf(p, rem, "%sBG", p == playlist_toast.line2 ? "" : " | ");
+    }
+    if (playlist_toast.line2[0] == '\0') {
+        snprintf(playlist_toast.line2, sizeof(playlist_toast.line2), "Playlist profile loaded");
+    }
+
+    playlist_toast.frames_left = 150; // ~5s at 30fps
+}
+
+static void playlist_toast_draw(void) {
+    if (playlist_toast.frames_left <= 0) {
+        return;
+    }
+
+    int x0 = 28;
+    int x1 = display_get_width() - 28;
+    int y0 = 46;
+    int y1 = y0 + 44;
+
+    ui_components_box_draw(x0, y0, x1, y1, RGBA32(0x00, 0x00, 0x00, 0xA8));
+    ui_components_border_draw(x0, y0, x1, y1);
+    rdpq_text_printf(&(rdpq_textparms_t){ .width = x1 - x0 - 12, .height = 18 },
+                     FNT_DEFAULT, x0 + 6, y0 + 6, "^%02X%s", STL_YELLOW, playlist_toast.line1);
+    rdpq_text_printf(&(rdpq_textparms_t){ .width = x1 - x0 - 12, .height = 18, .wrap = WRAP_ELLIPSES },
+                     FNT_DEFAULT, x0 + 6, y0 + 24, "%s", playlist_toast.line2);
+}
+
 static int playlist_theme_id_from_string(const char *value) {
     if (!value || !value[0]) {
         return -1;
@@ -791,6 +870,7 @@ static void browser_restore_playlist_overrides(menu_t *menu) {
     free(playlist_override.background_path);
     free(playlist_override.saved_screensaver_logo_file);
     memset(&playlist_override, 0, sizeof(playlist_override));
+    playlist_toast.frames_left = 0;
 }
 
 static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity, int text_panel_enabled, int text_panel_alpha, const char *screensaver_logo_path) {
@@ -874,6 +954,8 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
             }
         }
     }
+
+    playlist_toast_show(menu, want_theme, want_bgm, want_bg, want_viz_style, want_viz_intensity);
 }
 
 static bool load_playlist (menu_t *menu) {
@@ -1413,6 +1495,10 @@ static component_context_menu_t settings_context_menu = {
 };
 
 static void process (menu_t *menu) {
+    if (playlist_toast.frames_left > 0) {
+        playlist_toast.frames_left--;
+    }
+
     if (playlist_override.active &&
         playlist_override.background_path &&
         !playlist_override.background_applied &&
@@ -1630,6 +1716,8 @@ static void draw (menu_t *menu, surface_t *d) {
     }
 
     ui_components_context_menu_draw(&settings_context_menu);
+
+    playlist_toast_draw();
 
     rdpq_detach_show();
 }
