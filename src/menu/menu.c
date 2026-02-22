@@ -95,7 +95,18 @@ static void menu_bgm_init (menu_t *menu) {
 }
 
 static void menu_bgm_poll (menu_t *menu) {
-    if (menu->mode == MENU_MODE_MUSIC_PLAYER) {
+    bool loading_or_booting =
+        (menu->mode == MENU_MODE_MUSIC_PLAYER) ||
+        (menu->mode == MENU_MODE_LOAD_ROM) ||
+        (menu->mode == MENU_MODE_LOAD_DISK) ||
+        (menu->mode == MENU_MODE_LOAD_EMULATOR) ||
+        (menu->mode == MENU_MODE_BOOT) ||
+        (menu->next_mode == MENU_MODE_BOOT);
+
+    if (loading_or_booting) {
+        if (menu_bgm_initialized && mp3player_is_playing()) {
+            mp3player_stop();
+        }
         return;
     }
 
@@ -228,6 +239,10 @@ static void menu_init (boot_params_t *boot_params) {
         path_free(menu->browser.directory);
         menu->browser.directory = path_init(menu->storage_prefix, "/");
     }
+    if (menu->settings.browser_sort_mode < BROWSER_SORT_CUSTOM || menu->settings.browser_sort_mode > BROWSER_SORT_ZA) {
+        menu->settings.browser_sort_mode = BROWSER_SORT_AZ;
+    }
+    menu->browser.sort_mode = (browser_sort_t)menu->settings.browser_sort_mode;
 
     debugf("N64FlashcartMenu debugging...\n");
 }

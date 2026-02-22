@@ -714,6 +714,8 @@ static void set_default_directory (menu_t *menu, void *arg) {
 static void cycle_sort_mode (menu_t *menu, void *arg) {
     (void)arg;
     menu->browser.sort_mode = (browser_sort_t)(((int)menu->browser.sort_mode + 1) % 3);
+    menu->settings.browser_sort_mode = (int)menu->browser.sort_mode;
+    settings_save(&menu->settings);
     browser_apply_sort(menu);
 }
 
@@ -964,7 +966,6 @@ static void draw (menu_t *menu, surface_t *d) {
 
 void view_browser_init (menu_t *menu) {
     if (!menu->browser.valid) {
-        menu->browser.sort_mode = BROWSER_SORT_AZ;
         ui_components_context_menu_init(&entry_context_menu);
         ui_components_context_menu_init(&archive_context_menu);
         ui_components_context_menu_init(&playlist_context_menu);
