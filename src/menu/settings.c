@@ -43,6 +43,8 @@ static settings_t init = {
     .show_browser_file_extensions = true,
     .show_browser_rom_tags = true,
     .bgm_enabled = true,
+    .background_visualizer_enabled = false,
+    .bgm_enabled = true,
     .rumble_enabled = false,
 };
 
@@ -119,6 +121,7 @@ void settings_load (settings_t *settings) {
         "bgm_enabled",
         mini_get_bool(ini, "menu_beta_flag", "bgm_enabled", init.bgm_enabled)
     );
+    settings->background_visualizer_enabled = mini_get_bool(ini, "menu_beta_flag", "background_visualizer_enabled", init.background_visualizer_enabled);
     settings->rumble_enabled = mini_get_bool(ini, "menu_beta_flag", "rumble_enabled", init.rumble_enabled);
 
     mini_free(ini);
@@ -163,6 +166,8 @@ void settings_save (settings_t *settings) {
     /* Beta feature flags, they should not save until production ready! */
     // mini_set_bool(ini, "menu", "show_browser_file_extensions", settings->show_browser_file_extensions);
     // mini_set_bool(ini, "menu", "show_browser_rom_tags", settings->show_browser_rom_tags);
+    // mini_set_bool(ini, "menu_beta_flag", "bgm_enabled", settings->bgm_enabled);
+    mini_set_bool(ini, "menu_beta_flag", "background_visualizer_enabled", settings->background_visualizer_enabled);
     // mini_set_bool(ini, "menu_beta_flag", "rumble_enabled", settings->rumble_enabled);
 
     mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);

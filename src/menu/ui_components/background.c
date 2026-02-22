@@ -6,8 +6,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "../ui_components.h"
+#include "../mp3_player.h"
 #include "constants.h"
 #include "utils/fs.h"
 
@@ -20,6 +22,11 @@ typedef struct {
     char *cache_location;      /**< Path to the cache file location. */
     surface_t *image;          /**< Pointer to the loaded image surface. */
     rspq_block_t *image_display_list; /**< Display list for rendering the image. */
+    bool visualizer_enabled;   /**< Draw animated visualizer instead of image. */
+    float vis_bars[14];        /**< Smoothed visualizer bar values. */
+    float vis_trail_1[14];     /**< First trail buffer (recent). */
+    float vis_caps[14];        /**< Peak hold caps. */
+    uint32_t vis_tick;         /**< Animation tick counter. */
 } component_background_t;
 
 /**
@@ -33,6 +40,164 @@ typedef struct {
 } cache_metadata_t;
 
 static component_background_t *background = NULL;
+
+static uint8_t u8_clamp(int v) {
+    if (v < 0) return 0;
+    if (v > 255) return 255;
+    return (uint8_t)v;
+}
+
+static color_t hsv_to_rgba(float h, float s, float v, uint8_t a) {
+    while (h < 0.0f) h += 1.0f;
+    while (h >= 1.0f) h -= 1.0f;
+
+    float r = v, g = v, b = v;
+    if (s > 0.0f) {
+        float hf = h * 6.0f;
+        int i = (int)hf;
+        float f = hf - (float)i;
+        float p = v * (1.0f - s);
+        float q = v * (1.0f - s * f);
+        float t = v * (1.0f - s * (1.0f - f));
+
+        switch (i % 6) {
+            case 0: r = v; g = t; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+        }
+    }
+
+    return RGBA32(u8_clamp((int)(r * 255.0f)),
+                  u8_clamp((int)(g * 255.0f)),
+                  u8_clamp((int)(b * 255.0f)),
+                  a);
+}
+
+static void draw_visualizer_background(component_background_t *c) {
+    if (!c) {
+        rdpq_clear(BACKGROUND_EMPTY_COLOR);
+        return;
+    }
+
+    if (!c->image_display_list) {
+        rdpq_clear(BACKGROUND_EMPTY_COLOR);
+    }
+
+    mp3player_meter_t meter = {0};
+    bool have_meter = mp3player_get_meter(&meter) && mp3player_is_playing();
+    float base = 0.0f;
+    float peak = 0.0f;
+    if (have_meter) {
+        base = (meter.avg_l + meter.avg_r) * 0.5f;
+        peak = (meter.peak_l + meter.peak_r) * 0.5f;
+    }
+
+    c->vis_tick++;
+
+    const int bars = (int)(sizeof(c->vis_bars) / sizeof(c->vis_bars[0]));
+    const int bar_w = 14;
+    const int gap = 6;
+    const int total_w = bars * (bar_w + gap) - gap;
+    const int x0 = (DISPLAY_WIDTH - total_w) / 2;
+    const int bottom = DISPLAY_HEIGHT - 34;
+    const int panel_top = bottom - 84;
+    const int max_h = bottom - panel_top - 8;
+
+    // Keep playlist/background image visible; darken only the visualizer strip.
+    ui_components_box_draw(0, panel_top - 3, DISPLAY_WIDTH, bottom + 3, RGBA32(0x05, 0x08, 0x0C, 0x72));
+    ui_components_box_draw(0, panel_top - 4, DISPLAY_WIDTH, panel_top - 3, RGBA32(0xC8, 0xD8, 0xFF, 0x20));
+    for (int y = panel_top; y < bottom; y += 10) {
+        ui_components_box_draw(0, y, DISPLAY_WIDTH, y + 1, RGBA32(0x0D, 0x13, 0x18, 0x20));
+    }
+
+    for (int i = 0; i < bars; i++) {
+        // Cheap deterministic motion so the visualizer still animates gently when music is quiet.
+        float pulse = (float)(((c->vis_tick * 3) + (i * 11)) % 64) / 63.0f;
+        if (pulse > 0.5f) {
+            pulse = 1.0f - pulse;
+        }
+        pulse *= 2.0f;
+
+        float center = (float)(i < bars / 2 ? i : (bars - 1 - i)) / (float)(bars / 2);
+        float center_weight = 0.88f + center * 0.18f;
+        float band_shape = 0.92f + 0.12f * (float)(((i * 7) + (int)c->vis_tick) % 9) / 8.0f;
+        // Bias heavily toward instantaneous peaks to reduce perceived lag.
+        float peak_drive = peak * (0.85f + 0.35f * pulse);
+        float body_drive = base * (0.06f + 0.10f * band_shape);
+        float target = ((peak_drive * center_weight) + body_drive) * band_shape;
+        if (!have_meter) {
+            target = 0.03f + pulse * 0.05f;
+        }
+        if (target > 1.0f) {
+            target = 1.0f;
+        }
+
+        // Immediate rise and quick release for minimal visual lag.
+        if (target > c->vis_bars[i]) {
+            c->vis_bars[i] = target;
+        } else {
+            c->vis_bars[i] = (c->vis_bars[i] * 0.58f) + (target * 0.42f);
+        }
+
+        // Trail buffers for a cheap WMP/Winamp-style persistence effect.
+        c->vis_trail_1[i] = (c->vis_trail_1[i] * 0.70f) + (c->vis_bars[i] * 0.30f);
+        // Peak hold cap with gradual fall.
+        if (c->vis_bars[i] >= c->vis_caps[i]) {
+            c->vis_caps[i] = c->vis_bars[i];
+        } else {
+            c->vis_caps[i] -= 0.018f;
+            if (c->vis_caps[i] < c->vis_bars[i]) {
+                c->vis_caps[i] = c->vis_bars[i];
+            }
+            if (c->vis_caps[i] < 0.0f) {
+                c->vis_caps[i] = 0.0f;
+            }
+        }
+
+        int h = (int)(c->vis_bars[i] * max_h);
+        if (h < 2) {
+            h = 2;
+        }
+        int h_t1 = (int)(c->vis_trail_1[i] * max_h);
+        if (h_t1 < 1) h_t1 = 1;
+        int x = x0 + i * (bar_w + gap);
+        int y = bottom - h;
+        int y_t1 = bottom - h_t1;
+
+        float hue = (float)((c->vis_tick * 2) + (i * 10)) / 256.0f;
+        color_t trail1_col = hsv_to_rgba(hue + 0.01f, 0.85f, 0.72f, 0x40);
+        color_t fill_lo = hsv_to_rgba(hue + 0.08f, 0.90f, 0.70f, 0xCC);
+        color_t fill_mid = hsv_to_rgba(hue + 0.03f, 0.92f, 0.85f, 0xD8);
+        color_t fill_hi = hsv_to_rgba(hue, 0.95f, 1.00f, 0xE0);
+        color_t cap_col = hsv_to_rgba(hue + 0.15f, 0.55f, 1.00f, 0xF0);
+
+        // Trail for persistence.
+        ui_components_box_draw(x, y_t1, x + bar_w, bottom, trail1_col);
+
+        // Outer bar body
+        ui_components_box_draw(x, y, x + bar_w, bottom, RGBA32(0x14, 0x1D, 0x28, 0xD8));
+
+        // Segmented rainbow fill.
+        int fill_h = h - 2;
+        int fill_top = bottom - 1 - fill_h;
+        int split1 = fill_top + (fill_h / 2);
+        int split2 = fill_top + ((fill_h * 4) / 5);
+        ui_components_box_draw(x + 1, split1, x + bar_w - 1, bottom - 1, fill_hi);
+        ui_components_box_draw(x + 1, split2, x + bar_w - 1, split1, fill_mid);
+        ui_components_box_draw(x + 1, fill_top, x + bar_w - 1, split2, fill_lo);
+
+        // Peak cap (per-bar hold, not global peak).
+        int cap_y = bottom - 2 - (int)(c->vis_caps[i] * max_h);
+        if (cap_y < y) {
+            cap_y = y;
+        }
+        ui_components_box_draw(x, cap_y - 1, x + bar_w, cap_y + 2, RGBA32(0x00, 0x00, 0x00, 0x50));
+        ui_components_box_draw(x + 1, cap_y, x + bar_w - 1, cap_y + 1, cap_col);
+    }
+}
 
 /**
  * @brief Load background image from cache file if available.
@@ -286,12 +451,29 @@ void ui_components_background_reload_cache(void) {
     prepare_background(background);
 }
 
+void ui_components_background_set_visualizer(bool enabled) {
+    if (!background) {
+        return;
+    }
+    background->visualizer_enabled = enabled;
+    if (enabled) {
+        memset(background->vis_bars, 0, sizeof(background->vis_bars));
+        memset(background->vis_trail_1, 0, sizeof(background->vis_trail_1));
+        memset(background->vis_caps, 0, sizeof(background->vis_caps));
+    }
+}
+
 /**
  * @brief Draw the background image or clear the screen if not available.
  */
 void ui_components_background_draw(void) {
     if (background && background->image_display_list) {
         rspq_block_run(background->image_display_list);
+        if (background->visualizer_enabled) {
+            draw_visualizer_background(background);
+        }
+    } else if (background && background->visualizer_enabled) {
+        draw_visualizer_background(background);
     } else {
         rdpq_clear(BACKGROUND_EMPTY_COLOR);
     }

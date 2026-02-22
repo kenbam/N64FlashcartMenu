@@ -196,6 +196,12 @@ static void set_use_rom_fast_reboot_enabled_type (menu_t *menu, void *arg) {
 }
 #endif
 
+static void set_background_visualizer_enabled_type (menu_t *menu, void *arg) {
+    menu->settings.background_visualizer_enabled = (bool)(uintptr_t)(arg);
+    ui_components_background_set_visualizer(menu->settings.background_visualizer_enabled);
+    settings_save(&menu->settings);
+}
+
 #ifdef BETA_SETTINGS
 static void set_pal60_type (menu_t *menu, void *arg) {
     menu->settings.pal60_enabled = (bool)(uintptr_t)(arg);
@@ -217,7 +223,6 @@ static void set_show_browser_rom_tags_type (menu_t *menu, void *arg) {
     menu->settings.show_browser_rom_tags = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
 }
-
 static void set_rumble_enabled_type (menu_t *menu, void *arg) {
     menu->settings.rumble_enabled = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -493,7 +498,21 @@ static component_context_menu_t set_show_browser_rom_tags_context_menu = {
         {.text = "Off", .action = set_show_browser_rom_tags_type, .arg = (void *)(uintptr_t)(false) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
+#endif
 
+static int get_background_visualizer_enabled_current_selection (menu_t *menu) {
+    return menu->settings.background_visualizer_enabled ? 0 : 1;
+}
+
+static component_context_menu_t set_background_visualizer_enabled_type_context_menu = {
+    .get_default_selection = get_background_visualizer_enabled_current_selection,
+    .list = {
+        {.text = "On", .action = set_background_visualizer_enabled_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_background_visualizer_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+#ifdef BETA_SETTINGS
 static int get_rumble_enabled_current_selection (menu_t *menu) {
     return menu->settings.rumble_enabled ? 0 : 1;
 }
@@ -523,6 +542,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Text Panel Overlay", .submenu = &set_text_panel_enabled_type_context_menu },
     { .text = "Text Panel Strength", .submenu = &set_text_panel_alpha_context_menu },
     { .text = "Theme Preset", .submenu = &set_ui_theme_context_menu },
+    { .text = "Visualizer Background", .submenu = &set_background_visualizer_enabled_type_context_menu },
     { .text = "Pick Background Image", .action = open_background_picker },
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     { .text = "ROM Loading Bar", .submenu = &set_loading_progress_bar_enabled_context_menu },
@@ -611,6 +631,7 @@ ui_components_main_text_draw(
         "     Text Panel Overlay: %s\n"
         "     Text Panel Str    : %d\n"
         "     Theme Preset      : %s\n"
+        "     Visualizer BG     : %s\n"
         "     Background Picker : Use A menu\n"
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         "  Autoload ROM      : %s\n\n"
@@ -645,6 +666,7 @@ ui_components_main_text_draw(
         format_switch(menu->settings.text_panel_enabled),
         (int)menu->settings.text_panel_alpha,
         ui_components_theme_name(menu->settings.ui_theme),
+        format_switch(menu->settings.background_visualizer_enabled),
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         format_switch(menu->settings.rom_autoload_enabled),
         format_switch(menu->settings.loading_progress_bar_enabled)

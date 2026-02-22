@@ -237,6 +237,15 @@ void ui_components_background_replace_image_temporary(surface_t *image);
 void ui_components_background_reload_cache(void);
 
 /**
+ * @brief Enable or disable animated visualizer background mode.
+ *
+ * When enabled, an animated bar visualizer is drawn instead of the cached background image.
+ *
+ * @param enabled True to enable visualizer background mode.
+ */
+void ui_components_background_set_visualizer(bool enabled);
+
+/**
  * @brief Draw the background component.
  */
 void ui_components_background_draw(void);

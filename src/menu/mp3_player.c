@@ -39,6 +39,8 @@ typedef struct {
     float duration; /**< Duration of the MP3 file */
     float bitrate; /**< Bitrate of the MP3 file */
 
+    mp3player_meter_t meter; /**< Most recent decoded meter values for visualizers */
+
     waveform_t wave; /**< Waveform structure for playback */
 } mp3player_t;
 
@@ -52,6 +54,11 @@ static void mp3player_reset_decoder (void) {
     p->seek_predecode_frames = 0;
     p->buffer_ptr = p->buffer;
     p->buffer_left = 0;
+    p->meter.peak_l = 0.0f;
+    p->meter.peak_r = 0.0f;
+    p->meter.avg_l = 0.0f;
+    p->meter.avg_r = 0.0f;
+    p->meter.valid = false;
 }
 
 /**
@@ -96,6 +103,39 @@ static void mp3player_wave_read (void *ctx, samplebuffer_t *sbuf, int wpos, int 
             p->buffer_left -= p->info.frame_offset;
 
             mp3dec_decode_frame(&p->dec, p->buffer_ptr, p->buffer_left, buffer, &p->info);
+
+            // Capture a lightweight normalized meter from decoded PCM so UI visualizers
+            // can react to real menu music without re-decoding audio.
+            if (samples > 0 && p->info.channels > 0) {
+                int channels = p->info.channels;
+                uint32_t sum_abs_l = 0;
+                uint32_t sum_abs_r = 0;
+                int16_t peak_l = 0;
+                int16_t peak_r = 0;
+
+                for (int i = 0; i < samples; i++) {
+                    int16_t s_l = buffer[i * channels];
+                    int16_t a_l = (s_l < 0) ? (int16_t)(-s_l) : s_l;
+                    if (a_l > peak_l) {
+                        peak_l = a_l;
+                    }
+                    sum_abs_l += (uint16_t)a_l;
+
+                    int16_t s_r = (channels > 1) ? buffer[i * channels + 1] : s_l;
+                    int16_t a_r = (s_r < 0) ? (int16_t)(-s_r) : s_r;
+                    if (a_r > peak_r) {
+                        peak_r = a_r;
+                    }
+                    sum_abs_r += (uint16_t)a_r;
+                }
+
+                const float inv_max = 1.0f / 32768.0f;
+                p->meter.peak_l = peak_l * inv_max;
+                p->meter.peak_r = peak_r * inv_max;
+                p->meter.avg_l = ((float)sum_abs_l / (float)samples) * inv_max;
+                p->meter.avg_r = ((float)sum_abs_r / (float)samples) * inv_max;
+                p->meter.valid = true;
+            }
 
             if (p->seek_predecode_frames > 0) {
                 p->seek_predecode_frames -= 1;
@@ -490,4 +530,13 @@ float mp3player_get_progress (void) {
     long data_position = (data_consumed > p->data_start) ? (data_consumed - p->data_start) : 0;
 
     return data_position / (float) (data_size);
+}
+
+bool mp3player_get_meter (mp3player_meter_t *out) {
+    if ((p == NULL) || (out == NULL) || !p->meter.valid) {
+        return false;
+    }
+
+    *out = p->meter;
+    return true;
 }

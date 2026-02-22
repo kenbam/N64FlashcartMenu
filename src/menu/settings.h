@@ -62,7 +62,6 @@ typedef struct {
 
     /** @brief Enable Background music */
     bool bgm_enabled;
-
     /** @brief Absolute SD path to selected menu music file (empty = auto default) */
     char *bgm_file;
 
@@ -77,6 +76,9 @@ typedef struct {
     uint8_t screensaver_margin_right;
     uint8_t screensaver_margin_top;
     uint8_t screensaver_margin_bottom;
+
+    /** @brief Use an animated bar visualizer instead of static background image */
+    bool background_visualizer_enabled;
 
     /** @brief Enable Sound effects within the menu */
     bool soundfx_enabled;

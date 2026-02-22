@@ -23,6 +23,19 @@ typedef enum {
 } mp3player_err_t;
 
 /**
+ * @brief Lightweight playback meter values for visualizers.
+ *
+ * Values are normalized to the range 0.0 to 1.0.
+ */
+typedef struct {
+    float peak_l;
+    float peak_r;
+    float avg_l;
+    float avg_r;
+    bool valid;
+} mp3player_meter_t;
+
+/**
  * @brief Initialize the MP3 player mixer.
  * 
  * This function initializes the mixer for the MP3 player.
@@ -168,5 +181,13 @@ int mp3player_get_samplerate(void);
  * @return float Current playback progress as a percentage (0.0 to 100.0).
  */
 float mp3player_get_progress(void);
+
+/**
+ * @brief Get the most recent decoded audio meter values.
+ *
+ * @param out Pointer to output meter structure.
+ * @return true if meter data is available, false otherwise.
+ */
+bool mp3player_get_meter(mp3player_meter_t *out);
 
 #endif /* MP3_PLAYER_H__ */
