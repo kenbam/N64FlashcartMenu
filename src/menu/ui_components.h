@@ -242,6 +242,7 @@ typedef enum {
     UI_BACKGROUND_VISUALIZER_BARS = 0,
     UI_BACKGROUND_VISUALIZER_PULSE_WASH = 1,
     UI_BACKGROUND_VISUALIZER_SUNBURST = 2,
+    UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE = 3,
 } ui_background_visualizer_style_t;
 
 /**
@@ -253,6 +254,7 @@ typedef enum {
  */
 void ui_components_background_set_visualizer(bool enabled);
 void ui_components_background_set_visualizer_style(int style);
+void ui_components_background_set_visualizer_intensity(int intensity);
 void ui_components_set_selected_row_shimmer(bool enabled);
 
 /**

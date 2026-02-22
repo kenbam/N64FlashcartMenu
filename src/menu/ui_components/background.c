@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <math.h>
 
 #include "../ui_components.h"
 #include "../sound.h"
@@ -25,6 +26,7 @@ typedef struct {
     rspq_block_t *image_display_list; /**< Display list for rendering the image. */
     bool visualizer_enabled;   /**< Draw animated visualizer instead of image. */
     int visualizer_style;      /**< Visualizer style enum. */
+    int visualizer_intensity;  /**< 0=subtle,1=normal,2=full */
     float vis_bars[14];        /**< Smoothed visualizer bar values. */
     float vis_trail_1[14];     /**< First trail buffer (recent). */
     float vis_caps[14];        /**< Peak hold caps. */
@@ -191,6 +193,15 @@ static color_t hsv_to_rgba(float h, float s, float v, uint8_t a) {
                   a);
 }
 
+static uint8_t vis_alpha_scale(component_background_t *c, int alpha) {
+    static const float k[3] = {0.55f, 0.85f, 1.10f};
+    int idx = (c && c->visualizer_intensity >= 0 && c->visualizer_intensity <= 2) ? c->visualizer_intensity : 1;
+    int out = (int)(alpha * k[idx]);
+    if (out > 255) out = 255;
+    if (out < 0) out = 0;
+    return (uint8_t)out;
+}
+
 static bool visualizer_get_meter(component_background_t *c, float *out_base, float *out_peak) {
     (void)c;
     sound_bgm_meter_t meter = {0};
@@ -232,10 +243,10 @@ static void draw_visualizer_bars_overlay(component_background_t *c) {
     const int max_h = bottom - panel_top - 8;
 
     // Keep playlist/background image visible; darken only the visualizer strip.
-    ui_components_box_draw(0, panel_top - 3, DISPLAY_WIDTH, bottom + 3, RGBA32(0x05, 0x08, 0x0C, 0x72));
-    ui_components_box_draw(0, panel_top - 4, DISPLAY_WIDTH, panel_top - 3, RGBA32(0xC8, 0xD8, 0xFF, 0x20));
+    ui_components_box_draw(0, panel_top - 3, DISPLAY_WIDTH, bottom + 3, RGBA32(0x05, 0x08, 0x0C, vis_alpha_scale(c, 0x72)));
+    ui_components_box_draw(0, panel_top - 4, DISPLAY_WIDTH, panel_top - 3, RGBA32(0xC8, 0xD8, 0xFF, vis_alpha_scale(c, 0x20)));
     for (int y = panel_top; y < bottom; y += 10) {
-        ui_components_box_draw(0, y, DISPLAY_WIDTH, y + 1, RGBA32(0x0D, 0x13, 0x18, 0x20));
+        ui_components_box_draw(0, y, DISPLAY_WIDTH, y + 1, RGBA32(0x0D, 0x13, 0x18, vis_alpha_scale(c, 0x20)));
     }
 
     for (int i = 0; i < bars; i++) {
@@ -293,11 +304,11 @@ static void draw_visualizer_bars_overlay(component_background_t *c) {
         int y_t1 = bottom - h_t1;
 
         float hue = (float)((c->vis_tick * 2) + (i * 10)) / 256.0f;
-        color_t trail1_col = hsv_to_rgba(hue + 0.01f, 0.85f, 0.72f, 0x40);
-        color_t fill_lo = hsv_to_rgba(hue + 0.08f, 0.90f, 0.70f, 0xCC);
-        color_t fill_mid = hsv_to_rgba(hue + 0.03f, 0.92f, 0.85f, 0xD8);
-        color_t fill_hi = hsv_to_rgba(hue, 0.95f, 1.00f, 0xE0);
-        color_t cap_col = hsv_to_rgba(hue + 0.15f, 0.55f, 1.00f, 0xF0);
+        color_t trail1_col = hsv_to_rgba(hue + 0.01f, 0.85f, 0.72f, vis_alpha_scale(c, 0x40));
+        color_t fill_lo = hsv_to_rgba(hue + 0.08f, 0.90f, 0.70f, vis_alpha_scale(c, 0xCC));
+        color_t fill_mid = hsv_to_rgba(hue + 0.03f, 0.92f, 0.85f, vis_alpha_scale(c, 0xD8));
+        color_t fill_hi = hsv_to_rgba(hue, 0.95f, 1.00f, vis_alpha_scale(c, 0xE0));
+        color_t cap_col = hsv_to_rgba(hue + 0.15f, 0.55f, 1.00f, vis_alpha_scale(c, 0xF0));
 
         // Trail for persistence.
         ui_components_box_draw(x, y_t1, x + bar_w, bottom, trail1_col);
@@ -319,7 +330,7 @@ static void draw_visualizer_bars_overlay(component_background_t *c) {
         if (cap_y < y) {
             cap_y = y;
         }
-        ui_components_box_draw(x, cap_y - 1, x + bar_w, cap_y + 2, RGBA32(0x00, 0x00, 0x00, 0x50));
+        ui_components_box_draw(x, cap_y - 1, x + bar_w, cap_y + 2, RGBA32(0x00, 0x00, 0x00, vis_alpha_scale(c, 0x50)));
         ui_components_box_draw(x + 1, cap_y, x + bar_w - 1, cap_y + 1, cap_col);
     }
 }
@@ -344,12 +355,12 @@ static void draw_visualizer_pulse_wash(component_background_t *c) {
     if (energy > 1.0f) energy = 1.0f;
 
     float hue = (float)((c->vis_tick * 2) % 512) / 512.0f;
-    color_t wash_a = hsv_to_rgba(hue, 0.85f, 0.75f + 0.20f * energy, (uint8_t)(28 + (int)(energy * 50.0f)));
-    color_t wash_b = hsv_to_rgba(hue + 0.33f, 0.65f, 0.55f + 0.20f * energy, (uint8_t)(20 + (int)(energy * 36.0f)));
-    color_t wash_c = hsv_to_rgba(hue + 0.66f, 0.75f, 0.45f + 0.25f * energy, (uint8_t)(16 + (int)(energy * 30.0f)));
+    color_t wash_a = hsv_to_rgba(hue, 0.85f, 0.75f + 0.20f * energy, vis_alpha_scale(c, 28 + (int)(energy * 50.0f)));
+    color_t wash_b = hsv_to_rgba(hue + 0.33f, 0.65f, 0.55f + 0.20f * energy, vis_alpha_scale(c, 20 + (int)(energy * 36.0f)));
+    color_t wash_c = hsv_to_rgba(hue + 0.66f, 0.75f, 0.45f + 0.25f * energy, vis_alpha_scale(c, 16 + (int)(energy * 30.0f)));
 
     // Full-screen layered pulse wash (few large quads = cheap).
-    ui_components_box_draw(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, RGBA32(0x03, 0x05, 0x08, 0x30));
+    ui_components_box_draw(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, RGBA32(0x03, 0x05, 0x08, vis_alpha_scale(c, 0x30)));
     ui_components_box_draw(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT / 2, wash_a);
     ui_components_box_draw(0, DISPLAY_HEIGHT / 2, DISPLAY_WIDTH, DISPLAY_HEIGHT, wash_b);
 
@@ -363,7 +374,7 @@ static void draw_visualizer_pulse_wash(component_background_t *c) {
     for (int i = 0; i < 4; i++) {
         int band_h = 16 + (i * 6);
         int y = (int)((c->vis_tick * (2 + i) + i * 53) % (DISPLAY_HEIGHT + band_h)) - band_h;
-        color_t band = hsv_to_rgba(hue + (float)i * 0.12f, 0.9f, 0.9f, (uint8_t)(14 + (int)(energy * 24.0f)));
+        color_t band = hsv_to_rgba(hue + (float)i * 0.12f, 0.9f, 0.9f, vis_alpha_scale(c, 14 + (int)(energy * 24.0f)));
         ui_components_box_draw(0, y, DISPLAY_WIDTH, y + band_h, band);
     }
 }
@@ -392,14 +403,14 @@ static void draw_visualizer_sunburst(component_background_t *c) {
     float hue = (float)((c->vis_tick * 3) % 512) / 512.0f;
 
     // Dim center field to help rays pop without killing background visibility.
-    ui_components_box_draw(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, RGBA32(0x02, 0x03, 0x06, 0x16));
+    ui_components_box_draw(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, RGBA32(0x02, 0x03, 0x06, vis_alpha_scale(c, 0x16)));
 
     // Expanding pulse rings (axis-aligned rectangles).
     for (int r = 0; r < 3; r++) {
         int phase = ((int)c->vis_tick * (3 + r)) + (r * 41);
         int radius = 20 + (phase % 180) + (int)(energy * 30.0f);
         int thick = 2 + r;
-        color_t ring = hsv_to_rgba(hue + 0.08f * r, 0.85f, 0.95f, (uint8_t)(18 + (int)(energy * 28.0f)));
+        color_t ring = hsv_to_rgba(hue + 0.08f * r, 0.85f, 0.95f, vis_alpha_scale(c, 18 + (int)(energy * 28.0f)));
         ui_components_box_draw(cx - radius, cy - radius, cx + radius, cy - radius + thick, ring);
         ui_components_box_draw(cx - radius, cy + radius - thick, cx + radius, cy + radius, ring);
         ui_components_box_draw(cx - radius, cy - radius, cx - radius + thick, cy + radius, ring);
@@ -408,9 +419,9 @@ static void draw_visualizer_sunburst(component_background_t *c) {
 
     // Cardinal and diagonal "rays" approximated with rectangles / stepped quads.
     int ray = 50 + (int)(energy * 170.0f);
-    color_t ray1 = hsv_to_rgba(hue, 0.95f, 1.0f, (uint8_t)(22 + (int)(energy * 40.0f)));
-    color_t ray2 = hsv_to_rgba(hue + 0.18f, 0.90f, 0.95f, (uint8_t)(18 + (int)(energy * 30.0f)));
-    color_t core = hsv_to_rgba(hue + 0.08f, 0.35f, 1.0f, (uint8_t)(44 + (int)(energy * 70.0f)));
+    color_t ray1 = hsv_to_rgba(hue, 0.95f, 1.0f, vis_alpha_scale(c, 22 + (int)(energy * 40.0f)));
+    color_t ray2 = hsv_to_rgba(hue + 0.18f, 0.90f, 0.95f, vis_alpha_scale(c, 18 + (int)(energy * 30.0f)));
+    color_t core = hsv_to_rgba(hue + 0.08f, 0.35f, 1.0f, vis_alpha_scale(c, 44 + (int)(energy * 70.0f)));
 
     ui_components_box_draw(cx - 10, cy - ray, cx + 10, cy + ray, ray1);
     ui_components_box_draw(cx - ray, cy - 8, cx + ray, cy + 8, ray1);
@@ -429,8 +440,74 @@ static void draw_visualizer_sunburst(component_background_t *c) {
 
     // Center orb pulse.
     int core_r = 12 + (int)(energy * 22.0f);
-    ui_components_box_draw(cx - core_r - 2, cy - core_r - 2, cx + core_r + 2, cy + core_r + 2, RGBA32(0x00, 0x00, 0x00, 0x30));
+    ui_components_box_draw(cx - core_r - 2, cy - core_r - 2, cx + core_r + 2, cy + core_r + 2, RGBA32(0x00, 0x00, 0x00, vis_alpha_scale(c, 0x30)));
     ui_components_box_draw(cx - core_r, cy - core_r, cx + core_r, cy + core_r, core);
+}
+
+static void draw_visualizer_oscilloscope(component_background_t *c) {
+    if (!c) {
+        rdpq_clear(BACKGROUND_EMPTY_COLOR);
+        return;
+    }
+    if (!c->image_display_list) {
+        rdpq_clear(BACKGROUND_EMPTY_COLOR);
+    }
+
+    float base = 0.0f, peak = 0.0f;
+    bool have_meter = visualizer_get_meter(c, &base, &peak);
+    c->vis_tick++;
+
+    const int left = 26;
+    const int right = DISPLAY_WIDTH - 26;
+    const int center_y = DISPLAY_HEIGHT - 72;
+    const int amp = 14 + (int)(peak * 42.0f);
+    const int width = right - left;
+
+    ui_components_box_draw(0, center_y - 42, DISPLAY_WIDTH, center_y + 42, RGBA32(0x03, 0x06, 0x0A, vis_alpha_scale(c, 0x58)));
+    ui_components_box_draw(left, center_y, right, center_y + 1, RGBA32(0xB0, 0xD8, 0xFF, vis_alpha_scale(c, 0x26)));
+
+    float energy = peak * 0.75f + base * 0.25f;
+    if (!have_meter) energy = 0.10f;
+    for (int lane = 0; lane < 3; lane++) {
+        int prev_x = left;
+        float phase = (float)(c->vis_tick * (2 + lane)) * 0.05f;
+        float freq = 0.025f + (0.010f * lane) + (0.03f * energy);
+        color_t col = hsv_to_rgba(((float)c->vis_tick / 180.0f) + lane * 0.08f, 0.9f, 1.0f, vis_alpha_scale(c, 0x30 + lane * 0x18));
+        int prev_y = center_y;
+        for (int x = 0; x < width; x += 4) {
+            float xf = (float)x;
+            float yv = sinf((xf * freq) + phase) * (0.45f + 0.25f * lane)
+                     + sinf((xf * (freq * 0.47f)) - (phase * 1.7f)) * (0.25f + 0.10f * energy);
+            int y = center_y + (int)(yv * (float)amp);
+            int draw_x = left + x;
+            int minx = prev_x < draw_x ? prev_x : draw_x;
+            int maxx = prev_x > draw_x ? prev_x : draw_x;
+            int miny = prev_y < y ? prev_y : y;
+            int maxy = prev_y > y ? prev_y : y;
+            ui_components_box_draw(minx, miny, maxx + 2, maxy + 2, col);
+            prev_x = draw_x;
+            prev_y = y;
+        }
+    }
+
+    // Bright core trace on top.
+    int prev_x = left;
+    int prev_y = center_y;
+    color_t core = hsv_to_rgba((float)c->vis_tick / 160.0f, 0.35f, 1.0f, vis_alpha_scale(c, 0xCC));
+    for (int x = 0; x < width; x += 3) {
+        float xf = (float)x;
+        float yv = sinf((xf * (0.03f + 0.05f * energy)) + ((float)c->vis_tick * 0.12f))
+                 * (0.65f + 0.30f * peak);
+        int y = center_y + (int)(yv * (float)amp);
+        int draw_x = left + x;
+        int minx = prev_x < draw_x ? prev_x : draw_x;
+        int maxx = prev_x > draw_x ? prev_x : draw_x;
+        int miny = prev_y < y ? prev_y : y;
+        int maxy = prev_y > y ? prev_y : y;
+        ui_components_box_draw(minx, miny, maxx + 2, maxy + 2, core);
+        prev_x = draw_x;
+        prev_y = y;
+    }
 }
 
 /**
@@ -679,13 +756,22 @@ void ui_components_background_set_visualizer_style(int style) {
     if (!background) {
         return;
     }
-    if (style < UI_BACKGROUND_VISUALIZER_BARS || style > UI_BACKGROUND_VISUALIZER_SUNBURST) {
+    if (style < UI_BACKGROUND_VISUALIZER_BARS || style > UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE) {
         style = UI_BACKGROUND_VISUALIZER_BARS;
     }
     if (background->visualizer_style != style) {
         background->visualizer_style = style;
         visualizer_reset_state(background);
     }
+}
+
+void ui_components_background_set_visualizer_intensity(int intensity) {
+    if (!background) {
+        return;
+    }
+    if (intensity < 0) intensity = 0;
+    if (intensity > 2) intensity = 2;
+    background->visualizer_intensity = intensity;
 }
 
 /**
@@ -702,6 +788,9 @@ void ui_components_background_draw(void) {
                 case UI_BACKGROUND_VISUALIZER_SUNBURST:
                     draw_visualizer_sunburst(background);
                     break;
+                case UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE:
+                    draw_visualizer_oscilloscope(background);
+                    break;
                 case UI_BACKGROUND_VISUALIZER_BARS:
                 default:
                     draw_visualizer_bars_overlay(background);
@@ -715,6 +804,9 @@ void ui_components_background_draw(void) {
                 break;
             case UI_BACKGROUND_VISUALIZER_SUNBURST:
                 draw_visualizer_sunburst(background);
+                break;
+            case UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE:
+                draw_visualizer_oscilloscope(background);
                 break;
             case UI_BACKGROUND_VISUALIZER_BARS:
             default:

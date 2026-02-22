@@ -88,13 +88,17 @@ static bool browser_try_pick_menu_music_file(menu_t *menu);
 static bool browser_is_screensaver_logo_picker_root(menu_t *menu);
 static bool browser_try_pick_screensaver_logo_file(menu_t *menu);
 static void browser_restore_playlist_overrides(menu_t *menu);
-static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path);
+static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity);
 
 typedef struct {
     bool active;
     bool theme_applied;
     int saved_theme;
     bool bgm_applied;
+    bool viz_style_applied;
+    int saved_viz_style;
+    bool viz_intensity_applied;
+    int saved_viz_intensity;
     bool background_applied;
     bool background_loading;
     char *background_path;
@@ -623,7 +627,7 @@ static char *playlist_resolve_path(menu_t *menu, path_t *playlist_dir, const cha
     return normalized;
 }
 
-static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path) {
+static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path, int *viz_style, int *viz_intensity) {
     (void)menu;
     if (!line || line[0] != '#') {
         return;
@@ -682,6 +686,35 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
         }
         return;
     }
+
+    if (strcasecmp(key, "VIZ_STYLE") == 0 || strcasecmp(key, "VISUALIZER_STYLE") == 0) {
+        if (strcasecmp(value, "BARS") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_BARS;
+        else if (strcasecmp(value, "PULSE") == 0 || strcasecmp(value, "PULSE_WASH") == 0 || strcasecmp(value, "PULSEWASH") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_PULSE_WASH;
+        else if (strcasecmp(value, "SUNBURST") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_SUNBURST;
+        else if (strcasecmp(value, "SCOPE") == 0 || strcasecmp(value, "OSC") == 0 || strcasecmp(value, "OSCILLOSCOPE") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE;
+        else {
+            char *end = NULL;
+            long parsed = strtol(value, &end, 10);
+            if (end && *end == '\0' && parsed >= 0 && parsed <= UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE) {
+                *viz_style = (int)parsed;
+            }
+        }
+        return;
+    }
+
+    if (strcasecmp(key, "VIZ_INTENSITY") == 0 || strcasecmp(key, "VISUALIZER_INTENSITY") == 0) {
+        if (strcasecmp(value, "SUBTLE") == 0 || strcasecmp(value, "LOW") == 0) *viz_intensity = 0;
+        else if (strcasecmp(value, "NORMAL") == 0 || strcasecmp(value, "MEDIUM") == 0) *viz_intensity = 1;
+        else if (strcasecmp(value, "FULL") == 0 || strcasecmp(value, "HIGH") == 0) *viz_intensity = 2;
+        else {
+            char *end = NULL;
+            long parsed = strtol(value, &end, 10);
+            if (end && *end == '\0' && parsed >= 0 && parsed <= 2) {
+                *viz_intensity = (int)parsed;
+            }
+        }
+        return;
+    }
 }
 
 static void browser_restore_playlist_overrides(menu_t *menu) {
@@ -704,12 +737,18 @@ static void browser_restore_playlist_overrides(menu_t *menu) {
         menu->runtime_bgm_override_file = NULL;
         menu->bgm_reload_requested = true;
     }
+    if (playlist_override.viz_style_applied) {
+        ui_components_background_set_visualizer_style(playlist_override.saved_viz_style);
+    }
+    if (playlist_override.viz_intensity_applied) {
+        ui_components_background_set_visualizer_intensity(playlist_override.saved_viz_intensity);
+    }
 
     free(playlist_override.background_path);
     memset(&playlist_override, 0, sizeof(playlist_override));
 }
 
-static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path) {
+static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity) {
     if (!menu) {
         return;
     }
@@ -718,12 +757,16 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
     bool want_theme = (theme_id >= 0);
     bool want_bgm = (bgm_path && file_exists((char *)bgm_path));
     bool want_bg = (bg_path && file_exists((char *)bg_path));
-    if (!want_theme && !want_bgm && !want_bg) {
+    bool want_viz_style = (viz_style >= 0 && viz_style <= UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE);
+    bool want_viz_intensity = (viz_intensity >= 0 && viz_intensity <= 2);
+    if (!want_theme && !want_bgm && !want_bg && !want_viz_style && !want_viz_intensity) {
         return;
     }
 
     playlist_override.active = true;
     playlist_override.saved_theme = ui_components_get_theme();
+    playlist_override.saved_viz_style = menu->settings.background_visualizer_style;
+    playlist_override.saved_viz_intensity = menu->settings.background_visualizer_intensity;
 
     if (want_theme) {
         ui_components_set_theme(theme_id);
@@ -735,6 +778,15 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
         menu->runtime_bgm_override_file = strdup(bgm_path);
         menu->bgm_reload_requested = true;
         playlist_override.bgm_applied = (menu->runtime_bgm_override_file != NULL);
+    }
+
+    if (want_viz_style) {
+        ui_components_background_set_visualizer_style(viz_style);
+        playlist_override.viz_style_applied = true;
+    }
+    if (want_viz_intensity) {
+        ui_components_background_set_visualizer_intensity(viz_intensity);
+        playlist_override.viz_intensity_applied = true;
     }
 
     if (want_bg) {
@@ -772,6 +824,8 @@ static bool load_playlist (menu_t *menu) {
     char *playlist_theme = NULL;
     char *playlist_bgm = NULL;
     char *playlist_bg = NULL;
+    int playlist_viz_style = -1;
+    int playlist_viz_intensity = -1;
 
     char line[1024];
     while (fgets(line, sizeof(line), f) != NULL) {
@@ -780,7 +834,7 @@ static bool load_playlist (menu_t *menu) {
             continue;
         }
         if (trimmed[0] == '#') {
-            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg);
+            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg, &playlist_viz_style, &playlist_viz_intensity);
             continue;
         }
 
@@ -854,7 +908,7 @@ static bool load_playlist (menu_t *menu) {
     menu->browser.sort_mode = BROWSER_SORT_CUSTOM;
     browser_apply_sort(menu);
 
-    browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg);
+    browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity);
     path_free(playlist_dir);
     fclose(f);
     free(playlist_theme);

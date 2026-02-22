@@ -208,6 +208,12 @@ static void set_background_visualizer_style_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_background_visualizer_intensity_type (menu_t *menu, void *arg) {
+    menu->settings.background_visualizer_intensity = (int)(uintptr_t)(arg);
+    ui_components_background_set_visualizer_intensity(menu->settings.background_visualizer_intensity);
+    settings_save(&menu->settings);
+}
+
 static void set_selected_row_shimmer_enabled_type (menu_t *menu, void *arg) {
     menu->settings.selected_row_shimmer_enabled = (bool)(uintptr_t)(arg);
     ui_components_set_selected_row_shimmer(menu->settings.selected_row_shimmer_enabled);
@@ -538,6 +544,22 @@ static component_context_menu_t set_background_visualizer_style_context_menu = {
         {.text = "Bars", .action = set_background_visualizer_style_type, .arg = (void *)(uintptr_t)(0) },
         {.text = "Pulse Wash", .action = set_background_visualizer_style_type, .arg = (void *)(uintptr_t)(1) },
         {.text = "Sunburst", .action = set_background_visualizer_style_type, .arg = (void *)(uintptr_t)(2) },
+        {.text = "Oscilloscope", .action = set_background_visualizer_style_type, .arg = (void *)(uintptr_t)(3) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_background_visualizer_intensity_current_selection (menu_t *menu) {
+    int v = menu->settings.background_visualizer_intensity;
+    if (v < 0 || v > 2) return 1;
+    return v;
+}
+
+static component_context_menu_t set_background_visualizer_intensity_context_menu = {
+    .get_default_selection = get_background_visualizer_intensity_current_selection,
+    .list = {
+        {.text = "Subtle", .action = set_background_visualizer_intensity_type, .arg = (void *)(uintptr_t)(0) },
+        {.text = "Normal", .action = set_background_visualizer_intensity_type, .arg = (void *)(uintptr_t)(1) },
+        {.text = "Full", .action = set_background_visualizer_intensity_type, .arg = (void *)(uintptr_t)(2) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -585,6 +607,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Theme Preset", .submenu = &set_ui_theme_context_menu },
     { .text = "Visualizer Background", .submenu = &set_background_visualizer_enabled_type_context_menu },
     { .text = "Visualizer Style", .submenu = &set_background_visualizer_style_context_menu },
+    { .text = "Visualizer Intensity", .submenu = &set_background_visualizer_intensity_context_menu },
     { .text = "Selected Row Shimmer", .submenu = &set_selected_row_shimmer_enabled_context_menu },
     { .text = "Pick Background Image", .action = open_background_picker },
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
@@ -645,6 +668,13 @@ static void draw (menu_t *menu, surface_t *d) {
     switch (menu->settings.background_visualizer_style) {
         case 1: visualizer_style_label = "Pulse Wash"; break;
         case 2: visualizer_style_label = "Sunburst"; break;
+        case 3: visualizer_style_label = "Oscilloscope"; break;
+        default: break;
+    }
+    const char *visualizer_intensity_label = "Normal";
+    switch (menu->settings.background_visualizer_intensity) {
+        case 0: visualizer_intensity_label = "Subtle"; break;
+        case 2: visualizer_intensity_label = "Full"; break;
         default: break;
     }
 
@@ -682,6 +712,7 @@ ui_components_main_text_draw(
         "     Theme Preset      : %s\n"
         "     Visualizer BG     : %s\n"
         "     Visualizer Style  : %s\n"
+        "     Visualizer Int    : %s\n"
         "     Row Shimmer       : %s\n"
         "     Background Picker : Use A menu\n"
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
@@ -719,6 +750,7 @@ ui_components_main_text_draw(
         ui_components_theme_name(menu->settings.ui_theme),
         format_switch(menu->settings.background_visualizer_enabled),
         visualizer_style_label,
+        visualizer_intensity_label,
         format_switch(menu->settings.selected_row_shimmer_enabled),
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         format_switch(menu->settings.rom_autoload_enabled),

@@ -942,6 +942,7 @@ static void menu_init (boot_params_t *boot_params) {
     ui_components_background_init(path_get(path));
     ui_components_background_set_visualizer(menu->settings.background_visualizer_enabled);
     ui_components_background_set_visualizer_style(menu->settings.background_visualizer_style);
+    ui_components_background_set_visualizer_intensity(menu->settings.background_visualizer_intensity);
     ui_components_set_selected_row_shimmer(menu->settings.selected_row_shimmer_enabled);
     path_pop(path);
 
