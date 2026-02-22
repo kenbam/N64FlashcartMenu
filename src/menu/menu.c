@@ -487,7 +487,19 @@ static void screensaver_draw (surface_t *display) {
 }
 
 static mp3player_err_t menu_bgm_load_file (menu_t *menu, const char *file_name) {
-    path_t *path = path_init(menu->storage_prefix, (char *)file_name);
+    if (!menu || !file_name || file_name[0] == '\0') {
+        return MP3PLAYER_ERR_NO_FILE;
+    }
+
+    path_t *path = NULL;
+    if (strstr(file_name, ":/") != NULL) {
+        path = path_create((char *)file_name);
+    } else {
+        path = path_init(menu->storage_prefix, (char *)file_name);
+    }
+    if (!path) {
+        return MP3PLAYER_ERR_NO_FILE;
+    }
 
     if (!file_exists(path_get(path))) {
         path_free(path);
