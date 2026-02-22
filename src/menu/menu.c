@@ -36,6 +36,7 @@
 
 #define MENU_CACHE_DIRECTORY        "cache"
 #define BACKGROUND_CACHE_FILE       "background.data"
+#define BACKGROUND_IMAGES_DIRECTORY "backgrounds"
 
 #define FPS_LIMIT                   (30.0f)
 
@@ -226,9 +227,13 @@ static void menu_init (boot_params_t *boot_params) {
 
     path_push(path, MENU_CACHE_DIRECTORY);
     directory_create(path_get(path));
-
     path_push(path, BACKGROUND_CACHE_FILE);
     ui_components_background_init(path_get(path));
+    path_pop(path);
+    path_pop(path);
+
+    path_push(path, BACKGROUND_IMAGES_DIRECTORY);
+    directory_create(path_get(path));
 
     path_free(path);
 

@@ -1,6 +1,8 @@
 #include <stdbool.h>
 #include "../sound.h"
 #include "../settings.h"
+#include "../path.h"
+#include "utils/fs.h"
 #include "views.h"
 
 static bool show_message_reset_settings = false;
@@ -54,6 +56,27 @@ static void set_text_panel_alpha_type (menu_t *menu, void *arg) {
     menu->settings.text_panel_alpha = (uint8_t)(uintptr_t)(arg);
     ui_components_set_text_panel(menu->settings.text_panel_enabled, menu->settings.text_panel_alpha);
     settings_save(&menu->settings);
+}
+
+static void open_background_picker (menu_t *menu, void *arg) {
+    (void)arg;
+
+    path_t *backgrounds_dir = path_init(menu->storage_prefix, "/menu/backgrounds");
+    directory_create(path_get(backgrounds_dir));
+
+    if (menu->browser.directory) {
+        path_free(menu->browser.directory);
+    }
+    menu->browser.directory = backgrounds_dir;
+    menu->browser.valid = false;
+    menu->browser.reload = false;
+
+    if (menu->browser.select_file) {
+        path_free(menu->browser.select_file);
+        menu->browser.select_file = NULL;
+    }
+
+    menu->next_mode = MENU_MODE_BROWSER;
 }
 
 #ifndef FEATURE_AUTOLOAD_ROM_ENABLED
@@ -289,6 +312,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Show Saves Folder", .submenu = &set_show_saves_folder_type_context_menu },
     { .text = "Text Panel Overlay", .submenu = &set_text_panel_enabled_type_context_menu },
     { .text = "Text Panel Strength", .submenu = &set_text_panel_alpha_context_menu },
+    { .text = "Pick Background Image", .action = open_background_picker },
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     { .text = "ROM Loading Bar", .submenu = &set_loading_progress_bar_enabled_context_menu },
 #else
@@ -360,6 +384,7 @@ ui_components_main_text_draw(
         "     Show Saves folder : %s\n"
         "     Text Panel Overlay: %s\n"
         "     Text Panel Str    : %d\n"
+        "     Background Picker : Use A menu\n"
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         "  Autoload ROM      : %s\n\n"
         "    ROM Loading Bar   : %s\n"
