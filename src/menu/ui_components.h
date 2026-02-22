@@ -251,6 +251,7 @@ typedef enum {
  */
 void ui_components_background_set_visualizer(bool enabled);
 void ui_components_background_set_visualizer_style(int style);
+void ui_components_set_selected_row_shimmer(bool enabled);
 
 /**
  * @brief Draw the background component.

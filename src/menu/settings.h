@@ -81,6 +81,8 @@ typedef struct {
     bool background_visualizer_enabled;
     /** @brief Visualizer style (0=bars, 1=pulse wash, 2=sunburst) */
     int background_visualizer_style;
+    /** @brief Animate selected file-list row text with theme-based rainbow shimmer */
+    bool selected_row_shimmer_enabled;
 
     /** @brief Enable Sound effects within the menu */
     bool soundfx_enabled;

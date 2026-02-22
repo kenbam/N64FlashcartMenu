@@ -23,6 +23,24 @@ static const char *directory_icon = "[DIR] ";
 // static const char *save_icon = "[Save] ";
 // static const char *other_icon = "[?] ";
 
+static bool selected_row_shimmer_enabled = true;
+
+static menu_font_style_t selected_shimmer_style(void) {
+    static const menu_font_style_t cycle[] = {
+        STL_RED, STL_ORANGE, STL_YELLOW, STL_GREEN, STL_BLUE, STL_DEFAULT
+    };
+    static uint32_t tick = 0;
+    if (!selected_row_shimmer_enabled) {
+        return STL_DEFAULT;
+    }
+    tick++;
+    return cycle[(tick / 4) % (sizeof(cycle) / sizeof(cycle[0]))];
+}
+
+void ui_components_set_selected_row_shimmer(bool enabled) {
+    selected_row_shimmer_enabled = enabled;
+}
+
 /**
  * @brief Format the file size into a human-readable string.
  *
@@ -54,6 +72,8 @@ static int format_file_size(char *buffer, int64_t size) {
  * @param selected Index of the currently selected entry.
  */
 void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
+    menu_font_style_t shimmer_style = selected_shimmer_style();
+
     const int nominal_row_height = 19;
     int starting_position = 0;
     int list_x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
@@ -158,7 +178,11 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
                 default: style = STL_GRAY; break;
             }
 
-            rdpq_paragraph_builder_style(style);
+            if (entry_index == selected) {
+                rdpq_paragraph_builder_style(shimmer_style);
+            } else {
+                rdpq_paragraph_builder_style(style);
+            }
 
             rdpq_paragraph_builder_span(entry->name, name_lengths[i]);
 
@@ -221,6 +245,12 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
         for (int i = 0; i < visible_entries; i++) {
             int entry_index = starting_position + i;
             entry_t *entry = &list[entry_index];
+
+            if (entry_index == selected) {
+                rdpq_paragraph_builder_style(shimmer_style);
+            } else {
+                rdpq_paragraph_builder_style(STL_DEFAULT);
+            }
 
             if (entry->type != ENTRY_TYPE_DIR) {
                 // TODO: add option to use font icons instead of file sizes.

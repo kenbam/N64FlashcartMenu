@@ -208,6 +208,12 @@ static void set_background_visualizer_style_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_selected_row_shimmer_enabled_type (menu_t *menu, void *arg) {
+    menu->settings.selected_row_shimmer_enabled = (bool)(uintptr_t)(arg);
+    ui_components_set_selected_row_shimmer(menu->settings.selected_row_shimmer_enabled);
+    settings_save(&menu->settings);
+}
+
 #ifdef BETA_SETTINGS
 static void set_pal60_type (menu_t *menu, void *arg) {
     menu->settings.pal60_enabled = (bool)(uintptr_t)(arg);
@@ -535,6 +541,18 @@ static component_context_menu_t set_background_visualizer_style_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_selected_row_shimmer_enabled_current_selection (menu_t *menu) {
+    return menu->settings.selected_row_shimmer_enabled ? 0 : 1;
+}
+
+static component_context_menu_t set_selected_row_shimmer_enabled_context_menu = {
+    .get_default_selection = get_selected_row_shimmer_enabled_current_selection,
+    .list = {
+        {.text = "On", .action = set_selected_row_shimmer_enabled_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_selected_row_shimmer_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 #ifdef BETA_SETTINGS
 static int get_rumble_enabled_current_selection (menu_t *menu) {
     return menu->settings.rumble_enabled ? 0 : 1;
@@ -567,6 +585,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Theme Preset", .submenu = &set_ui_theme_context_menu },
     { .text = "Visualizer Background", .submenu = &set_background_visualizer_enabled_type_context_menu },
     { .text = "Visualizer Style", .submenu = &set_background_visualizer_style_context_menu },
+    { .text = "Selected Row Shimmer", .submenu = &set_selected_row_shimmer_enabled_context_menu },
     { .text = "Pick Background Image", .action = open_background_picker },
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     { .text = "ROM Loading Bar", .submenu = &set_loading_progress_bar_enabled_context_menu },
@@ -663,6 +682,7 @@ ui_components_main_text_draw(
         "     Theme Preset      : %s\n"
         "     Visualizer BG     : %s\n"
         "     Visualizer Style  : %s\n"
+        "     Row Shimmer       : %s\n"
         "     Background Picker : Use A menu\n"
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         "  Autoload ROM      : %s\n\n"
@@ -699,6 +719,7 @@ ui_components_main_text_draw(
         ui_components_theme_name(menu->settings.ui_theme),
         format_switch(menu->settings.background_visualizer_enabled),
         visualizer_style_label,
+        format_switch(menu->settings.selected_row_shimmer_enabled),
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
         format_switch(menu->settings.rom_autoload_enabled),
         format_switch(menu->settings.loading_progress_bar_enabled)

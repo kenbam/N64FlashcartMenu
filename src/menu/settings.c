@@ -45,6 +45,7 @@ static settings_t init = {
     .bgm_enabled = true,
     .background_visualizer_enabled = false,
     .background_visualizer_style = 0,
+    .selected_row_shimmer_enabled = true,
     .rumble_enabled = false,
 };
 
@@ -126,6 +127,7 @@ void settings_load (settings_t *settings) {
     if (settings->background_visualizer_style < 0 || settings->background_visualizer_style > 2) {
         settings->background_visualizer_style = init.background_visualizer_style;
     }
+    settings->selected_row_shimmer_enabled = mini_get_bool(ini, "menu_beta_flag", "selected_row_shimmer_enabled", init.selected_row_shimmer_enabled);
     settings->rumble_enabled = mini_get_bool(ini, "menu_beta_flag", "rumble_enabled", init.rumble_enabled);
 
     mini_free(ini);
@@ -173,6 +175,7 @@ void settings_save (settings_t *settings) {
     // mini_set_bool(ini, "menu_beta_flag", "bgm_enabled", settings->bgm_enabled);
     mini_set_bool(ini, "menu_beta_flag", "background_visualizer_enabled", settings->background_visualizer_enabled);
     mini_set_int(ini, "menu_beta_flag", "background_visualizer_style", settings->background_visualizer_style);
+    mini_set_bool(ini, "menu_beta_flag", "selected_row_shimmer_enabled", settings->selected_row_shimmer_enabled);
     // mini_set_bool(ini, "menu_beta_flag", "rumble_enabled", settings->rumble_enabled);
 
     mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
