@@ -881,7 +881,7 @@ static void process (menu_t *menu) {
         menu->next_mode = MENU_MODE_HISTORY;
         sound_play_effect(SFX_CURSOR);
     } else if (menu->actions.go_left) {
-        menu->next_mode = MENU_MODE_FAVORITE;
+        menu->next_mode = MENU_MODE_PLAYTIME;
         sound_play_effect(SFX_CURSOR);
     }
 }

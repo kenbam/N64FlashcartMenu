@@ -325,6 +325,21 @@ void view_history_init(menu_t *menu);
 void view_history_display(menu_t *menu, surface_t *display);
 
 /**
+ * @brief Initialize the playtime leaderboard view.
+ *
+ * @param menu Pointer to the menu structure.
+ */
+void view_playtime_init(menu_t *menu);
+
+/**
+ * @brief Display the playtime leaderboard view.
+ *
+ * @param menu Pointer to the menu structure.
+ * @param display Pointer to the display surface.
+ */
+void view_playtime_display(menu_t *menu, surface_t *display);
+
+/**
  * @brief Initialize the cheats editor view.
  *
  * @param menu Pointer to the menu structure.

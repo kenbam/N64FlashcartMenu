@@ -14,6 +14,7 @@ static const char *tabs[] = {
     "Files",
     "History",
     "Favorites",
+    "Playtime",
     NULL
 };
 
@@ -24,7 +25,7 @@ static const char *tabs[] = {
  */
 void ui_components_tabs_common_draw(int selected)
 {
-    uint8_t tabs_count = 3;
+    uint8_t tabs_count = 4;
     float width = (VISIBLE_AREA_X1 - VISIBLE_AREA_X0 - 8.0f) / (tabs_count + 1 * 0.5f);
     ui_components_tabs_draw(tabs, tabs_count, selected, width);
 }
