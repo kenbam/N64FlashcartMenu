@@ -1,4 +1,6 @@
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 #include "../sound.h"
 #include "../settings.h"
 #include "../path.h"
@@ -44,6 +46,78 @@ static void set_soundfx_enabled_type (menu_t *menu, void *arg) {
     menu->settings.soundfx_enabled = (bool)(uintptr_t)(arg);
     sound_use_sfx(menu->settings.soundfx_enabled);
     settings_save(&menu->settings);
+}
+
+static void set_bgm_enabled_type (menu_t *menu, void *arg) {
+    menu->settings.bgm_enabled = (bool)(uintptr_t)(arg);
+    menu->bgm_reload_requested = true;
+    settings_save(&menu->settings);
+}
+
+static void set_menu_music_file_auto (menu_t *menu, void *arg) {
+    (void)arg;
+
+    if (menu->settings.bgm_file) {
+        free(menu->settings.bgm_file);
+    }
+    menu->settings.bgm_file = strdup("");
+    menu->bgm_reload_requested = true;
+    settings_save(&menu->settings);
+}
+
+static void open_menu_music_picker (menu_t *menu, void *arg) {
+    (void)arg;
+
+    path_t *music_dir = path_init(menu->storage_prefix, "/menu/music");
+    directory_create(path_get(music_dir));
+
+    if (menu->browser.directory) {
+        path_free(menu->browser.directory);
+    }
+    menu->browser.directory = music_dir;
+    menu->browser.valid = false;
+    menu->browser.reload = false;
+    menu->browser.picker = BROWSER_PICKER_MENU_BGM;
+
+    if (menu->browser.select_file) {
+        path_free(menu->browser.select_file);
+        menu->browser.select_file = NULL;
+    }
+
+    menu->next_mode = MENU_MODE_BROWSER;
+}
+
+static void set_screensaver_logo_file_auto (menu_t *menu, void *arg) {
+    (void)arg;
+
+    if (menu->settings.screensaver_logo_file) {
+        free(menu->settings.screensaver_logo_file);
+    }
+    menu->settings.screensaver_logo_file = strdup("");
+    menu->screensaver_logo_reload_requested = true;
+    settings_save(&menu->settings);
+}
+
+static void open_screensaver_logo_picker (menu_t *menu, void *arg) {
+    (void)arg;
+
+    path_t *logos_dir = path_init(menu->storage_prefix, "/menu/screensavers");
+    directory_create(path_get(logos_dir));
+
+    if (menu->browser.directory) {
+        path_free(menu->browser.directory);
+    }
+    menu->browser.directory = logos_dir;
+    menu->browser.valid = false;
+    menu->browser.reload = false;
+    menu->browser.picker = BROWSER_PICKER_SCREENSAVER_LOGO;
+
+    if (menu->browser.select_file) {
+        path_free(menu->browser.select_file);
+        menu->browser.select_file = NULL;
+    }
+
+    menu->next_mode = MENU_MODE_BROWSER;
 }
 
 static void set_text_panel_enabled_type (menu_t *menu, void *arg) {
@@ -119,11 +193,6 @@ static void set_show_browser_rom_tags_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
-static void set_bgm_enabled_type (menu_t *menu, void *arg) {
-    menu->settings.bgm_enabled = (bool)(uintptr_t)(arg);
-    settings_save(&menu->settings);
-}
-
 static void set_rumble_enabled_type (menu_t *menu, void *arg) {
     menu->settings.rumble_enabled = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -170,6 +239,32 @@ static component_context_menu_t set_soundfx_enabled_type_context_menu = {
     .list = {
         {.text = "On", .action = set_soundfx_enabled_type, .arg = (void *)(uintptr_t)(true) },
         {.text = "Off", .action = set_soundfx_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_bgm_enabled_current_selection (menu_t *menu) {
+    return menu->settings.bgm_enabled ? 0 : 1;
+}
+
+static component_context_menu_t set_bgm_enabled_type_context_menu = {
+    .get_default_selection = get_bgm_enabled_current_selection,
+    .list = {
+        {.text = "On", .action = set_bgm_enabled_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_bgm_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static component_context_menu_t set_menu_music_file_context_menu = {
+    .list = {
+        {.text = "Auto (menu.mp3/bgm.mp3)", .action = set_menu_music_file_auto },
+        {.text = "Pick from /menu/music", .action = open_menu_music_picker },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static component_context_menu_t set_screensaver_logo_file_context_menu = {
+    .list = {
+        {.text = "Auto (DVD logo)", .action = set_screensaver_logo_file_auto },
+        {.text = "Pick from /menu/screensavers", .action = open_screensaver_logo_picker },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -310,18 +405,6 @@ static component_context_menu_t set_show_browser_rom_tags_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
-static int get_bgm_enabled_current_selection (menu_t *menu) {
-    return menu->settings.bgm_enabled ? 0 : 1;
-}
-
-static component_context_menu_t set_bgm_enabled_type_context_menu = {
-    .get_default_selection = get_bgm_enabled_current_selection,
-    .list = {
-        {.text = "On", .action = set_bgm_enabled_type, .arg = (void *)(uintptr_t)(true) },
-        {.text = "Off", .action = set_bgm_enabled_type, .arg = (void *)(uintptr_t)(false) },
-    COMPONENT_CONTEXT_MENU_LIST_END,
-}};
-
 static int get_rumble_enabled_current_selection (menu_t *menu) {
     return menu->settings.rumble_enabled ? 0 : 1;
 }
@@ -338,6 +421,9 @@ static component_context_menu_t set_rumble_enabled_type_context_menu = {
 static component_context_menu_t options_context_menu = { .list = {
     { .text = "Show Hidden Files", .submenu = &set_protected_entries_type_context_menu },
     { .text = "Sound Effects", .submenu = &set_soundfx_enabled_type_context_menu },
+    { .text = "Background Music", .submenu = &set_bgm_enabled_type_context_menu },
+    { .text = "Menu Music File", .submenu = &set_menu_music_file_context_menu },
+    { .text = "Screensaver Logo", .submenu = &set_screensaver_logo_file_context_menu },
     { .text = "Use Saves Folder", .submenu = &set_use_saves_folder_type_context_menu },
     { .text = "Show Saves Folder", .submenu = &set_show_saves_folder_type_context_menu },
     { .text = "Text Panel Overlay", .submenu = &set_text_panel_enabled_type_context_menu },
@@ -354,7 +440,6 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "PAL60 Compatibility", .submenu = &set_pal60_mod_compatibility_type_context_menu },
     { .text = "Hide ROM Extensions", .submenu = &set_show_browser_file_extensions_context_menu },
     { .text = "Hide ROM Tags", .submenu = &set_show_browser_rom_tags_context_menu },
-    { .text = "Background Music", .submenu = &set_bgm_enabled_type_context_menu },
     { .text = "Rumble Feedback", .submenu = &set_rumble_enabled_type_context_menu },
     // { .text = "Restore Defaults", .action = set_use_default_settings },
 #endif
@@ -390,6 +475,15 @@ static void process (menu_t *menu) {
 }
 
 static void draw (menu_t *menu, surface_t *d) {
+    const char *bgm_file_label = "Auto";
+    if (menu->settings.bgm_file && menu->settings.bgm_file[0] != '\0') {
+        bgm_file_label = file_basename(menu->settings.bgm_file);
+    }
+    const char *screensaver_logo_label = "Auto";
+    if (menu->settings.screensaver_logo_file && menu->settings.screensaver_logo_file[0] != '\0') {
+        screensaver_logo_label = file_basename(menu->settings.screensaver_logo_file);
+    }
+
     rdpq_attach(d, NULL);
 
     ui_components_background_draw();
@@ -411,6 +505,9 @@ ui_components_main_text_draw(
         "To change the following menu settings, press 'A':\n"
         "     Show Hidden Files : %s\n"
         "     Sound Effects     : %s\n"
+        "     Background Music  : %s\n"
+        "     Menu Music File   : %s\n"
+        "     Screensaver Logo  : %s\n"
         "     Use Saves folder  : %s\n"
         "     Show Saves folder : %s\n"
         "     Text Panel Overlay: %s\n"
@@ -428,7 +525,6 @@ ui_components_main_text_draw(
         "*    PAL60 Mod Compat  : %s\n"
         "     Hide ROM Extension: %s\n"
         "     Hide ROM Tags     : %s\n"
-        "     Background Music  : %s\n"
         "     Rumble Feedback   : %s\n"
         "\n\n"
         "Note: Certain settings have the following caveats:\n"
@@ -438,6 +534,9 @@ ui_components_main_text_draw(
         menu->settings.default_directory,
         format_switch(menu->settings.show_protected_entries),
         format_switch(menu->settings.soundfx_enabled),
+        format_switch(menu->settings.bgm_enabled),
+        bgm_file_label,
+        screensaver_logo_label,
         format_switch(menu->settings.use_saves_folder),
         format_switch(menu->settings.show_saves_folder),
         format_switch(menu->settings.text_panel_enabled),
@@ -455,7 +554,6 @@ ui_components_main_text_draw(
         format_switch(menu->settings.pal60_compatibility_mode),
         format_switch(menu->settings.show_browser_file_extensions),
         format_switch(menu->settings.show_browser_rom_tags),
-        format_switch(menu->settings.bgm_enabled),
         format_switch(menu->settings.rumble_enabled)
 #endif
     );

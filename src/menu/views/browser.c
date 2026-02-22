@@ -82,6 +82,10 @@ static bool browser_entry_is_game(const entry_t *entry);
 static char *browser_entry_path(menu_t *menu, int index);
 static bool path_is_favorite(menu_t *menu, const char *path);
 static int browser_pick_random_index(menu_t *menu);
+static bool browser_is_menu_music_picker_root(menu_t *menu);
+static bool browser_try_pick_menu_music_file(menu_t *menu);
+static bool browser_is_screensaver_logo_picker_root(menu_t *menu);
+static bool browser_try_pick_screensaver_logo_file(menu_t *menu);
 
 
 static bool path_is_hidden (path_t *path) {
@@ -172,6 +176,78 @@ static int compare_entry (const void *pa, const void *pb) {
     }
 
     return strcasecmp((const char *) (a->name), (const char *) (b->name));
+}
+
+static bool browser_is_menu_music_picker_root(menu_t *menu) {
+    if (!menu || menu->browser.picker != BROWSER_PICKER_MENU_BGM || !menu->browser.directory) {
+        return false;
+    }
+    return strcmp(strip_fs_prefix(path_get(menu->browser.directory)), "/menu/music") == 0;
+}
+
+static bool browser_try_pick_menu_music_file(menu_t *menu) {
+    if (!menu || menu->browser.picker != BROWSER_PICKER_MENU_BGM || !menu->browser.entry) {
+        return false;
+    }
+
+    if (menu->browser.entry->type != ENTRY_TYPE_MUSIC) {
+        if (menu->browser.entry->type != ENTRY_TYPE_DIR) {
+            menu_show_error(menu, "Select an MP3 file");
+        }
+        return false;
+    }
+
+    char *entry_path = browser_entry_path(menu, menu->browser.selected);
+    if (!entry_path) {
+        menu_show_error(menu, "Failed to resolve file path");
+        return true;
+    }
+    if (menu->settings.bgm_file) {
+        free(menu->settings.bgm_file);
+    }
+    menu->settings.bgm_file = strdup(strip_fs_prefix(entry_path));
+    free(entry_path);
+    menu->bgm_reload_requested = true;
+    settings_save(&menu->settings);
+    menu->browser.picker = BROWSER_PICKER_NONE;
+    menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+    return true;
+}
+
+static bool browser_is_screensaver_logo_picker_root(menu_t *menu) {
+    if (!menu || menu->browser.picker != BROWSER_PICKER_SCREENSAVER_LOGO || !menu->browser.directory) {
+        return false;
+    }
+    return strcmp(strip_fs_prefix(path_get(menu->browser.directory)), "/menu/screensavers") == 0;
+}
+
+static bool browser_try_pick_screensaver_logo_file(menu_t *menu) {
+    if (!menu || menu->browser.picker != BROWSER_PICKER_SCREENSAVER_LOGO || !menu->browser.entry) {
+        return false;
+    }
+
+    if (menu->browser.entry->type != ENTRY_TYPE_IMAGE) {
+        if (menu->browser.entry->type != ENTRY_TYPE_DIR) {
+            menu_show_error(menu, "Select a PNG file");
+        }
+        return false;
+    }
+
+    char *entry_path = browser_entry_path(menu, menu->browser.selected);
+    if (!entry_path) {
+        menu_show_error(menu, "Failed to resolve file path");
+        return true;
+    }
+    if (menu->settings.screensaver_logo_file) {
+        free(menu->settings.screensaver_logo_file);
+    }
+    menu->settings.screensaver_logo_file = strdup(strip_fs_prefix(entry_path));
+    free(entry_path);
+    menu->screensaver_logo_reload_requested = true;
+    settings_save(&menu->settings);
+    menu->browser.picker = BROWSER_PICKER_NONE;
+    menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+    return true;
 }
 
 static int compare_entry_reverse (const void *pa, const void *pb) {
@@ -1019,6 +1095,12 @@ static void process (menu_t *menu) {
 
     if (menu->actions.enter && menu->browser.entry) {
         sound_play_effect(SFX_ENTER);
+        if (browser_try_pick_menu_music_file(menu)) {
+            return;
+        }
+        if (browser_try_pick_screensaver_logo_file(menu)) {
+            return;
+        }
         switch (menu->browser.entry->type) {
             case ENTRY_TYPE_ARCHIVE:
                 if (push_directory(menu, menu->browser.entry->name, true)) {
@@ -1070,6 +1152,14 @@ static void process (menu_t *menu) {
                 menu->next_mode = MENU_MODE_FILE_INFO;
                 break;
         }
+    } else if (menu->actions.back && browser_is_menu_music_picker_root(menu)) {
+        menu->browser.picker = BROWSER_PICKER_NONE;
+        menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+        sound_play_effect(SFX_EXIT);
+    } else if (menu->actions.back && browser_is_screensaver_logo_picker_root(menu)) {
+        menu->browser.picker = BROWSER_PICKER_NONE;
+        menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+        sound_play_effect(SFX_EXIT);
     } else if (menu->actions.back && !path_is_root(menu->browser.directory)) {
         if (pop_directory(menu)) {
             menu->browser.valid = false;
@@ -1109,9 +1199,9 @@ static void draw (menu_t *menu, surface_t *d) {
             case ENTRY_TYPE_DIR: action = "A: Enter"; break;
             case ENTRY_TYPE_ROM: action = "A: Load"; break;
             case ENTRY_TYPE_DISK: action = "A: Load"; break;
-            case ENTRY_TYPE_IMAGE: action = "A: Show"; break;
+            case ENTRY_TYPE_IMAGE: action = menu->browser.picker == BROWSER_PICKER_SCREENSAVER_LOGO ? "A: Select" : "A: Show"; break;
             case ENTRY_TYPE_TEXT: action = "A: View"; break;
-            case ENTRY_TYPE_MUSIC: action = "A: Play"; break;
+            case ENTRY_TYPE_MUSIC: action = menu->browser.picker == BROWSER_PICKER_MENU_BGM ? "A: Select" : "A: Play"; break;
             case ENTRY_TYPE_ARCHIVE: action = "A: Open"; break;
             case ENTRY_TYPE_PLAYLIST: action = "A: Open"; break;
             default: action = "A: Info"; break;

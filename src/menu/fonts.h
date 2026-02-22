@@ -43,4 +43,11 @@ typedef enum {
  */
 void fonts_init(char *custom_font_path);
 
+/**
+ * @brief Apply themed font colors to all menu styles.
+ *
+ * @param theme_id Theme identifier.
+ */
+void fonts_set_theme(int theme_id);
+
 #endif /* FONTS_H__ */

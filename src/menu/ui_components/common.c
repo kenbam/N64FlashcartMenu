@@ -143,6 +143,7 @@ void ui_components_set_theme(int theme_id) {
     }
     active_theme_id = theme_id;
     active_theme = ui_theme_palettes[theme_id];
+    fonts_set_theme(theme_id);
 }
 
 int ui_components_get_theme(void) {

@@ -86,6 +86,12 @@ typedef enum {
     BROWSER_SORT_ZA,
 } browser_sort_t;
 
+typedef enum {
+    BROWSER_PICKER_NONE = 0,
+    BROWSER_PICKER_MENU_BGM = 1,
+    BROWSER_PICKER_SCREENSAVER_LOGO = 2,
+} browser_picker_t;
+
 typedef struct {
     path_t *disk_path;
     disk_info_t disk_info;
@@ -111,6 +117,8 @@ typedef struct {
     flashcart_err_t flashcart_err;
 
     time_t current_time;
+    bool bgm_reload_requested;
+    bool screensaver_logo_reload_requested;
 
     struct {
         bool go_up;
@@ -139,6 +147,7 @@ typedef struct {
         int32_t selected;
         path_t* select_file;
         browser_sort_t sort_mode;
+        browser_picker_t picker;
     } browser;
 
     struct {

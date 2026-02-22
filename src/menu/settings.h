@@ -63,6 +63,12 @@ typedef struct {
     /** @brief Enable Background music */
     bool bgm_enabled;
 
+    /** @brief Absolute SD path to selected menu music file (empty = auto default) */
+    char *bgm_file;
+
+    /** @brief Absolute SD path to selected screensaver logo PNG (empty = auto default) */
+    char *screensaver_logo_file;
+
     /** @brief Enable Sound effects within the menu */
     bool soundfx_enabled;
 
