@@ -98,6 +98,31 @@ static void set_screensaver_logo_file_auto (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_screensaver_smooth_mode_type (menu_t *menu, void *arg) {
+    menu->settings.screensaver_smooth_mode = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_screensaver_margin_left_type (menu_t *menu, void *arg) {
+    menu->settings.screensaver_margin_left = (uint8_t)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_screensaver_margin_right_type (menu_t *menu, void *arg) {
+    menu->settings.screensaver_margin_right = (uint8_t)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_screensaver_margin_top_type (menu_t *menu, void *arg) {
+    menu->settings.screensaver_margin_top = (uint8_t)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_screensaver_margin_bottom_type (menu_t *menu, void *arg) {
+    menu->settings.screensaver_margin_bottom = (uint8_t)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
 static void open_screensaver_logo_picker (menu_t *menu, void *arg) {
     (void)arg;
 
@@ -268,6 +293,62 @@ static component_context_menu_t set_screensaver_logo_file_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_screensaver_smooth_mode_current_selection (menu_t *menu) {
+    return menu->settings.screensaver_smooth_mode ? 0 : 1;
+}
+
+static component_context_menu_t set_screensaver_smooth_mode_context_menu = {
+    .get_default_selection = get_screensaver_smooth_mode_current_selection,
+    .list = {
+        {.text = "On (60 FPS)", .action = set_screensaver_smooth_mode_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off (30 FPS)", .action = set_screensaver_smooth_mode_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_screensaver_margin_selection(int v) {
+    if (v <= 0) return 0;
+    if (v <= 2) return 1;
+    if (v <= 4) return 2;
+    if (v <= 8) return 3;
+    if (v <= 12) return 4;
+    if (v <= 16) return 5;
+    if (v <= 24) return 6;
+    return 7;
+}
+static int get_screensaver_margin_left_current_selection (menu_t *menu) {
+    return get_screensaver_margin_selection(menu->settings.screensaver_margin_left);
+}
+static int get_screensaver_margin_right_current_selection (menu_t *menu) {
+    return get_screensaver_margin_selection(menu->settings.screensaver_margin_right);
+}
+static int get_screensaver_margin_top_current_selection (menu_t *menu) {
+    return get_screensaver_margin_selection(menu->settings.screensaver_margin_top);
+}
+static int get_screensaver_margin_bottom_current_selection (menu_t *menu) {
+    return get_screensaver_margin_selection(menu->settings.screensaver_margin_bottom);
+}
+
+#define SCREEN_MARGIN_MENU(name, getter, setter) \
+static component_context_menu_t name = { \
+    .get_default_selection = getter, \
+    .list = { \
+        {.text = "0 px", .action = setter, .arg = (void *)(uintptr_t)(0) }, \
+        {.text = "2 px", .action = setter, .arg = (void *)(uintptr_t)(2) }, \
+        {.text = "4 px", .action = setter, .arg = (void *)(uintptr_t)(4) }, \
+        {.text = "8 px", .action = setter, .arg = (void *)(uintptr_t)(8) }, \
+        {.text = "12 px", .action = setter, .arg = (void *)(uintptr_t)(12) }, \
+        {.text = "16 px", .action = setter, .arg = (void *)(uintptr_t)(16) }, \
+        {.text = "24 px", .action = setter, .arg = (void *)(uintptr_t)(24) }, \
+        {.text = "32 px", .action = setter, .arg = (void *)(uintptr_t)(32) }, \
+    COMPONENT_CONTEXT_MENU_LIST_END, \
+}};
+
+SCREEN_MARGIN_MENU(set_screensaver_margin_left_context_menu, get_screensaver_margin_left_current_selection, set_screensaver_margin_left_type)
+SCREEN_MARGIN_MENU(set_screensaver_margin_right_context_menu, get_screensaver_margin_right_current_selection, set_screensaver_margin_right_type)
+SCREEN_MARGIN_MENU(set_screensaver_margin_top_context_menu, get_screensaver_margin_top_current_selection, set_screensaver_margin_top_type)
+SCREEN_MARGIN_MENU(set_screensaver_margin_bottom_context_menu, get_screensaver_margin_bottom_current_selection, set_screensaver_margin_bottom_type)
+#undef SCREEN_MARGIN_MENU
+
 static int get_text_panel_enabled_current_selection (menu_t *menu) {
     return menu->settings.text_panel_enabled ? 0 : 1;
 }
@@ -424,6 +505,11 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Background Music", .submenu = &set_bgm_enabled_type_context_menu },
     { .text = "Menu Music File", .submenu = &set_menu_music_file_context_menu },
     { .text = "Screensaver Logo", .submenu = &set_screensaver_logo_file_context_menu },
+    { .text = "Screensaver Smooth", .submenu = &set_screensaver_smooth_mode_context_menu },
+    { .text = "Screensaver Margin Left", .submenu = &set_screensaver_margin_left_context_menu },
+    { .text = "Screensaver Margin Right", .submenu = &set_screensaver_margin_right_context_menu },
+    { .text = "Screensaver Margin Top", .submenu = &set_screensaver_margin_top_context_menu },
+    { .text = "Screensaver Margin Bottom", .submenu = &set_screensaver_margin_bottom_context_menu },
     { .text = "Use Saves Folder", .submenu = &set_use_saves_folder_type_context_menu },
     { .text = "Show Saves Folder", .submenu = &set_show_saves_folder_type_context_menu },
     { .text = "Text Panel Overlay", .submenu = &set_text_panel_enabled_type_context_menu },
@@ -483,6 +569,7 @@ static void draw (menu_t *menu, surface_t *d) {
     if (menu->settings.screensaver_logo_file && menu->settings.screensaver_logo_file[0] != '\0') {
         screensaver_logo_label = file_basename(menu->settings.screensaver_logo_file);
     }
+    const char *screensaver_smooth_label = menu->settings.screensaver_smooth_mode ? "On (60)" : "Off (30)";
 
     rdpq_attach(d, NULL);
 
@@ -508,6 +595,9 @@ ui_components_main_text_draw(
         "     Background Music  : %s\n"
         "     Menu Music File   : %s\n"
         "     Screensaver Logo  : %s\n"
+        "     Screensaver Smooth: %s\n"
+        "     Saver Margin L/R  : %d / %d\n"
+        "     Saver Margin T/B  : %d / %d\n"
         "     Use Saves folder  : %s\n"
         "     Show Saves folder : %s\n"
         "     Text Panel Overlay: %s\n"
@@ -537,6 +627,11 @@ ui_components_main_text_draw(
         format_switch(menu->settings.bgm_enabled),
         bgm_file_label,
         screensaver_logo_label,
+        screensaver_smooth_label,
+        (int)menu->settings.screensaver_margin_left,
+        (int)menu->settings.screensaver_margin_right,
+        (int)menu->settings.screensaver_margin_top,
+        (int)menu->settings.screensaver_margin_bottom,
         format_switch(menu->settings.use_saves_folder),
         format_switch(menu->settings.show_saves_folder),
         format_switch(menu->settings.text_panel_enabled),

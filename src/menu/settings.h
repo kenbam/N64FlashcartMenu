@@ -69,6 +69,15 @@ typedef struct {
     /** @brief Absolute SD path to selected screensaver logo PNG (empty = auto default) */
     char *screensaver_logo_file;
 
+    /** @brief Use 60 FPS while screensaver is active for smoother animation */
+    bool screensaver_smooth_mode;
+
+    /** @brief Screensaver visible-area compensation margins (pixels) */
+    uint8_t screensaver_margin_left;
+    uint8_t screensaver_margin_right;
+    uint8_t screensaver_margin_top;
+    uint8_t screensaver_margin_bottom;
+
     /** @brief Enable Sound effects within the menu */
     bool soundfx_enabled;
 

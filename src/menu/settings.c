@@ -26,6 +26,11 @@ static settings_t init = {
     .soundfx_enabled = false,
     .bgm_file = "",
     .screensaver_logo_file = "",
+    .screensaver_smooth_mode = false,
+    .screensaver_margin_left = 2,
+    .screensaver_margin_right = 0,
+    .screensaver_margin_top = 16,
+    .screensaver_margin_bottom = 16,
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     .rom_autoload_enabled = false,
     .rom_autoload_path = "",
@@ -79,6 +84,23 @@ void settings_load (settings_t *settings) {
     settings->soundfx_enabled = mini_get_bool(ini, "menu", "soundfx_enabled", init.soundfx_enabled);
     settings->bgm_file = strdup(mini_get_string(ini, "menu", "bgm_file", init.bgm_file));
     settings->screensaver_logo_file = strdup(mini_get_string(ini, "menu", "screensaver_logo_file", init.screensaver_logo_file));
+    settings->screensaver_smooth_mode = mini_get_bool(ini, "menu", "screensaver_smooth_mode", init.screensaver_smooth_mode);
+    int margin_left = mini_get_int(ini, "menu", "screensaver_margin_left", init.screensaver_margin_left);
+    int margin_right = mini_get_int(ini, "menu", "screensaver_margin_right", init.screensaver_margin_right);
+    int margin_top = mini_get_int(ini, "menu", "screensaver_margin_top", init.screensaver_margin_top);
+    int margin_bottom = mini_get_int(ini, "menu", "screensaver_margin_bottom", init.screensaver_margin_bottom);
+    if (margin_left < 0) margin_left = 0;
+    if (margin_left > 64) margin_left = 64;
+    if (margin_right < 0) margin_right = 0;
+    if (margin_right > 64) margin_right = 64;
+    if (margin_top < 0) margin_top = 0;
+    if (margin_top > 64) margin_top = 64;
+    if (margin_bottom < 0) margin_bottom = 0;
+    if (margin_bottom > 64) margin_bottom = 64;
+    settings->screensaver_margin_left = (uint8_t)margin_left;
+    settings->screensaver_margin_right = (uint8_t)margin_right;
+    settings->screensaver_margin_top = (uint8_t)margin_top;
+    settings->screensaver_margin_bottom = (uint8_t)margin_bottom;
 
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     settings->rom_autoload_enabled = mini_get_bool(ini, "menu", "autoload_rom_enabled", init.rom_autoload_enabled);
@@ -122,6 +144,11 @@ void settings_save (settings_t *settings) {
     mini_set_bool(ini, "menu", "soundfx_enabled", settings->soundfx_enabled);
     mini_set_string(ini, "menu", "bgm_file", settings->bgm_file ? settings->bgm_file : "");
     mini_set_string(ini, "menu", "screensaver_logo_file", settings->screensaver_logo_file ? settings->screensaver_logo_file : "");
+    mini_set_bool(ini, "menu", "screensaver_smooth_mode", settings->screensaver_smooth_mode);
+    mini_set_int(ini, "menu", "screensaver_margin_left", settings->screensaver_margin_left);
+    mini_set_int(ini, "menu", "screensaver_margin_right", settings->screensaver_margin_right);
+    mini_set_int(ini, "menu", "screensaver_margin_top", settings->screensaver_margin_top);
+    mini_set_int(ini, "menu", "screensaver_margin_bottom", settings->screensaver_margin_bottom);
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     mini_set_bool(ini, "menu", "autoload_rom_enabled", settings->rom_autoload_enabled);
     mini_set_string(ini, "autoload", "rom_path", settings->rom_autoload_path);
