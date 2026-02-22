@@ -1,16 +1,24 @@
 #include "../bookkeeping.h"
 #include "../cart_load.h"
 #include "../datel_codes.h"
+#include "../playtime.h"
 #include "../rom_info.h"
 #include "../sound.h"
 #include "boot/boot.h"
 #include "utils/fs.h"
 #include "views.h"
+#include "../ui_components/constants.h"
+#include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <sys/stat.h>
 
 static bool show_extra_info_message = false;
 static component_boxart_t *boxart;
 static char *rom_filename = NULL;
+static int details_scroll = 0;
+static int details_max_scroll = 0;
+static bool boxart_retry_pending = false;
 
 static int16_t current_metadata_image_index = 0;
 static const file_image_type_t metadata_image_filename_cache[] = {
@@ -26,6 +34,52 @@ static const file_image_type_t metadata_image_filename_cache[] = {
 static const uint16_t metadata_image_filename_cache_length = sizeof(metadata_image_filename_cache) / sizeof(metadata_image_filename_cache[0]);
 static bool metadata_image_available[sizeof(metadata_image_filename_cache) / sizeof(metadata_image_filename_cache[0])] = {false};
 static bool metadata_images_scanned = false;
+
+static bool resolve_metadata_directory_for_rom (path_t *path, const char game_code[4], char *resolved, size_t resolved_size) {
+    if ((path == NULL) || (game_code == NULL)) {
+        return false;
+    }
+
+    char candidate[32];
+
+    snprintf(candidate, sizeof(candidate), "%c/%c/%c/%c", game_code[0], game_code[1], game_code[2], game_code[3]);
+    path_push(path, candidate);
+    if (directory_exists(path_get(path))) {
+        if (resolved && resolved_size > 0) {
+            snprintf(resolved, resolved_size, "%s", candidate);
+        }
+        return true;
+    }
+    path_pop(path);
+
+    const char fallback_regions[] = { 'E', 'P', 'J', 'U', 'A', '\0' };
+    for (size_t i = 0; fallback_regions[i] != '\0'; i++) {
+        if (fallback_regions[i] == game_code[3]) {
+            continue;
+        }
+        snprintf(candidate, sizeof(candidate), "%c/%c/%c/%c", game_code[0], game_code[1], game_code[2], fallback_regions[i]);
+        path_push(path, candidate);
+        if (directory_exists(path_get(path))) {
+            if (resolved && resolved_size > 0) {
+                snprintf(resolved, resolved_size, "%s", candidate);
+            }
+            return true;
+        }
+        path_pop(path);
+    }
+
+    snprintf(candidate, sizeof(candidate), "%c/%c/%c", game_code[0], game_code[1], game_code[2]);
+    path_push(path, candidate);
+    if (directory_exists(path_get(path))) {
+        if (resolved && resolved_size > 0) {
+            snprintf(resolved, resolved_size, "%s", candidate);
+        }
+        return true;
+    }
+    path_pop(path);
+
+    return false;
+}
 
 static void scan_metadata_images(menu_t *menu) {
     if (metadata_images_scanned) {
@@ -46,15 +100,8 @@ static void scan_metadata_images(menu_t *menu) {
         path_push(path, game_code_path);
     }
     else {
-        snprintf(game_code_path, sizeof(game_code_path), "%c/%c/%c/%c",
-            menu->load.rom_info.game_code[0],
-            menu->load.rom_info.game_code[1],
-            menu->load.rom_info.game_code[2],
-            menu->load.rom_info.game_code[3]);
-        path_push(path, game_code_path);
-
-        if (!directory_exists(path_get(path))) { // Allow boxart to not specify the region code.
-            path_pop(path);
+        if (!resolve_metadata_directory_for_rom(path, menu->load.rom_info.game_code, game_code_path, sizeof(game_code_path))) {
+            game_code_path[0] = '\0';
         }
     }
 
@@ -93,10 +140,49 @@ static void scan_metadata_images(menu_t *menu) {
     metadata_images_scanned = true;
 }
 
-static const char *format_rom_description(menu_t *menu) {
-    char *rom_description = NULL;
+static void retry_boxart_load (menu_t *menu) {
+    if (!boxart_retry_pending || boxart != NULL) {
+        return;
+    }
 
-    return rom_description ? rom_description : "No description available.";
+    scan_metadata_images(menu);
+
+    if (!metadata_image_available[current_metadata_image_index]) {
+        for (uint16_t i = 0; i < metadata_image_filename_cache_length; i++) {
+            if (metadata_image_available[i]) {
+                current_metadata_image_index = i;
+                break;
+            }
+        }
+    }
+
+    if (!metadata_image_available[current_metadata_image_index]) {
+        boxart_retry_pending = false;
+        return;
+    }
+
+    boxart = ui_components_boxart_init(
+        menu->storage_prefix,
+        menu->load.rom_info.game_code,
+        menu->load.rom_info.title,
+        metadata_image_filename_cache[current_metadata_image_index]
+    );
+
+    if (boxart != NULL) {
+        boxart_retry_pending = false;
+    }
+}
+
+static const char *format_rom_description(menu_t *menu) {
+    if (menu->load.rom_info.metadata.long_desc[0] != '\0') {
+        return menu->load.rom_info.metadata.long_desc;
+    }
+
+    if (menu->load.rom_info.metadata.short_desc[0] != '\0') {
+        return menu->load.rom_info.metadata.short_desc;
+    }
+
+    return "No description available.";
 }
 
 static char *convert_error_message (rom_err_t err) {
@@ -401,6 +487,195 @@ static component_context_menu_t options_context_menu = { .list = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static void format_duration (char *out, size_t out_len, uint64_t seconds) {
+    uint64_t hrs = seconds / 3600;
+    uint64_t mins = (seconds % 3600) / 60;
+    uint64_t secs = seconds % 60;
+    if (hrs > 0) {
+        snprintf(out, out_len, "%lluh %llum %llus", (unsigned long long)hrs, (unsigned long long)mins, (unsigned long long)secs);
+    } else if (mins > 0) {
+        snprintf(out, out_len, "%llum %llus", (unsigned long long)mins, (unsigned long long)secs);
+    } else {
+        snprintf(out, out_len, "%llus", (unsigned long long)secs);
+    }
+}
+
+static void format_last_played (char *out, size_t out_len, int64_t ts) {
+    if (ts <= 0) {
+        snprintf(out, out_len, "Never");
+        return;
+    }
+    time_t t = (time_t)ts;
+    char *s = ctime(&t);
+    if (!s) {
+        snprintf(out, out_len, "Unknown");
+        return;
+    }
+    // ctime adds trailing newline
+    size_t len = strnlen(s, out_len - 1);
+    if (len > 0 && s[len - 1] == '\n') {
+        len--;
+    }
+    snprintf(out, out_len, "%.*s", (int)len, s);
+}
+
+static size_t get_expected_save_size(rom_save_type_t save_type) {
+    switch (save_type) {
+        case SAVE_TYPE_EEPROM_4KBIT: return 512;
+        case SAVE_TYPE_EEPROM_16KBIT: return 2 * 1024;
+        case SAVE_TYPE_SRAM_256KBIT: return 32 * 1024;
+        case SAVE_TYPE_SRAM_BANKED: return 96 * 1024;
+        case SAVE_TYPE_SRAM_1MBIT: return 128 * 1024;
+        case SAVE_TYPE_FLASHRAM_1MBIT: return 128 * 1024;
+        case SAVE_TYPE_FLASHRAM_PKST2: return 128 * 1024;
+        default: return 0;
+    }
+}
+
+static const char *format_save_backend(rom_save_type_t save_type, bool supports_cpak) {
+    if (save_type == SAVE_TYPE_NONE) {
+        return supports_cpak ? "Controller Pak only (game-managed)" : "No persistent save";
+    }
+    return "SD-backed .sav via flashcart";
+}
+
+static const char *format_save_writeback_status(bool save_expected) {
+    if (!save_expected) {
+        return "N/A";
+    }
+    return flashcart_has_feature(FLASHCART_FEATURE_SAVE_WRITEBACK) ? "Enabled" : "Unavailable";
+}
+
+static bool get_save_file_path(menu_t *menu, char *out, size_t out_len) {
+    if (!menu || !menu->load.rom_path || !out || out_len == 0) {
+        return false;
+    }
+
+    path_t *save_path = path_clone(menu->load.rom_path);
+    path_ext_replace(save_path, "sav");
+    if (menu->settings.use_saves_folder) {
+        path_push_subdir(save_path, SAVE_DIRECTORY_NAME);
+    }
+
+    snprintf(out, out_len, "%s", strip_fs_prefix(path_get(save_path)));
+    path_free(save_path);
+    return true;
+}
+
+static void format_save_health(char *out, size_t out_len, const char *save_path, size_t expected_size) {
+    if (!out || out_len == 0) {
+        return;
+    }
+    out[0] = '\0';
+
+    if (!save_path || save_path[0] == '\0') {
+        snprintf(out, out_len, "Unknown");
+        return;
+    }
+
+    path_t *path = path_create(save_path);
+    char *full_path = path_get(path);
+
+    if (!file_exists(full_path)) {
+        snprintf(out, out_len, "Missing (created on first load)");
+        path_free(path);
+        return;
+    }
+
+    int64_t actual_size = file_get_size(full_path);
+    if (actual_size < 0) {
+        snprintf(out, out_len, "Present (size unavailable)");
+        path_free(path);
+        return;
+    }
+
+    if (expected_size > 0 && (size_t)actual_size != expected_size) {
+        snprintf(out, out_len, "Size mismatch (%lld vs %u bytes)", (long long)actual_size, (unsigned int)expected_size);
+    } else {
+        snprintf(out, out_len, "OK");
+    }
+
+    path_free(path);
+}
+
+static void format_save_last_modified(char *out, size_t out_len, const char *save_path) {
+    if (!out || out_len == 0) {
+        return;
+    }
+    out[0] = '\0';
+
+    if (!save_path || save_path[0] == '\0') {
+        snprintf(out, out_len, "Unknown");
+        return;
+    }
+
+    struct stat st;
+    path_t *path = path_create(save_path);
+    int err = stat(path_get(path), &st);
+    path_free(path);
+    if (err != 0) {
+        snprintf(out, out_len, "Not created");
+        return;
+    }
+
+    time_t modified = st.st_mtime;
+    struct tm *time_info = localtime(&modified);
+    if (!time_info || strftime(out, out_len, "%m/%d %I:%M %p", time_info) == 0) {
+        snprintf(out, out_len, "Unknown");
+    }
+}
+
+static void format_recent_sessions (char *out, size_t out_len, const playtime_entry_t *pt) {
+    if (out_len == 0) {
+        return;
+    }
+
+    out[0] = '\0';
+
+    if (!pt || pt->recent_sessions_count == 0) {
+        snprintf(out, out_len, "\tNone");
+        return;
+    }
+
+    for (uint32_t i = 0; i < pt->recent_sessions_count; i++) {
+        char when_buf[64];
+        char dur_buf[64];
+
+        format_last_played(when_buf, sizeof(when_buf), pt->recent_sessions[i].ended_at);
+        format_duration(dur_buf, sizeof(dur_buf), pt->recent_sessions[i].duration_seconds);
+
+        size_t used = strlen(out);
+        if (used >= out_len - 1) {
+            break;
+        }
+
+        snprintf(out + used, out_len - used, "\t- %s (%s)%s",
+            when_buf,
+            dur_buf,
+            (i + 1 < pt->recent_sessions_count) ? "\n" : "");
+    }
+}
+
+static void paragraph_builder_add_text(const char *text) {
+    const char *start = text;
+    const char *p = text;
+    while (*p) {
+        if (*p == '\n') {
+            if (p > start) {
+                rdpq_paragraph_builder_span(start, (size_t)(p - start));
+            }
+            rdpq_paragraph_builder_newline();
+            p++;
+            start = p;
+            continue;
+        }
+        p++;
+    }
+    if (p > start) {
+        rdpq_paragraph_builder_span(start, (size_t)(p - start));
+    }
+}
+
 static void process (menu_t *menu) {
     if (ui_components_context_menu_process(menu, &options_context_menu)) {
         return;
@@ -427,6 +702,19 @@ static void process (menu_t *menu) {
     } else if (menu->actions.go_left) {
         iterate_metadata_image(menu, -1);
         sound_play_effect(SFX_CURSOR);
+    } else if (!show_extra_info_message && (menu->actions.go_down || menu->actions.go_up)) {
+        int step = menu->actions.go_fast ? 48 : 12;
+        if (menu->actions.go_down) {
+            details_scroll += step;
+            if (details_scroll > details_max_scroll) {
+                details_scroll = details_max_scroll;
+            }
+        } else if (menu->actions.go_up) {
+            details_scroll -= step;
+            if (details_scroll < 0) {
+                details_scroll = 0;
+            }
+        }
     }
 }
 
@@ -448,33 +736,136 @@ static void draw (menu_t *menu, surface_t *d) {
             rom_filename
         );
 
-        ui_components_main_text_draw(
-            STL_DEFAULT,
-            ALIGN_LEFT, VALIGN_TOP,
-            "\n\n\t%.300s\n",
-            format_rom_description(menu)
-            
-        );
+        playtime_entry_t *pt = playtime_get(&menu->playtime, path_get(menu->load.rom_path));
+        char total_buf[64];
+        char last_session_buf[64];
+        char last_played_buf[64];
+        char recent_sessions_buf[512];
+        if (pt) {
+            format_duration(total_buf, sizeof(total_buf), pt->total_seconds);
+            format_duration(last_session_buf, sizeof(last_session_buf), pt->last_session_seconds);
+            format_last_played(last_played_buf, sizeof(last_played_buf), pt->last_played);
+            format_recent_sessions(recent_sessions_buf, sizeof(recent_sessions_buf), pt);
+        } else {
+            snprintf(total_buf, sizeof(total_buf), "0s");
+            snprintf(last_session_buf, sizeof(last_session_buf), "0s");
+            snprintf(last_played_buf, sizeof(last_played_buf), "Never");
+            snprintf(recent_sessions_buf, sizeof(recent_sessions_buf), "\tNone");
+        }
 
-        ui_components_main_text_draw(
-            STL_DEFAULT,
-            ALIGN_LEFT, VALIGN_TOP,
-            "\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        char details[4608];
+        const char *display_name = (menu->load.rom_info.metadata.name[0] != '\0') ? menu->load.rom_info.metadata.name : rom_filename;
+        const char *publisher = (menu->load.rom_info.metadata.author[0] != '\0') ? menu->load.rom_info.metadata.author : "Unknown";
+        char age_rating[16];
+        if (menu->load.rom_info.metadata.age_rating >= 0) {
+            snprintf(age_rating, sizeof(age_rating), "%d+", (int)menu->load.rom_info.metadata.age_rating);
+        } else {
+            snprintf(age_rating, sizeof(age_rating), "Unknown");
+        }
+
+        rom_save_type_t effective_save_type = rom_info_get_save_type(&menu->load.rom_info);
+        bool save_expected = (effective_save_type != SAVE_TYPE_NONE);
+        bool supports_cpak = menu->load.rom_info.features.controller_pak;
+        char save_path[512];
+        char save_health[96];
+        char save_last_modified[64];
+        size_t expected_save_size = get_expected_save_size(effective_save_type);
+        if (save_expected && get_save_file_path(menu, save_path, sizeof(save_path))) {
+            format_save_health(save_health, sizeof(save_health), save_path, expected_save_size);
+            format_save_last_modified(save_last_modified, sizeof(save_last_modified), save_path);
+        } else {
+            snprintf(save_path, sizeof(save_path), "N/A");
+            snprintf(save_health, sizeof(save_health), "N/A");
+            snprintf(save_last_modified, sizeof(save_last_modified), "N/A");
+        }
+
+        snprintf(details, sizeof(details),
+            "Title:\t\t\t%s\n"
+            "Publisher:\t\t%s\n"
+            "ESRB Rating:\t\t%s\n"
+            "Age Rating:\t\t%s\n\n"
+            "Description:\n\t%s\n\n"
             "Datel Cheats:\t\t%s\n"
             "Patches:\t\t\t%s\n"
             "TV region:\t\t%s\n"
             "Expansion PAK:\t%s\n"
             "Rumble PAK:\t\t%s\n"
             "Transfer PAK:\t\t%s\n"
-            "Save type:\t\t%s\n",
+            "Save type:\t\t%s\n"
+            "Save backend:\t\t%s\n"
+            "Save writeback:\t%s\n"
+            "Save file:\t\t%s\n"
+            "Save health:\t\t%s\n"
+            "Save modified:\t\t%s\n"
+            "Playtime:\t\t%s\n"
+            "Last session:\t\t%s\n"
+            "Last played:\t\t%s\n"
+            "Recent sessions:\n%s\n",
+            display_name,
+            publisher,
+            format_esrb_age_rating(menu->load.rom_info.metadata.esrb_age_rating),
+            age_rating,
+            format_rom_description(menu),
             format_boolean_type(menu->load.rom_info.settings.cheats_enabled),
             format_boolean_type(menu->load.rom_info.settings.patches_enabled),
             format_rom_tv_type(rom_info_get_tv_type(&menu->load.rom_info)),
             format_rom_expansion_pak_info(menu->load.rom_info.features.expansion_pak),
             format_rom_pak_feature_info(menu->load.rom_info.features.rumble_pak),
             format_rom_pak_feature_info(menu->load.rom_info.features.transfer_pak),
-            format_rom_save_type(rom_info_get_save_type(&menu->load.rom_info), menu->load.rom_info.features.controller_pak)
+            format_rom_save_type(effective_save_type, supports_cpak),
+            format_save_backend(effective_save_type, supports_cpak),
+            format_save_writeback_status(save_expected),
+            save_path,
+            save_health,
+            save_last_modified,
+            total_buf,
+            last_session_buf,
+            last_played_buf,
+            recent_sessions_buf
         );
+
+        int base_x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
+        int base_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TEXT_OFFSET_VERTICAL + 18;
+        int text_right_limit = BOXART_X - 12;
+        int text_width = text_right_limit - base_x;
+        if (text_width < 180) {
+            text_width = 180;
+        }
+
+        int clip_y0 = base_y;
+        int clip_y1 = LAYOUT_ACTIONS_SEPARATOR_Y - TEXT_MARGIN_VERTICAL;
+        int visible_height = clip_y1 - clip_y0;
+        if (visible_height < 0) {
+            visible_height = 0;
+        }
+
+        rdpq_paragraph_builder_begin(
+            &(rdpq_textparms_t) {
+                .width = text_width,
+                .height = 10000,
+                .wrap = WRAP_WORD,
+                .line_spacing = TEXT_LINE_SPACING_ADJUST,
+            },
+            FNT_DEFAULT,
+            NULL
+        );
+        rdpq_paragraph_builder_style(STL_DEFAULT);
+        paragraph_builder_add_text(details);
+        rdpq_paragraph_t *layout = rdpq_paragraph_builder_end();
+
+        int total_height = layout->bbox.y1 - layout->bbox.y0;
+        details_max_scroll = total_height > visible_height ? (total_height - visible_height) : 0;
+        if (details_scroll > details_max_scroll) {
+            details_scroll = details_max_scroll;
+        }
+        if (details_scroll < 0) {
+            details_scroll = 0;
+        }
+
+        rdpq_set_scissor(base_x, clip_y0, base_x + text_width, clip_y1);
+        rdpq_paragraph_render(layout, base_x, base_y - details_scroll);
+        rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+        rdpq_paragraph_free(layout);
 
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
@@ -566,6 +957,8 @@ static void load (menu_t *menu) {
         return;
     }
 
+    playtime_start_session(&menu->playtime, path_get(menu->load.rom_path), menu->current_time);
+
     bookkeeping_history_add(&menu->bookkeeping, menu->load.rom_path, NULL, BOOKKEEPING_TYPE_ROM);
 
     menu->next_mode = MENU_MODE_BOOT;
@@ -613,6 +1006,9 @@ static void deinit (void) {
     boxart = NULL;
     current_metadata_image_index = 0;
     metadata_images_scanned = false;
+    details_scroll = 0;
+    details_max_scroll = 0;
+    boxart_retry_pending = false;
 
     // Clear availability cache
     for (uint16_t i = 0; i < metadata_image_filename_cache_length; i++) {
@@ -634,7 +1030,11 @@ void view_load_rom_init (menu_t *menu) {
         } else if(menu->load.load_favorite_id != -1) {
             menu->load.rom_path = path_clone(menu->bookkeeping.favorite_items[menu->load.load_favorite_id].primary_path);
         } else {
-            menu->load.rom_path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
+            if (menu->browser.entry && menu->browser.entry->path) {
+                menu->load.rom_path = path_create(menu->browser.entry->path);
+            } else {
+                menu->load.rom_path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
+            }
         }
 
         rom_filename = path_last_get(menu->load.rom_path);
@@ -659,6 +1059,7 @@ void view_load_rom_init (menu_t *menu) {
 #endif
         current_metadata_image_index = 0;
         boxart = ui_components_boxart_init(menu->storage_prefix, menu->load.rom_info.game_code, menu->load.rom_info.title, IMAGE_BOXART_FRONT);
+        boxart_retry_pending = (boxart == NULL);
         ui_components_context_menu_init(&options_context_menu);
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     }
@@ -668,6 +1069,7 @@ void view_load_rom_init (menu_t *menu) {
 
 void view_load_rom_display (menu_t *menu, surface_t *display) {
     process(menu);
+    retry_boxart_load(menu);
 
     draw(menu, display);
 

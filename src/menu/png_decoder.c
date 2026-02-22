@@ -22,6 +22,7 @@ typedef struct {
 } png_decoder_t;
 
 static png_decoder_t *decoder;
+static const int PNG_DECODER_ROWS_PER_POLL = 6;
 
 /**
  * @brief Deinitialize the PNG decoder.
@@ -163,33 +164,41 @@ void png_decoder_poll (void) {
         return;
     }
 
-    enum spng_errno err;
-    struct spng_row_info row_info;
+    for (int row = 0; row < PNG_DECODER_ROWS_PER_POLL && decoder; row++) {
+        enum spng_errno err;
+        struct spng_row_info row_info;
 
-    if ((err = spng_get_row_info(decoder->ctx, &row_info)) != SPNG_OK) {
-        decoder->callback(PNG_ERR_BAD_FILE, NULL, decoder->callback_data);
-        png_decoder_deinit(true);
-        return;
-    }
+        if ((err = spng_get_row_info(decoder->ctx, &row_info)) != SPNG_OK) {
+            decoder->callback(PNG_ERR_BAD_FILE, NULL, decoder->callback_data);
+            png_decoder_deinit(true);
+            return;
+        }
 
-    err = spng_decode_row(decoder->ctx, decoder->row_buffer, decoder->ihdr.width * 3);
+        err = spng_decode_row(decoder->ctx, decoder->row_buffer, decoder->ihdr.width * 3);
 
-    if (err == SPNG_OK || err == SPNG_EOI) {
-        decoder->decoded_rows += 1;
-        uint16_t *image_buffer = decoder->image->buffer + (row_info.row_num * decoder->image->stride);
-        for (int i = 0; i < decoder->ihdr.width * 3; i += 3) {
-            uint8_t r = decoder->row_buffer[i + 0] >> 3;
-            uint8_t g = decoder->row_buffer[i + 1] >> 3;
-            uint8_t b = decoder->row_buffer[i + 2] >> 3;
-            *image_buffer++ = (r << 11) | (g << 6) | (b << 1) | 1;
+        if (err == SPNG_OK || err == SPNG_EOI) {
+            decoder->decoded_rows += 1;
+            uint16_t *image_buffer = decoder->image->buffer + (row_info.row_num * decoder->image->stride);
+            for (int i = 0; i < decoder->ihdr.width * 3; i += 3) {
+                uint8_t r = decoder->row_buffer[i + 0] >> 3;
+                uint8_t g = decoder->row_buffer[i + 1] >> 3;
+                uint8_t b = decoder->row_buffer[i + 2] >> 3;
+                *image_buffer++ = (r << 11) | (g << 6) | (b << 1) | 1;
+            }
+        }
+
+        if (err == SPNG_EOI) {
+            decoder->callback(PNG_OK, decoder->image, decoder->callback_data);
+            png_decoder_deinit(false);
+            return;
+        } else if (err != SPNG_OK) {
+            decoder->callback(PNG_ERR_BAD_FILE, NULL, decoder->callback_data);
+            png_decoder_deinit(true);
+            return;
         }
     }
+}
 
-    if (err == SPNG_EOI) {
-        decoder->callback(PNG_OK, decoder->image, decoder->callback_data);
-        png_decoder_deinit(false);
-    } else if (err != SPNG_OK) {
-        decoder->callback(PNG_ERR_BAD_FILE, NULL, decoder->callback_data);
-        png_decoder_deinit(true);
-    }
+bool png_decoder_is_busy (void) {
+    return (decoder != NULL);
 }

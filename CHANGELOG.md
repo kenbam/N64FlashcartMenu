@@ -6,6 +6,52 @@ built from latest commit on main branch.
 - For the 64Drive, use the `menu.bin` file in the root of your SD card.
 - For the ares emulator, use the `N64FlashcartMenu.n64` file.
 
+## Branch Notes (ben/m3u-support)
+
+This section summarizes the major user-facing work added on the `ben/m3u-support` branch.
+
+### Playlists and Browser
+- Added `.m3u` playlist support for ROM browsing, including preserved playlist order (`custom` sort mode). (`ce7c65c1`)
+- Added browser sorting modes (`Custom`, `A-Z`, `Z-A`) and persisted sort preference in settings. (`890a835b`, `9f4d5d96`)
+- Added random game jump from the browser and later smart-random modes with persistence. (`35aae24e`, `40b4cc0c`)
+- Refined file list row rendering and selector alignment / visible-row handling. (`09a22fe6`)
+- Clipped scrollable UI regions and reduced action-bar crowding. (`d78c0c0b`)
+
+### ROM Metadata and Details
+- Improved ROM details screen with metadata database loading and richer metadata display. (`e8a6275c`)
+- Hardened metadata parsing and expanded description handling. (`91da44af`)
+- Added `description.txt` fallback loading for full descriptions. (`01a2e915`)
+- Added metadata boxart fallback behavior for improved image coverage. (`890a835b`)
+- Added save backend and save file health information to ROM details. (`3ee948cd`)
+
+### Playtime and Session Tracking
+- Added per-game playtime tracking (including total time and last played display). (`a2e6c76d`)
+- Added recent play session tracking in bookkeeping/history. (`c0e9ed0f`)
+- Added a playtime leaderboard tab and navigation. (`639b1d43`)
+
+### Menu Audio and MP3 Experience
+- Added menu BGM autoplay with MP3 playback stability improvements. (`62b9142e`)
+- Added settings support to enable/disable menu BGM and choose a menu music file from `sd:/menu/music/`. (`15aa6241`)
+- Fixed playlist BGM override path handling for absolute prefixed paths (e.g. `sd:/...`). (`70936409`)
+
+### Visual Customization and Themes
+- Added configurable text panel overlay (including opacity/alpha) to improve readability over backgrounds. (`c332a085`, `d1f26a2d`)
+- Added in-menu background image picker entry. (`2abfef26`)
+- Added theme presets and theme selection support in settings. (`df2279d0`)
+
+### Screensaver
+- Added idle DVD-logo screensaver. (`df2279d0`)
+- Added selectable screensaver logos from `sd:/menu/screensavers/`. (`15aa6241`)
+- Added screensaver smooth mode / motion tuning and configurable safe margins for display crop compensation. (`a16342b1`)
+
+### Per-Playlist Immersion Overrides
+- Added temporary per-playlist theme, background, and BGM overrides via M3U comment directives (restored on exit). (`7f7d1d91`)
+
+#### Supported M3U directives
+- `#SC64_THEME=...`
+- `#SC64_BACKGROUND=...` (or `#SC64_BG=...`)
+- `#SC64_BGM=...` (or `#SC64_MUSIC=...`)
+
 ## Release Notes 2025-12-04 - Tagged 0.3.1
 
 - **New Features**

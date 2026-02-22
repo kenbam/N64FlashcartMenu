@@ -31,6 +31,20 @@ static struct tm rtc_tm = {0};
 static bool is_editing_mode;
 static rtc_field_t editing_field_type;
 
+static const char *format_clock_12h(time_t now, char *buffer, size_t buffer_len) {
+    if (!buffer || buffer_len == 0) {
+        return "Unknown";
+    }
+    struct tm *time_info = localtime(&now);
+    if (!time_info) {
+        return "Unknown";
+    }
+    if (strftime(buffer, buffer_len, "%m/%d %I:%M %p", time_info) == 0) {
+        return "Unknown";
+    }
+    return buffer;
+}
+
 
 void adjust_rtc_time( struct tm *t, int incr ) {
     switch(editing_field_type)
@@ -150,6 +164,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
     if (!is_editing_mode) {
          if( menu->current_time >= 0 ) {
+            char datetime[32];
 
             ui_components_main_text_draw(
                 STL_DEFAULT,
@@ -163,7 +178,7 @@ static void draw (menu_t *menu, surface_t *d) {
                 "\n"
                 "Current date & time: %s\n"
                 "\n",
-                menu->current_time >= 0 ? ctime(&menu->current_time) : "Unknown"
+                format_clock_12h(menu->current_time, datetime, sizeof(datetime))
             );
 
             ui_components_actions_bar_text_draw(
@@ -174,6 +189,7 @@ static void draw (menu_t *menu, surface_t *d) {
             );
          }
          else {
+            char datetime[32];
 
             ui_components_main_text_draw(
                 STL_DEFAULT,
@@ -185,7 +201,7 @@ static void draw (menu_t *menu, surface_t *d) {
                 "\n"
                 "Current date & time: %s\n"
                 "\n",
-                menu->current_time >= 0 ? ctime(&menu->current_time) : "Unknown"
+                format_clock_12h(menu->current_time, datetime, sizeof(datetime))
             );
 
             ui_components_actions_bar_text_draw(

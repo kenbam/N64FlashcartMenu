@@ -1,12 +1,15 @@
 #include <errno.h>
+#include <stdint.h>
 #include <miniz.h>
 #include <miniz_zip.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
 #include "../cart_load.h"
 #include "../fonts.h"
+#include "../png_decoder.h"
 #include "utils/fs.h"
 #include "views.h"
 #include "../sound.h"
@@ -21,6 +24,7 @@ static const char *image_extensions[] = { "png", NULL };
 static const char *music_extensions[] = { "mp3", NULL };
 static const char *n64_rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
 static const char *patch_extensions[] = { "bps", "ips", "aps", "ups", "xdelta", NULL };
+static const char *playlist_extensions[] = { "m3u", "m3u8", NULL };
 // TODO: "eep", "sra", "srm", "fla" could be used if transfered from different flashcarts.
 static const char *save_extensions[] = { "sav", NULL };
 static const char *text_extensions[] = { "txt", "ini", "yml", "yaml", NULL };
@@ -57,6 +61,46 @@ static const struct substr hidden_prefixes[] = {
     substr("._"), // macOS "AppleDouble" metadata files
 };
 #define HIDDEN_PREFIXES_COUNT (sizeof(hidden_prefixes) / sizeof(hidden_prefixes[0]))
+
+static uint32_t random_entry_state = 0x9E3779B9u;
+
+typedef enum {
+    RANDOM_MODE_ANY_GAME = 0,
+    RANDOM_MODE_UNPLAYED = 1,
+    RANDOM_MODE_UNDERPLAYED = 2,
+    RANDOM_MODE_FAVORITES = 3,
+} browser_random_mode_t;
+
+typedef struct {
+    int index;
+    uint64_t total_seconds;
+} random_candidate_t;
+
+static char *normalize_path (const char *path);
+static const char *format_clock_12h(time_t now, char *buffer, size_t buffer_len);
+static int random_candidate_compare(const void *a, const void *b);
+static bool browser_entry_is_game(const entry_t *entry);
+static char *browser_entry_path(menu_t *menu, int index);
+static bool path_is_favorite(menu_t *menu, const char *path);
+static int browser_pick_random_index(menu_t *menu);
+static bool browser_is_menu_music_picker_root(menu_t *menu);
+static bool browser_try_pick_menu_music_file(menu_t *menu);
+static bool browser_is_screensaver_logo_picker_root(menu_t *menu);
+static bool browser_try_pick_screensaver_logo_file(menu_t *menu);
+static void browser_restore_playlist_overrides(menu_t *menu);
+static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path);
+
+typedef struct {
+    bool active;
+    bool theme_applied;
+    int saved_theme;
+    bool bgm_applied;
+    bool background_applied;
+    bool background_loading;
+    char *background_path;
+} playlist_override_state_t;
+
+static playlist_override_state_t playlist_override = {0};
 
 
 static bool path_is_hidden (path_t *path) {
@@ -131,6 +175,10 @@ static int compare_entry (const void *pa, const void *pb) {
             return -1;
         } else if (b->type == ENTRY_TYPE_ROM_PATCH) {
             return 1;
+        } else if (a->type == ENTRY_TYPE_PLAYLIST) {
+            return -1;
+        } else if (b->type == ENTRY_TYPE_PLAYLIST) {
+            return 1;
         } else if (a->type == ENTRY_TYPE_SAVE) {
             return -1;
         } else if (b->type == ENTRY_TYPE_SAVE) {
@@ -145,14 +193,295 @@ static int compare_entry (const void *pa, const void *pb) {
     return strcasecmp((const char *) (a->name), (const char *) (b->name));
 }
 
+static bool browser_is_menu_music_picker_root(menu_t *menu) {
+    if (!menu || menu->browser.picker != BROWSER_PICKER_MENU_BGM || !menu->browser.directory) {
+        return false;
+    }
+    return strcmp(strip_fs_prefix(path_get(menu->browser.directory)), "/menu/music") == 0;
+}
+
+static bool browser_try_pick_menu_music_file(menu_t *menu) {
+    if (!menu || menu->browser.picker != BROWSER_PICKER_MENU_BGM || !menu->browser.entry) {
+        return false;
+    }
+
+    if (menu->browser.entry->type != ENTRY_TYPE_MUSIC) {
+        if (menu->browser.entry->type != ENTRY_TYPE_DIR) {
+            menu_show_error(menu, "Select an MP3 file");
+        }
+        return false;
+    }
+
+    char *entry_path = browser_entry_path(menu, menu->browser.selected);
+    if (!entry_path) {
+        menu_show_error(menu, "Failed to resolve file path");
+        return true;
+    }
+    if (menu->settings.bgm_file) {
+        free(menu->settings.bgm_file);
+    }
+    menu->settings.bgm_file = strdup(strip_fs_prefix(entry_path));
+    free(entry_path);
+    menu->bgm_reload_requested = true;
+    settings_save(&menu->settings);
+    menu->browser.picker = BROWSER_PICKER_NONE;
+    menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+    return true;
+}
+
+static bool browser_is_screensaver_logo_picker_root(menu_t *menu) {
+    if (!menu || menu->browser.picker != BROWSER_PICKER_SCREENSAVER_LOGO || !menu->browser.directory) {
+        return false;
+    }
+    return strcmp(strip_fs_prefix(path_get(menu->browser.directory)), "/menu/screensavers") == 0;
+}
+
+static bool browser_try_pick_screensaver_logo_file(menu_t *menu) {
+    if (!menu || menu->browser.picker != BROWSER_PICKER_SCREENSAVER_LOGO || !menu->browser.entry) {
+        return false;
+    }
+
+    if (menu->browser.entry->type != ENTRY_TYPE_IMAGE) {
+        if (menu->browser.entry->type != ENTRY_TYPE_DIR) {
+            menu_show_error(menu, "Select a PNG file");
+        }
+        return false;
+    }
+
+    char *entry_path = browser_entry_path(menu, menu->browser.selected);
+    if (!entry_path) {
+        menu_show_error(menu, "Failed to resolve file path");
+        return true;
+    }
+    if (menu->settings.screensaver_logo_file) {
+        free(menu->settings.screensaver_logo_file);
+    }
+    menu->settings.screensaver_logo_file = strdup(strip_fs_prefix(entry_path));
+    free(entry_path);
+    menu->screensaver_logo_reload_requested = true;
+    settings_save(&menu->settings);
+    menu->browser.picker = BROWSER_PICKER_NONE;
+    menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+    return true;
+}
+
+static int compare_entry_reverse (const void *pa, const void *pb) {
+    return compare_entry(pb, pa);
+}
+
+static void browser_apply_sort (menu_t *menu) {
+    if ((menu->browser.entries <= 1) || (menu->browser.list == NULL)) {
+        return;
+    }
+
+    entry_t *selected_entry = menu->browser.entry;
+    const char *selected_name = (selected_entry != NULL) ? selected_entry->name : NULL;
+    const char *selected_path = (selected_entry != NULL) ? selected_entry->path : NULL;
+    entry_type_t selected_type = (selected_entry != NULL) ? selected_entry->type : ENTRY_TYPE_OTHER;
+
+    switch (menu->browser.sort_mode) {
+        case BROWSER_SORT_AZ:
+            qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry);
+            break;
+        case BROWSER_SORT_ZA:
+            qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry_reverse);
+            break;
+        case BROWSER_SORT_CUSTOM:
+        default:
+            break;
+    }
+
+    if (selected_name == NULL) {
+        return;
+    }
+
+    for (int32_t i = 0; i < menu->browser.entries; i++) {
+        entry_t *entry = &menu->browser.list[i];
+        if (entry->type != selected_type) {
+            continue;
+        }
+        if (strcmp(entry->name, selected_name) != 0) {
+            continue;
+        }
+        if (((entry->path == NULL) && (selected_path == NULL)) ||
+            ((entry->path != NULL) && (selected_path != NULL) && strcmp(entry->path, selected_path) == 0)) {
+            menu->browser.selected = i;
+            menu->browser.entry = entry;
+            return;
+        }
+    }
+
+    if (menu->browser.selected >= menu->browser.entries) {
+        menu->browser.selected = menu->browser.entries - 1;
+    }
+    if (menu->browser.selected < 0) {
+        menu->browser.selected = 0;
+    }
+    menu->browser.entry = &menu->browser.list[menu->browser.selected];
+}
+
+static const char *browser_sort_mode_string (menu_t *menu) {
+    switch (menu->browser.sort_mode) {
+        case BROWSER_SORT_CUSTOM: return "Custom";
+        case BROWSER_SORT_AZ: return "A-Z";
+        case BROWSER_SORT_ZA: return "Z-A";
+        default: return "A-Z";
+    }
+}
+
+static int random_candidate_compare(const void *a, const void *b) {
+    const random_candidate_t *lhs = (const random_candidate_t *)a;
+    const random_candidate_t *rhs = (const random_candidate_t *)b;
+    if (lhs->total_seconds < rhs->total_seconds) return -1;
+    if (lhs->total_seconds > rhs->total_seconds) return 1;
+    return lhs->index - rhs->index;
+}
+
+static bool browser_entry_is_game(const entry_t *entry) {
+    if (!entry) {
+        return false;
+    }
+    return entry->type == ENTRY_TYPE_ROM || entry->type == ENTRY_TYPE_DISK || entry->type == ENTRY_TYPE_EMULATOR;
+}
+
+static char *browser_entry_path(menu_t *menu, int index) {
+    if (!menu || index < 0 || index >= menu->browser.entries) {
+        return NULL;
+    }
+
+    entry_t *entry = &menu->browser.list[index];
+    if (entry->path) {
+        return strdup(entry->path);
+    }
+    if (!entry->name) {
+        return NULL;
+    }
+
+    path_t *path = path_clone_push(menu->browser.directory, entry->name);
+    if (!path) {
+        return NULL;
+    }
+
+    char *resolved = strdup(path_get(path));
+    path_free(path);
+    return resolved;
+}
+
+static bool path_is_favorite(menu_t *menu, const char *path) {
+    if (!menu || !path) {
+        return false;
+    }
+
+    for (int i = 0; i < FAVORITES_COUNT; i++) {
+        bookkeeping_item_t *item = &menu->bookkeeping.favorite_items[i];
+        if (item->bookkeeping_type == BOOKKEEPING_TYPE_EMPTY || item->primary_path == NULL) {
+            continue;
+        }
+        if (strcmp(path_get(item->primary_path), path) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static int browser_pick_random_index(menu_t *menu) {
+    if (!menu || menu->browser.entries <= 0) {
+        return -1;
+    }
+
+    int mode = menu->settings.browser_random_mode;
+    if (mode < RANDOM_MODE_ANY_GAME || mode > RANDOM_MODE_FAVORITES) {
+        mode = RANDOM_MODE_ANY_GAME;
+    }
+
+    random_candidate_t *candidates = malloc((size_t)menu->browser.entries * sizeof(random_candidate_t));
+    if (!candidates) {
+        return -1;
+    }
+
+    int count = 0;
+    for (int i = 0; i < menu->browser.entries; i++) {
+        entry_t *entry = &menu->browser.list[i];
+        if (!browser_entry_is_game(entry)) {
+            continue;
+        }
+
+        char *entry_path = browser_entry_path(menu, i);
+        if (!entry_path) {
+            continue;
+        }
+
+        bool keep = false;
+        uint64_t total_seconds = 0;
+
+        if (mode == RANDOM_MODE_ANY_GAME) {
+            keep = true;
+        } else if (mode == RANDOM_MODE_UNPLAYED) {
+            playtime_entry_t *stat = playtime_get(&menu->playtime, entry_path);
+            keep = (stat == NULL || stat->play_count == 0);
+        } else if (mode == RANDOM_MODE_UNDERPLAYED) {
+            playtime_entry_t *stat = playtime_get(&menu->playtime, entry_path);
+            total_seconds = stat ? stat->total_seconds : 0;
+            keep = true;
+        } else if (mode == RANDOM_MODE_FAVORITES) {
+            keep = path_is_favorite(menu, entry_path);
+        }
+
+        if (keep) {
+            candidates[count].index = i;
+            candidates[count].total_seconds = total_seconds;
+            count++;
+        }
+
+        free(entry_path);
+    }
+
+    if (count == 0 && mode != RANDOM_MODE_ANY_GAME) {
+        menu->settings.browser_random_mode = RANDOM_MODE_ANY_GAME;
+        settings_save(&menu->settings);
+        free(candidates);
+        return browser_pick_random_index(menu);
+    }
+
+    int next = -1;
+    if (count > 0) {
+        random_entry_state = (random_entry_state * 1664525u) + 1013904223u + (uint32_t)menu->browser.selected + (uint32_t)menu->browser.entries + (uint32_t)mode;
+
+        if (mode == RANDOM_MODE_UNDERPLAYED) {
+            qsort(candidates, (size_t)count, sizeof(random_candidate_t), random_candidate_compare);
+            int pool = count / 4;
+            if (pool < 1) {
+                pool = 1;
+            }
+            next = candidates[(int)(random_entry_state % (uint32_t)pool)].index;
+        } else {
+            next = candidates[(int)(random_entry_state % (uint32_t)count)].index;
+        }
+
+        if (next == menu->browser.selected && count > 1) {
+            for (int i = 0; i < count; i++) {
+                if (candidates[i].index != menu->browser.selected) {
+                    next = candidates[i].index;
+                    break;
+                }
+            }
+        }
+    }
+
+    free(candidates);
+    return next;
+}
+
 static void browser_list_free (menu_t *menu) {
     if (menu->browser.archive) {
         mz_zip_reader_end(&menu->browser.zip);
     }
     menu->browser.archive = false;
+    menu->browser.playlist = false;
 
     for (int i = menu->browser.entries - 1; i >= 0; i--) {
         free(menu->browser.list[i].name);
+        free(menu->browser.list[i].path);
     }
 
     free(menu->browser.list);
@@ -193,6 +522,7 @@ static bool load_archive (menu_t *menu) {
             browser_list_free(menu);
             return true;
         }
+        entry->path = NULL;
 
         entry->type = ENTRY_TYPE_ARCHIVED;
         entry->size = info.m_uncomp_size;
@@ -204,14 +534,429 @@ static bool load_archive (menu_t *menu) {
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
     }
 
-    qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry);
+    browser_apply_sort(menu);
 
     return false;
+}
+
+static char *trim_line (char *line) {
+    if (line == NULL) {
+        return NULL;
+    }
+
+    size_t len = strlen(line);
+    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' || line[len - 1] == ' ' || line[len - 1] == '\t')) {
+        line[len - 1] = '\0';
+        len--;
+    }
+
+    while (*line == ' ' || *line == '\t') {
+        line++;
+    }
+
+    return line;
+}
+
+static void playlist_background_callback (png_err_t err, surface_t *decoded_image, void *callback_data) {
+    (void)callback_data;
+    playlist_override.background_loading = false;
+
+    if (err != PNG_OK) {
+        if (decoded_image) {
+            surface_free(decoded_image);
+            free(decoded_image);
+        }
+        return;
+    }
+
+    if (!playlist_override.active) {
+        surface_free(decoded_image);
+        free(decoded_image);
+        return;
+    }
+
+    ui_components_background_replace_image_temporary(decoded_image);
+    playlist_override.background_applied = true;
+}
+
+static int playlist_theme_id_from_string(const char *value) {
+    if (!value || !value[0]) {
+        return -1;
+    }
+
+    char *end = NULL;
+    long parsed = strtol(value, &end, 10);
+    if (end && *end == '\0') {
+        if (parsed >= 0 && parsed < ui_components_theme_count()) {
+            return (int)parsed;
+        }
+    }
+
+    for (int i = 0; i < ui_components_theme_count(); i++) {
+        if (strcasecmp(value, ui_components_theme_name(i)) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static char *playlist_resolve_path(menu_t *menu, path_t *playlist_dir, const char *raw_path) {
+    if (!menu || !playlist_dir || !raw_path || !raw_path[0]) {
+        return NULL;
+    }
+
+    path_t *resolved = NULL;
+    if (strstr(raw_path, ":/") != NULL) {
+        resolved = path_create(raw_path);
+    } else if (raw_path[0] == '/') {
+        resolved = path_init(menu->storage_prefix, (char *)raw_path);
+    } else {
+        resolved = path_clone(playlist_dir);
+        path_push(resolved, (char *)raw_path);
+    }
+
+    char *normalized = normalize_path(path_get(resolved));
+    path_free(resolved);
+    return normalized;
+}
+
+static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path) {
+    (void)menu;
+    if (!line || line[0] != '#') {
+        return;
+    }
+
+    const char *prefix = "#SC64_";
+    if (strncasecmp(line, prefix, strlen(prefix)) != 0) {
+        return;
+    }
+
+    const char *body = line + strlen(prefix);
+    const char *sep = strchr(body, '=');
+    if (!sep) {
+        return;
+    }
+
+    size_t key_len = (size_t)(sep - body);
+    if (key_len == 0) {
+        return;
+    }
+
+    char key[32];
+    if (key_len >= sizeof(key)) {
+        key_len = sizeof(key) - 1;
+    }
+    memcpy(key, body, key_len);
+    key[key_len] = '\0';
+
+    char value_buf[1024];
+    snprintf(value_buf, sizeof(value_buf), "%s", sep + 1);
+    char *value = trim_line(value_buf);
+    if (!value || !value[0]) {
+        return;
+    }
+
+    if (strcasecmp(key, "THEME") == 0) {
+        free(*theme_name);
+        *theme_name = strdup(value);
+        return;
+    }
+
+    if (strcasecmp(key, "BGM") == 0 || strcasecmp(key, "MUSIC") == 0) {
+        char *resolved = playlist_resolve_path(menu, playlist_dir, value);
+        if (resolved) {
+            free(*bgm_path);
+            *bgm_path = resolved;
+        }
+        return;
+    }
+
+    if (strcasecmp(key, "BACKGROUND") == 0 || strcasecmp(key, "BG") == 0) {
+        char *resolved = playlist_resolve_path(menu, playlist_dir, value);
+        if (resolved) {
+            free(*bg_path);
+            *bg_path = resolved;
+        }
+        return;
+    }
+}
+
+static void browser_restore_playlist_overrides(menu_t *menu) {
+    if (!playlist_override.active) {
+        return;
+    }
+
+    if (playlist_override.background_loading) {
+        png_decoder_abort();
+        playlist_override.background_loading = false;
+    }
+    if (playlist_override.background_applied) {
+        ui_components_background_reload_cache();
+    }
+    if (playlist_override.theme_applied) {
+        ui_components_set_theme(playlist_override.saved_theme);
+    }
+    if (playlist_override.bgm_applied) {
+        free(menu->runtime_bgm_override_file);
+        menu->runtime_bgm_override_file = NULL;
+        menu->bgm_reload_requested = true;
+    }
+
+    free(playlist_override.background_path);
+    memset(&playlist_override, 0, sizeof(playlist_override));
+}
+
+static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path) {
+    if (!menu) {
+        return;
+    }
+
+    int theme_id = playlist_theme_id_from_string(theme_name);
+    bool want_theme = (theme_id >= 0);
+    bool want_bgm = (bgm_path && file_exists((char *)bgm_path));
+    bool want_bg = (bg_path && file_exists((char *)bg_path));
+    if (!want_theme && !want_bgm && !want_bg) {
+        return;
+    }
+
+    playlist_override.active = true;
+    playlist_override.saved_theme = ui_components_get_theme();
+
+    if (want_theme) {
+        ui_components_set_theme(theme_id);
+        playlist_override.theme_applied = true;
+    }
+
+    if (want_bgm) {
+        free(menu->runtime_bgm_override_file);
+        menu->runtime_bgm_override_file = strdup(bgm_path);
+        menu->bgm_reload_requested = true;
+        playlist_override.bgm_applied = (menu->runtime_bgm_override_file != NULL);
+    }
+
+    if (want_bg) {
+        free(playlist_override.background_path);
+        playlist_override.background_path = strdup(bg_path);
+        if (playlist_override.background_path && !png_decoder_is_busy()) {
+            png_err_t err = png_decoder_start(
+                playlist_override.background_path,
+                640,
+                480,
+                playlist_background_callback,
+                NULL
+            );
+            if (err == PNG_OK) {
+                playlist_override.background_loading = true;
+            }
+        }
+    }
+}
+
+static bool load_playlist (menu_t *menu) {
+    browser_list_free(menu);
+
+    FILE *f = fopen(path_get(menu->browser.directory), "r");
+    if (f == NULL) {
+        return true;
+    }
+
+    menu->browser.playlist = true;
+
+    path_t *playlist_dir = path_clone(menu->browser.directory);
+    path_pop(playlist_dir);
+    char *playlist_theme = NULL;
+    char *playlist_bgm = NULL;
+    char *playlist_bg = NULL;
+
+    char line[1024];
+    while (fgets(line, sizeof(line), f) != NULL) {
+        char *trimmed = trim_line(line);
+        if (trimmed == NULL || trimmed[0] == '\0') {
+            continue;
+        }
+        if (trimmed[0] == '#') {
+            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg);
+            continue;
+        }
+
+        path_t *entry_path = NULL;
+        if (strstr(trimmed, ":/") != NULL) {
+            entry_path = path_create(trimmed);
+        } else if (trimmed[0] == '/') {
+            entry_path = path_init(menu->storage_prefix, trimmed);
+        } else {
+            entry_path = path_clone(playlist_dir);
+            path_push(entry_path, trimmed);
+        }
+
+        char *normalized = normalize_path(path_get(entry_path));
+        if (!normalized) {
+            path_free(entry_path);
+            fclose(f);
+            free(playlist_theme);
+            free(playlist_bgm);
+            free(playlist_bg);
+            browser_list_free(menu);
+            return true;
+        }
+
+        if (!file_has_extensions(normalized, n64_rom_extensions)) {
+            free(normalized);
+            path_free(entry_path);
+            continue;
+        }
+
+        menu->browser.list = realloc(menu->browser.list, (menu->browser.entries + 1) * sizeof(entry_t));
+
+        entry_t *entry = &menu->browser.list[menu->browser.entries++];
+        entry->name = strdup(file_basename(normalized));
+        if (!entry->name) {
+            free(normalized);
+            path_free(entry_path);
+            fclose(f);
+            free(playlist_theme);
+            free(playlist_bgm);
+            free(playlist_bg);
+            browser_list_free(menu);
+            return true;
+        }
+
+        entry->path = normalized;
+        if (!entry->path) {
+            free(normalized);
+            path_free(entry_path);
+            fclose(f);
+            free(playlist_theme);
+            free(playlist_bgm);
+            free(playlist_bg);
+            browser_list_free(menu);
+            return true;
+        }
+
+        entry->type = ENTRY_TYPE_ROM;
+        entry->size = -1;
+        entry->index = menu->browser.entries - 1;
+
+        path_free(entry_path);
+    }
+
+    if (menu->browser.entries > 0) {
+        menu->browser.selected = 0;
+        menu->browser.entry = &menu->browser.list[menu->browser.selected];
+    }
+
+    // Preserve m3u order by default for playlist views.
+    menu->browser.sort_mode = BROWSER_SORT_CUSTOM;
+    browser_apply_sort(menu);
+
+    browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg);
+    path_free(playlist_dir);
+    fclose(f);
+    free(playlist_theme);
+    free(playlist_bgm);
+    free(playlist_bg);
+
+    return false;
+}
+
+static char *normalize_path (const char *path) {
+    if (path == NULL) {
+        return NULL;
+    }
+
+    const char *prefix_pos = strstr(path, ":/");
+    size_t prefix_len = 0;
+    if (prefix_pos != NULL) {
+        prefix_len = (size_t)(prefix_pos - path) + 2;
+    } else if (path[0] == '/') {
+        prefix_len = 1;
+    }
+
+    size_t path_len = strlen(path);
+    char *work = malloc(path_len + 1);
+    if (!work) {
+        return NULL;
+    }
+    memcpy(work, path, path_len + 1);
+
+    char *segments_start = work + prefix_len;
+    size_t max_segments = (path_len / 2) + 1;
+    char **segments = malloc(max_segments * sizeof(char *));
+    if (!segments) {
+        free(work);
+        return NULL;
+    }
+
+    size_t seg_count = 0;
+    char *cursor = segments_start;
+    while (*cursor) {
+        while (*cursor == '/') {
+            cursor++;
+        }
+        if (*cursor == '\0') {
+            break;
+        }
+        char *seg = cursor;
+        while (*cursor && *cursor != '/') {
+            cursor++;
+        }
+        if (*cursor) {
+            *cursor++ = '\0';
+        }
+
+        if (strcmp(seg, ".") == 0 || strcmp(seg, "") == 0) {
+            continue;
+        }
+        if (strcmp(seg, "..") == 0) {
+            if (seg_count > 0) {
+                seg_count--;
+            }
+            continue;
+        }
+        segments[seg_count++] = seg;
+    }
+
+    size_t out_cap = path_len + 2;
+    char *out = malloc(out_cap);
+    if (!out) {
+        free(segments);
+        free(work);
+        return NULL;
+    }
+
+    size_t out_len = 0;
+    if (prefix_len > 0) {
+        memcpy(out, path, prefix_len);
+        out_len = prefix_len;
+    }
+
+    for (size_t i = 0; i < seg_count; i++) {
+        if (out_len > 0 && out[out_len - 1] != '/') {
+            out[out_len++] = '/';
+        }
+        size_t seg_len = strlen(segments[i]);
+        memcpy(out + out_len, segments[i], seg_len);
+        out_len += seg_len;
+    }
+
+    if (out_len == 0) {
+        out[out_len++] = '.';
+    }
+
+    out[out_len] = '\0';
+
+    free(segments);
+    free(work);
+    return out;
 }
 
 static bool load_directory (menu_t *menu) {
     int result;
     dir_t info;
+
+    if (menu->browser.playlist || playlist_override.active) {
+        browser_restore_playlist_overrides(menu);
+    }
 
     browser_list_free(menu);
 
@@ -248,6 +993,7 @@ static bool load_directory (menu_t *menu) {
                 browser_list_free(menu);
                 return true;
             }
+            entry->path = NULL;
 
             if (info.d_type == DT_DIR) {
                 entry->type = ENTRY_TYPE_DIR;
@@ -271,6 +1017,8 @@ static bool load_directory (menu_t *menu) {
                 entry->type = ENTRY_TYPE_MUSIC;
             } else if (file_has_extensions(entry->name, archive_extensions)) {
                 entry->type = ENTRY_TYPE_ARCHIVE;
+            } else if (file_has_extensions(entry->name, playlist_extensions)) {
+                entry->type = ENTRY_TYPE_PLAYLIST;
             } else {
                 entry->type = ENTRY_TYPE_OTHER;
             }
@@ -294,9 +1042,23 @@ static bool load_directory (menu_t *menu) {
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
     }
 
-    qsort(menu->browser.list, menu->browser.entries, sizeof(entry_t), compare_entry);
+    browser_apply_sort(menu);
 
     return false;
+}
+
+static const char *format_clock_12h(time_t now, char *buffer, size_t buffer_len) {
+    if (!buffer || buffer_len == 0) {
+        return "";
+    }
+    struct tm *time_info = localtime(&now);
+    if (!time_info) {
+        return "";
+    }
+    if (strftime(buffer, buffer_len, "%m/%d %I:%M %p", time_info) == 0) {
+        return "";
+    }
+    return buffer;
 }
 
 static bool reload_directory (menu_t *menu) {
@@ -381,6 +1143,22 @@ static bool select_file (menu_t *menu, path_t *file) {
     return false;
 }
 
+static bool push_playlist (menu_t *menu, char *playlist) {
+    path_t *previous_directory = path_clone(menu->browser.directory);
+
+    path_push(menu->browser.directory, playlist);
+
+    if (load_playlist(menu)) {
+        path_free(menu->browser.directory);
+        menu->browser.directory = previous_directory;
+        return true;
+    }
+
+    path_free(previous_directory);
+
+    return false;
+}
+
 static void show_properties (menu_t *menu, void *arg) {
     menu->next_mode = menu->browser.entry->type == ENTRY_TYPE_ARCHIVED ? MENU_MODE_EXTRACT_FILE : MENU_MODE_FILE_INFO;
 }
@@ -418,11 +1196,60 @@ static void set_default_directory (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void cycle_sort_mode (menu_t *menu, void *arg) {
+    (void)arg;
+    menu->browser.sort_mode = (browser_sort_t)(((int)menu->browser.sort_mode + 1) % 3);
+    menu->settings.browser_sort_mode = (int)menu->browser.sort_mode;
+    settings_save(&menu->settings);
+    browser_apply_sort(menu);
+}
+
+static void set_random_mode(menu_t *menu, void *arg) {
+    int mode = (int)(intptr_t)arg;
+    if (mode < RANDOM_MODE_ANY_GAME || mode > RANDOM_MODE_FAVORITES) {
+        mode = RANDOM_MODE_ANY_GAME;
+    }
+    menu->settings.browser_random_mode = mode;
+    settings_save(&menu->settings);
+}
+
+static int get_random_mode_selection(menu_t *menu) {
+    if (!menu) {
+        return 0;
+    }
+    if (menu->settings.browser_random_mode < RANDOM_MODE_ANY_GAME || menu->settings.browser_random_mode > RANDOM_MODE_FAVORITES) {
+        return 0;
+    }
+    return menu->settings.browser_random_mode;
+}
+
+static component_context_menu_t random_mode_context_menu = {
+    .get_default_selection = get_random_mode_selection,
+    .list = {
+        { .text = "Any game", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_ANY_GAME },
+        { .text = "Unplayed", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_UNPLAYED },
+        { .text = "Underplayed", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_UNDERPLAYED },
+        { .text = "Favorites", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_FAVORITES },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static component_context_menu_t entry_context_menu = {
     .list = {
         { .text = "Show entry properties", .action = show_properties },
         { .text = "Delete selected entry", .action = delete_entry },
         { .text = "Set current directory as default", .action = set_default_directory },
+        { .text = "Cycle sorting mode", .action = cycle_sort_mode },
+        { .text = "Random mode...", .submenu = &random_mode_context_menu },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static component_context_menu_t playlist_context_menu = {
+    .list = {
+        { .text = "Show entry properties", .action = show_properties },
+        { .text = "Cycle sorting mode", .action = cycle_sort_mode },
+        { .text = "Random mode...", .submenu = &random_mode_context_menu },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -431,6 +1258,8 @@ static component_context_menu_t archive_context_menu = {
     .list = {
         { .text = "Show entry properties", .action = show_properties },
         { .text = "Extract selected entry", .action = extract_entry },
+        { .text = "Cycle sorting mode", .action = cycle_sort_mode },
+        { .text = "Random mode...", .submenu = &random_mode_context_menu },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -442,6 +1271,7 @@ static void set_menu_next_mode (menu_t *menu, void *arg) {
 
 static component_context_menu_t settings_context_menu = {
     .list = {
+        { .text = "Random mode...", .submenu = &random_mode_context_menu },
         { .text = "Controller Pak manager", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_CONTROLLER_PAKFS) },
         { .text = "Menu settings", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_SETTINGS_EDITOR) },
         { .text = "Time (RTC) settings", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_RTC) },
@@ -453,7 +1283,25 @@ static component_context_menu_t settings_context_menu = {
 };
 
 static void process (menu_t *menu) {
-    if (ui_components_context_menu_process(menu, menu->browser.archive ? &archive_context_menu : &entry_context_menu)) {
+    if (playlist_override.active &&
+        playlist_override.background_path &&
+        !playlist_override.background_applied &&
+        !playlist_override.background_loading &&
+        !png_decoder_is_busy()) {
+        png_err_t err = png_decoder_start(playlist_override.background_path, 640, 480, playlist_background_callback, NULL);
+        if (err == PNG_OK) {
+            playlist_override.background_loading = true;
+        }
+    }
+
+    component_context_menu_t *active_context_menu = &entry_context_menu;
+    if (menu->browser.archive) {
+        active_context_menu = &archive_context_menu;
+    } else if (menu->browser.playlist) {
+        active_context_menu = &playlist_context_menu;
+    }
+
+    if (ui_components_context_menu_process(menu, active_context_menu)) {
         return;
     }
 
@@ -480,13 +1328,35 @@ static void process (menu_t *menu) {
         menu->browser.entry = &menu->browser.list[menu->browser.selected];
     }
 
+    if (menu->actions.lz_context && menu->browser.entries > 1) {
+        int next = browser_pick_random_index(menu);
+        if (next >= 0 && next < menu->browser.entries) {
+            menu->browser.selected = next;
+            menu->browser.entry = &menu->browser.list[menu->browser.selected];
+            sound_play_effect(SFX_CURSOR);
+        }
+        return;
+    }
+
     if (menu->actions.enter && menu->browser.entry) {
         sound_play_effect(SFX_ENTER);
+        if (browser_try_pick_menu_music_file(menu)) {
+            return;
+        }
+        if (browser_try_pick_screensaver_logo_file(menu)) {
+            return;
+        }
         switch (menu->browser.entry->type) {
             case ENTRY_TYPE_ARCHIVE:
                 if (push_directory(menu, menu->browser.entry->name, true)) {
                     menu->browser.valid = false;
                     menu_show_error(menu, "Couldn't open file archive");
+                }
+                break;
+            case ENTRY_TYPE_PLAYLIST:
+                if (push_playlist(menu, menu->browser.entry->name)) {
+                    menu->browser.valid = false;
+                    menu_show_error(menu, "Couldn't open playlist");
                 }
                 break;
             case ENTRY_TYPE_ARCHIVED:
@@ -527,6 +1397,14 @@ static void process (menu_t *menu) {
                 menu->next_mode = MENU_MODE_FILE_INFO;
                 break;
         }
+    } else if (menu->actions.back && browser_is_menu_music_picker_root(menu)) {
+        menu->browser.picker = BROWSER_PICKER_NONE;
+        menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+        sound_play_effect(SFX_EXIT);
+    } else if (menu->actions.back && browser_is_screensaver_logo_picker_root(menu)) {
+        menu->browser.picker = BROWSER_PICKER_NONE;
+        menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+        sound_play_effect(SFX_EXIT);
     } else if (menu->actions.back && !path_is_root(menu->browser.directory)) {
         if (pop_directory(menu)) {
             menu->browser.valid = false;
@@ -534,7 +1412,7 @@ static void process (menu_t *menu) {
         }
         sound_play_effect(SFX_EXIT);
     } else if (menu->actions.options && menu->browser.entry) {
-        ui_components_context_menu_show(menu->browser.archive ? &archive_context_menu : &entry_context_menu);
+        ui_components_context_menu_show(active_context_menu);
         sound_play_effect(SFX_SETTING);
     } else if (menu->actions.settings) {
         ui_components_context_menu_show(&settings_context_menu);
@@ -543,7 +1421,7 @@ static void process (menu_t *menu) {
         menu->next_mode = MENU_MODE_HISTORY;
         sound_play_effect(SFX_CURSOR);
     } else if (menu->actions.go_left) {
-        menu->next_mode = MENU_MODE_FAVORITE;
+        menu->next_mode = MENU_MODE_PLAYTIME;
         sound_play_effect(SFX_CURSOR);
     }
 }
@@ -566,10 +1444,11 @@ static void draw (menu_t *menu, surface_t *d) {
             case ENTRY_TYPE_DIR: action = "A: Enter"; break;
             case ENTRY_TYPE_ROM: action = "A: Load"; break;
             case ENTRY_TYPE_DISK: action = "A: Load"; break;
-            case ENTRY_TYPE_IMAGE: action = "A: Show"; break;
+            case ENTRY_TYPE_IMAGE: action = menu->browser.picker == BROWSER_PICKER_SCREENSAVER_LOGO ? "A: Select" : "A: Show"; break;
             case ENTRY_TYPE_TEXT: action = "A: View"; break;
-            case ENTRY_TYPE_MUSIC: action = "A: Play"; break;
+            case ENTRY_TYPE_MUSIC: action = menu->browser.picker == BROWSER_PICKER_MENU_BGM ? "A: Select" : "A: Play"; break;
             case ENTRY_TYPE_ARCHIVE: action = "A: Open"; break;
+            case ENTRY_TYPE_PLAYLIST: action = "A: Open"; break;
             default: action = "A: Info"; break;
         }
     }
@@ -578,37 +1457,47 @@ static void draw (menu_t *menu, surface_t *d) {
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
         "%s\n"
-        "^%02XB: Back^00",
+        "^%02XB: Back^00 | ^%02XL: Random^00",
         menu->browser.entries == 0 ? "" : action,
-        path_is_root(menu->browser.directory) ? STL_GRAY : STL_DEFAULT
+        path_is_root(menu->browser.directory) ? STL_GRAY : STL_DEFAULT,
+        menu->browser.entries > 1 ? STL_DEFAULT : STL_GRAY
     );
 
     ui_components_actions_bar_text_draw(
         STL_DEFAULT,
         ALIGN_RIGHT, VALIGN_TOP,
         "^%02XStart: Settings^00\n"
-        "^%02XR:  Options^00",
-        menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT
+        "^%02XR: Options^00 | Sort:%s",
+        menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+        menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+        browser_sort_mode_string(menu)
     );
 
     if (menu->current_time >= 0) {
+        char datetime[32];
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_CENTER, VALIGN_TOP,
-            "C-▼▲ Fast Scroll | ◀ Tabs ▶ \n"
+            "C-▼▲ Scroll | ◀ ▶ Tabs\n"
             "%s",
-            ctime(&menu->current_time)
+            format_clock_12h(menu->current_time, datetime, sizeof(datetime))
         );
     } else {
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_CENTER, VALIGN_TOP,
-            "C-▼▲ Fast Scroll | ◀ Tabs ▶ \n"
+            "C-▼▲ Scroll | ◀ ▶ Tabs\n"
             "\n"
         );
     }
 
-    ui_components_context_menu_draw(menu->browser.archive ? &archive_context_menu : &entry_context_menu);
+    if (menu->browser.archive) {
+        ui_components_context_menu_draw(&archive_context_menu);
+    } else if (menu->browser.playlist) {
+        ui_components_context_menu_draw(&playlist_context_menu);
+    } else {
+        ui_components_context_menu_draw(&entry_context_menu);
+    }
 
     ui_components_context_menu_draw(&settings_context_menu);
 
@@ -620,6 +1509,7 @@ void view_browser_init (menu_t *menu) {
     if (!menu->browser.valid) {
         ui_components_context_menu_init(&entry_context_menu);
         ui_components_context_menu_init(&archive_context_menu);
+        ui_components_context_menu_init(&playlist_context_menu);
         ui_components_context_menu_init(&settings_context_menu);
         if (load_directory(menu)) {
             path_free(menu->browser.directory);

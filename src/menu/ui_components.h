@@ -79,6 +79,57 @@ void ui_components_layout_draw_tabbed(void);
 void ui_components_layout_draw(void);
 
 /**
+ * @brief Configure semi-transparent panel drawn behind the main content area.
+ *
+ * @param enabled Whether the panel is enabled.
+ * @param alpha Alpha value (0-255).
+ */
+void ui_components_set_text_panel(bool enabled, uint8_t alpha);
+
+/**
+ * @brief Apply one of the built-in UI themes.
+ *
+ * @param theme_id Theme identifier (0..N).
+ */
+void ui_components_set_theme(int theme_id);
+
+/**
+ * @brief Get current UI theme identifier.
+ *
+ * @return int Theme identifier.
+ */
+int ui_components_get_theme(void);
+
+/**
+ * @brief Get current theme display name.
+ *
+ * @param theme_id Theme identifier.
+ * @return const char* Theme name.
+ */
+const char *ui_components_theme_name(int theme_id);
+
+/**
+ * @brief Get number of available built-in UI themes.
+ *
+ * @return int theme count.
+ */
+int ui_components_theme_count(void);
+
+/**
+ * @brief Get themed color used for file list highlight.
+ *
+ * @return color_t highlight color.
+ */
+color_t ui_components_file_list_highlight_color(void);
+
+/**
+ * @brief Get themed color used for context menu highlight.
+ *
+ * @return color_t highlight color.
+ */
+color_t ui_components_context_menu_highlight_color(void);
+
+/**
  * @brief Draw a progress bar component.
  * 
  * @param x0 Starting x-coordinate.
@@ -182,6 +233,8 @@ void ui_components_background_free(void);
  * @param image New background image.
  */
 void ui_components_background_replace_image(surface_t *image);
+void ui_components_background_replace_image_temporary(surface_t *image);
+void ui_components_background_reload_cache(void);
 
 /**
  * @brief Draw the background component.

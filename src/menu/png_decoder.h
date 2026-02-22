@@ -7,6 +7,7 @@
 #ifndef PNG_DECODER_H__
 #define PNG_DECODER_H__
 
+#include <stdbool.h>
 #include <surface.h>
 
 /** 
@@ -70,5 +71,12 @@ float png_decoder_get_progress (void);
  * This function polls the PNG decoder to handle any ongoing decoding tasks.
  */
 void png_decoder_poll (void);
+
+/**
+ * @brief Check whether a PNG decode job is currently active.
+ *
+ * @return true if decoder is busy, false otherwise.
+ */
+bool png_decoder_is_busy (void);
 
 #endif /* PNG_DECODER_H__ */

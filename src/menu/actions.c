@@ -107,7 +107,7 @@ static void actions_update_buttons (menu_t *menu) {
         menu->actions.options = true;
     } else if (pressed.start) {
         menu->actions.settings = true;
-    } else if (pressed.l || pressed.z) {
+    } else if (pressed.l) {
         menu->actions.lz_context = true;
     }
 }

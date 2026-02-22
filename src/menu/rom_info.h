@@ -13,6 +13,11 @@
 
 #include "path.h"
 
+#define ROM_METADATA_NAME_LENGTH        96
+#define ROM_METADATA_AUTHOR_LENGTH      96
+#define ROM_METADATA_SHORT_DESC_LENGTH  256
+#define ROM_METADATA_LONG_DESC_LENGTH   1536
+
 /** @brief ROM error enumeration. */
 typedef enum {
     ROM_OK,                /**< No error */
@@ -177,6 +182,11 @@ typedef struct {
 
     struct {
         rom_esrb_age_rating_t esrb_age_rating; /**< The game age rating */
+        int32_t age_rating;                    /**< Generic age rating (0-18), -1 when unavailable */
+        char name[ROM_METADATA_NAME_LENGTH];   /**< Metadata title */
+        char author[ROM_METADATA_AUTHOR_LENGTH]; /**< Metadata author/publisher */
+        char short_desc[ROM_METADATA_SHORT_DESC_LENGTH]; /**< Metadata short description */
+        char long_desc[ROM_METADATA_LONG_DESC_LENGTH];   /**< Metadata long description */
     } metadata;                     /**< The ROM metadata */
 } rom_info_t;
 

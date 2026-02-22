@@ -18,7 +18,19 @@ static settings_t init = {
     .default_directory = "/",
     .use_saves_folder = true,
     .show_saves_folder = false,
+    .browser_sort_mode = 1,
+    .browser_random_mode = 0,
+    .ui_theme = 0,
+    .text_panel_enabled = true,
+    .text_panel_alpha = 112,
     .soundfx_enabled = false,
+    .bgm_file = "",
+    .screensaver_logo_file = "",
+    .screensaver_smooth_mode = false,
+    .screensaver_margin_left = 2,
+    .screensaver_margin_right = 0,
+    .screensaver_margin_top = 16,
+    .screensaver_margin_bottom = 16,
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     .rom_autoload_enabled = false,
     .rom_autoload_path = "",
@@ -30,7 +42,7 @@ static settings_t init = {
     /* Beta feature flags (should always init to default) */
     .show_browser_file_extensions = true,
     .show_browser_rom_tags = true,
-    .bgm_enabled = false,
+    .bgm_enabled = true,
     .rumble_enabled = false,
 };
 
@@ -58,8 +70,38 @@ void settings_load (settings_t *settings) {
     settings->default_directory = strdup(mini_get_string(ini, "menu", "default_directory", init.default_directory));
     settings->use_saves_folder = mini_get_bool(ini, "menu", "use_saves_folder", init.use_saves_folder);
     settings->show_saves_folder = mini_get_bool(ini, "menu", "show_saves_folder", init.show_saves_folder);
+    settings->browser_sort_mode = mini_get_int(ini, "menu", "browser_sort_mode", init.browser_sort_mode);
+    settings->browser_random_mode = mini_get_int(ini, "menu", "browser_random_mode", init.browser_random_mode);
+    settings->ui_theme = mini_get_int(ini, "menu", "ui_theme", init.ui_theme);
+    settings->text_panel_enabled = mini_get_bool(ini, "menu", "text_panel_enabled", init.text_panel_enabled);
+    int text_panel_alpha = mini_get_int(ini, "menu", "text_panel_alpha", init.text_panel_alpha);
+    if (text_panel_alpha < 0) {
+        text_panel_alpha = 0;
+    } else if (text_panel_alpha > 255) {
+        text_panel_alpha = 255;
+    }
+    settings->text_panel_alpha = (uint8_t)text_panel_alpha;
     settings->soundfx_enabled = mini_get_bool(ini, "menu", "soundfx_enabled", init.soundfx_enabled);
-    
+    settings->bgm_file = strdup(mini_get_string(ini, "menu", "bgm_file", init.bgm_file));
+    settings->screensaver_logo_file = strdup(mini_get_string(ini, "menu", "screensaver_logo_file", init.screensaver_logo_file));
+    settings->screensaver_smooth_mode = mini_get_bool(ini, "menu", "screensaver_smooth_mode", init.screensaver_smooth_mode);
+    int margin_left = mini_get_int(ini, "menu", "screensaver_margin_left", init.screensaver_margin_left);
+    int margin_right = mini_get_int(ini, "menu", "screensaver_margin_right", init.screensaver_margin_right);
+    int margin_top = mini_get_int(ini, "menu", "screensaver_margin_top", init.screensaver_margin_top);
+    int margin_bottom = mini_get_int(ini, "menu", "screensaver_margin_bottom", init.screensaver_margin_bottom);
+    if (margin_left < 0) margin_left = 0;
+    if (margin_left > 64) margin_left = 64;
+    if (margin_right < 0) margin_right = 0;
+    if (margin_right > 64) margin_right = 64;
+    if (margin_top < 0) margin_top = 0;
+    if (margin_top > 64) margin_top = 64;
+    if (margin_bottom < 0) margin_bottom = 0;
+    if (margin_bottom > 64) margin_bottom = 64;
+    settings->screensaver_margin_left = (uint8_t)margin_left;
+    settings->screensaver_margin_right = (uint8_t)margin_right;
+    settings->screensaver_margin_top = (uint8_t)margin_top;
+    settings->screensaver_margin_bottom = (uint8_t)margin_bottom;
+
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     settings->rom_autoload_enabled = mini_get_bool(ini, "menu", "autoload_rom_enabled", init.rom_autoload_enabled);
     settings->rom_autoload_path = strdup(mini_get_string(ini, "autoload", "rom_path", init.rom_autoload_path));
@@ -71,7 +113,12 @@ void settings_load (settings_t *settings) {
     /* Beta feature flags, they might not be in the file */
     settings->show_browser_file_extensions = mini_get_bool(ini, "menu", "show_browser_file_extensions", init.show_browser_file_extensions);
     settings->show_browser_rom_tags = mini_get_bool(ini, "menu", "show_browser_rom_tags", init.show_browser_rom_tags);
-    settings->bgm_enabled = mini_get_bool(ini, "menu_beta_flag", "bgm_enabled", init.bgm_enabled);
+    settings->bgm_enabled = mini_get_bool(
+        ini,
+        "menu",
+        "bgm_enabled",
+        mini_get_bool(ini, "menu_beta_flag", "bgm_enabled", init.bgm_enabled)
+    );
     settings->rumble_enabled = mini_get_bool(ini, "menu_beta_flag", "rumble_enabled", init.rumble_enabled);
 
     mini_free(ini);
@@ -89,7 +136,19 @@ void settings_save (settings_t *settings) {
     mini_set_string(ini, "menu", "default_directory", settings->default_directory);
     mini_set_bool(ini, "menu", "use_saves_folder", settings->use_saves_folder);
     mini_set_bool(ini, "menu", "show_saves_folder", settings->show_saves_folder);
+    mini_set_int(ini, "menu", "browser_sort_mode", settings->browser_sort_mode);
+    mini_set_int(ini, "menu", "browser_random_mode", settings->browser_random_mode);
+    mini_set_int(ini, "menu", "ui_theme", settings->ui_theme);
+    mini_set_bool(ini, "menu", "text_panel_enabled", settings->text_panel_enabled);
+    mini_set_int(ini, "menu", "text_panel_alpha", settings->text_panel_alpha);
     mini_set_bool(ini, "menu", "soundfx_enabled", settings->soundfx_enabled);
+    mini_set_string(ini, "menu", "bgm_file", settings->bgm_file ? settings->bgm_file : "");
+    mini_set_string(ini, "menu", "screensaver_logo_file", settings->screensaver_logo_file ? settings->screensaver_logo_file : "");
+    mini_set_bool(ini, "menu", "screensaver_smooth_mode", settings->screensaver_smooth_mode);
+    mini_set_int(ini, "menu", "screensaver_margin_left", settings->screensaver_margin_left);
+    mini_set_int(ini, "menu", "screensaver_margin_right", settings->screensaver_margin_right);
+    mini_set_int(ini, "menu", "screensaver_margin_top", settings->screensaver_margin_top);
+    mini_set_int(ini, "menu", "screensaver_margin_bottom", settings->screensaver_margin_bottom);
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     mini_set_bool(ini, "menu", "autoload_rom_enabled", settings->rom_autoload_enabled);
     mini_set_string(ini, "autoload", "rom_path", settings->rom_autoload_path);
@@ -99,10 +158,11 @@ void settings_save (settings_t *settings) {
     mini_set_bool(ini, "menu", "reboot_rom_enabled", settings->rom_fast_reboot_enabled);
 #endif
 
+    mini_set_bool(ini, "menu", "bgm_enabled", settings->bgm_enabled);
+
     /* Beta feature flags, they should not save until production ready! */
     // mini_set_bool(ini, "menu", "show_browser_file_extensions", settings->show_browser_file_extensions);
     // mini_set_bool(ini, "menu", "show_browser_rom_tags", settings->show_browser_rom_tags);
-    // mini_set_bool(ini, "menu_beta_flag", "bgm_enabled", settings->bgm_enabled);
     // mini_set_bool(ini, "menu_beta_flag", "rumble_enabled", settings->rumble_enabled);
 
     mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);

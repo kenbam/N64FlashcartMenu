@@ -154,7 +154,7 @@ void ui_components_context_menu_draw(component_context_menu_t *cm) {
         highlight_y,
         highlight_x1,
         highlight_y + highlight_height,
-        CONTEXT_MENU_HIGHLIGHT_COLOR
+        ui_components_context_menu_highlight_color()
     );
 
     rdpq_paragraph_render(layout, VISIBLE_AREA_X0, VISIBLE_AREA_Y0);

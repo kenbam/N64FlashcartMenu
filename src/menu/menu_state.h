@@ -16,6 +16,7 @@
 #include "disk_info.h"
 #include "flashcart/flashcart.h"
 #include "path.h"
+#include "playtime.h"
 #include "rom_info.h"
 #include "settings.h"
 #include "bookkeeping.h"
@@ -46,6 +47,7 @@ typedef enum {
     MENU_MODE_BOOT,
     MENU_MODE_FAVORITE,
     MENU_MODE_HISTORY,
+    MENU_MODE_PLAYTIME,
     MENU_MODE_DATEL_CODE_EDITOR,
     MENU_MODE_EXTRACT_FILE
 } menu_mode_t;
@@ -58,6 +60,7 @@ typedef enum {
     ENTRY_TYPE_IMAGE,
     ENTRY_TYPE_MUSIC,
     ENTRY_TYPE_OTHER,
+    ENTRY_TYPE_PLAYLIST,
     ENTRY_TYPE_ROM,
     ENTRY_TYPE_ROM_CHEAT,
     ENTRY_TYPE_ROM_PATCH,
@@ -70,10 +73,24 @@ typedef enum {
 /** @brief File Entry Structure */
 typedef struct {
     char *name;
+    char *path;
     entry_type_t type;
     int64_t size;
     int32_t index;
 } entry_t;
+
+/** @brief Browser sort mode */
+typedef enum {
+    BROWSER_SORT_CUSTOM,
+    BROWSER_SORT_AZ,
+    BROWSER_SORT_ZA,
+} browser_sort_t;
+
+typedef enum {
+    BROWSER_PICKER_NONE = 0,
+    BROWSER_PICKER_MENU_BGM = 1,
+    BROWSER_PICKER_SCREENSAVER_LOGO = 2,
+} browser_picker_t;
 
 typedef struct {
     path_t *disk_path;
@@ -93,12 +110,16 @@ typedef struct {
     const char *storage_prefix;
     settings_t settings;
     bookkeeping_t bookkeeping;
+    playtime_db_t playtime;
     boot_params_t *boot_params;
 
     char *error_message;
     flashcart_err_t flashcart_err;
 
     time_t current_time;
+    bool bgm_reload_requested;
+    bool screensaver_logo_reload_requested;
+    char *runtime_bgm_override_file;
 
     struct {
         bool go_up;
@@ -118,6 +139,7 @@ typedef struct {
         bool valid;
         bool reload;
         bool archive;
+        bool playlist;
         mz_zip_archive zip;
         path_t *directory;
         entry_t *list;
@@ -125,6 +147,8 @@ typedef struct {
         entry_t *entry;
         int32_t selected;
         path_t* select_file;
+        browser_sort_t sort_mode;
+        browser_picker_t picker;
     } browser;
 
     struct {

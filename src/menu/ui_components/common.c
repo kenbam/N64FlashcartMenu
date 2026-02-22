@@ -10,6 +10,302 @@
 #include "../fonts.h"
 #include "constants.h"
 
+static bool text_panel_enabled = true;
+static uint8_t text_panel_alpha = 112;
+
+typedef struct {
+    color_t border;
+    color_t progress_done;
+    color_t progress_bg;
+    color_t scrollbar_bg;
+    color_t scrollbar_inactive;
+    color_t scrollbar_position;
+    color_t dialog_bg;
+    color_t file_list_highlight;
+    color_t context_menu_highlight;
+    color_t tab_inactive_border;
+    color_t tab_active_border;
+    color_t tab_inactive_bg;
+    color_t tab_active_bg;
+} ui_theme_palette_t;
+
+static const ui_theme_palette_t ui_theme_palettes[] = {
+    {
+        .border = BORDER_COLOR,
+        .progress_done = PROGRESSBAR_DONE_COLOR,
+        .progress_bg = PROGRESSBAR_BG_COLOR,
+        .scrollbar_bg = SCROLLBAR_BG_COLOR,
+        .scrollbar_inactive = SCROLLBAR_INACTIVE_COLOR,
+        .scrollbar_position = SCROLLBAR_POSITION_COLOR,
+        .dialog_bg = DIALOG_BG_COLOR,
+        .file_list_highlight = FILE_LIST_HIGHLIGHT_COLOR,
+        .context_menu_highlight = CONTEXT_MENU_HIGHLIGHT_COLOR,
+        .tab_inactive_border = TAB_INACTIVE_BORDER_COLOR,
+        .tab_active_border = TAB_ACTIVE_BORDER_COLOR,
+        .tab_inactive_bg = TAB_INACTIVE_BACKGROUND_COLOR,
+        .tab_active_bg = TAB_ACTIVE_BACKGROUND_COLOR,
+    },
+    {
+        // Solarized Dark-inspired palette
+        .border = RGBA32(0x93, 0xA1, 0xA1, 0xFF),
+        .progress_done = RGBA32(0x2A, 0xA1, 0x98, 0xFF),
+        .progress_bg = RGBA32(0x00, 0x2B, 0x36, 0xFF),
+        .scrollbar_bg = RGBA32(0x07, 0x36, 0x42, 0xFF),
+        .scrollbar_inactive = RGBA32(0x58, 0x6E, 0x75, 0xFF),
+        .scrollbar_position = RGBA32(0x26, 0x8B, 0xD2, 0xFF),
+        .dialog_bg = RGBA32(0x00, 0x2B, 0x36, 0xFF),
+        .file_list_highlight = RGBA32(0x07, 0x36, 0x42, 0xFF),
+        .context_menu_highlight = RGBA32(0x07, 0x36, 0x42, 0xFF),
+        .tab_inactive_border = RGBA32(0x58, 0x6E, 0x75, 0xFF),
+        .tab_active_border = RGBA32(0x93, 0xA1, 0xA1, 0xFF),
+        .tab_inactive_bg = RGBA32(0x00, 0x2B, 0x36, 0xFF),
+        .tab_active_bg = RGBA32(0x07, 0x36, 0x42, 0xFF),
+    },
+    {
+        // Gruvbox dark-inspired palette
+        .border = RGBA32(0xD5, 0xC4, 0xA1, 0xFF),
+        .progress_done = RGBA32(0x98, 0x97, 0x1A, 0xFF),
+        .progress_bg = RGBA32(0x28, 0x28, 0x28, 0xFF),
+        .scrollbar_bg = RGBA32(0x3C, 0x38, 0x36, 0xFF),
+        .scrollbar_inactive = RGBA32(0x50, 0x49, 0x45, 0xFF),
+        .scrollbar_position = RGBA32(0xD7, 0x99, 0x21, 0xFF),
+        .dialog_bg = RGBA32(0x1D, 0x20, 0x21, 0xFF),
+        .file_list_highlight = RGBA32(0x45, 0x3B, 0x2C, 0xFF),
+        .context_menu_highlight = RGBA32(0x45, 0x3B, 0x2C, 0xFF),
+        .tab_inactive_border = RGBA32(0x66, 0x5C, 0x54, 0xFF),
+        .tab_active_border = RGBA32(0xD5, 0xC4, 0xA1, 0xFF),
+        .tab_inactive_bg = RGBA32(0x3C, 0x38, 0x36, 0xFF),
+        .tab_active_bg = RGBA32(0x50, 0x49, 0x45, 0xFF),
+    },
+    {
+        // CRT terminal-inspired green palette
+        .border = RGBA32(0x9C, 0xFF, 0x9C, 0xFF),
+        .progress_done = RGBA32(0x4D, 0xFF, 0x66, 0xFF),
+        .progress_bg = RGBA32(0x00, 0x10, 0x00, 0xFF),
+        .scrollbar_bg = RGBA32(0x00, 0x18, 0x00, 0xFF),
+        .scrollbar_inactive = RGBA32(0x00, 0x26, 0x00, 0xFF),
+        .scrollbar_position = RGBA32(0x57, 0xFF, 0x57, 0xFF),
+        .dialog_bg = RGBA32(0x00, 0x08, 0x00, 0xFF),
+        .file_list_highlight = RGBA32(0x00, 0x22, 0x00, 0xFF),
+        .context_menu_highlight = RGBA32(0x00, 0x22, 0x00, 0xFF),
+        .tab_inactive_border = RGBA32(0x33, 0x88, 0x33, 0xFF),
+        .tab_active_border = RGBA32(0x9C, 0xFF, 0x9C, 0xFF),
+        .tab_inactive_bg = RGBA32(0x00, 0x14, 0x00, 0xFF),
+        .tab_active_bg = RGBA32(0x00, 0x2A, 0x00, 0xFF),
+    },
+    {
+        // Retrowave-inspired neon palette
+        .border = RGBA32(0xFF, 0x6B, 0xC8, 0xFF),
+        .progress_done = RGBA32(0x00, 0xE5, 0xFF, 0xFF),
+        .progress_bg = RGBA32(0x16, 0x08, 0x24, 0xFF),
+        .scrollbar_bg = RGBA32(0x23, 0x10, 0x38, 0xFF),
+        .scrollbar_inactive = RGBA32(0x2E, 0x18, 0x4A, 0xFF),
+        .scrollbar_position = RGBA32(0xFF, 0x9D, 0x00, 0xFF),
+        .dialog_bg = RGBA32(0x0F, 0x05, 0x19, 0xFF),
+        .file_list_highlight = RGBA32(0x31, 0x16, 0x4E, 0xFF),
+        .context_menu_highlight = RGBA32(0x31, 0x16, 0x4E, 0xFF),
+        .tab_inactive_border = RGBA32(0x77, 0x32, 0xA6, 0xFF),
+        .tab_active_border = RGBA32(0xFF, 0x6B, 0xC8, 0xFF),
+        .tab_inactive_bg = RGBA32(0x23, 0x10, 0x38, 0xFF),
+        .tab_active_bg = RGBA32(0x42, 0x1D, 0x66, 0xFF),
+    },
+    {
+        // Nord-inspired cool palette
+        .border = RGBA32(0xD8, 0xDE, 0xE9, 0xFF),
+        .progress_done = RGBA32(0x88, 0xC0, 0xD0, 0xFF),
+        .progress_bg = RGBA32(0x2E, 0x34, 0x40, 0xFF),
+        .scrollbar_bg = RGBA32(0x3B, 0x42, 0x52, 0xFF),
+        .scrollbar_inactive = RGBA32(0x43, 0x4C, 0x5E, 0xFF),
+        .scrollbar_position = RGBA32(0x81, 0xA1, 0xC1, 0xFF),
+        .dialog_bg = RGBA32(0x2E, 0x34, 0x40, 0xFF),
+        .file_list_highlight = RGBA32(0x3B, 0x42, 0x52, 0xFF),
+        .context_menu_highlight = RGBA32(0x3B, 0x42, 0x52, 0xFF),
+        .tab_inactive_border = RGBA32(0x4C, 0x56, 0x6A, 0xFF),
+        .tab_active_border = RGBA32(0xD8, 0xDE, 0xE9, 0xFF),
+        .tab_inactive_bg = RGBA32(0x2E, 0x34, 0x40, 0xFF),
+        .tab_active_bg = RGBA32(0x43, 0x4C, 0x5E, 0xFF),
+    },
+    {
+        // Dracula-inspired palette
+        .border = RGBA32(0xF8, 0xF8, 0xF2, 0xFF),
+        .progress_done = RGBA32(0x50, 0xFA, 0x7B, 0xFF),
+        .progress_bg = RGBA32(0x28, 0x2A, 0x36, 0xFF),
+        .scrollbar_bg = RGBA32(0x44, 0x47, 0x5A, 0xFF),
+        .scrollbar_inactive = RGBA32(0x38, 0x3A, 0x4A, 0xFF),
+        .scrollbar_position = RGBA32(0xBD, 0x93, 0xF9, 0xFF),
+        .dialog_bg = RGBA32(0x1E, 0x1F, 0x29, 0xFF),
+        .file_list_highlight = RGBA32(0x36, 0x38, 0x46, 0xFF),
+        .context_menu_highlight = RGBA32(0x36, 0x38, 0x46, 0xFF),
+        .tab_inactive_border = RGBA32(0x62, 0x72, 0xA4, 0xFF),
+        .tab_active_border = RGBA32(0xFF, 0x79, 0xC6, 0xFF),
+        .tab_inactive_bg = RGBA32(0x28, 0x2A, 0x36, 0xFF),
+        .tab_active_bg = RGBA32(0x36, 0x38, 0x46, 0xFF),
+    },
+    {
+        // Amber terminal-inspired palette
+        .border = RGBA32(0xFF, 0xD0, 0x7A, 0xFF),
+        .progress_done = RGBA32(0xFF, 0xB0, 0x2E, 0xFF),
+        .progress_bg = RGBA32(0x12, 0x0A, 0x00, 0xFF),
+        .scrollbar_bg = RGBA32(0x1B, 0x10, 0x00, 0xFF),
+        .scrollbar_inactive = RGBA32(0x26, 0x17, 0x00, 0xFF),
+        .scrollbar_position = RGBA32(0xFF, 0xC0, 0x4C, 0xFF),
+        .dialog_bg = RGBA32(0x0D, 0x07, 0x00, 0xFF),
+        .file_list_highlight = RGBA32(0x2C, 0x1A, 0x00, 0xFF),
+        .context_menu_highlight = RGBA32(0x2C, 0x1A, 0x00, 0xFF),
+        .tab_inactive_border = RGBA32(0x99, 0x66, 0x22, 0xFF),
+        .tab_active_border = RGBA32(0xFF, 0xD0, 0x7A, 0xFF),
+        .tab_inactive_bg = RGBA32(0x1B, 0x10, 0x00, 0xFF),
+        .tab_active_bg = RGBA32(0x33, 0x1E, 0x00, 0xFF),
+    },
+    {
+        // Ocean teal / arcade cabinet palette
+        .border = RGBA32(0xD2, 0xFF, 0xF3, 0xFF),
+        .progress_done = RGBA32(0x00, 0xD5, 0xB8, 0xFF),
+        .progress_bg = RGBA32(0x05, 0x1A, 0x1E, 0xFF),
+        .scrollbar_bg = RGBA32(0x0A, 0x24, 0x29, 0xFF),
+        .scrollbar_inactive = RGBA32(0x0F, 0x31, 0x38, 0xFF),
+        .scrollbar_position = RGBA32(0x4D, 0xF5, 0xD0, 0xFF),
+        .dialog_bg = RGBA32(0x03, 0x12, 0x15, 0xFF),
+        .file_list_highlight = RGBA32(0x0C, 0x2E, 0x34, 0xFF),
+        .context_menu_highlight = RGBA32(0x0C, 0x2E, 0x34, 0xFF),
+        .tab_inactive_border = RGBA32(0x1D, 0x66, 0x70, 0xFF),
+        .tab_active_border = RGBA32(0x7A, 0xFF, 0xE3, 0xFF),
+        .tab_inactive_bg = RGBA32(0x08, 0x21, 0x25, 0xFF),
+        .tab_active_bg = RGBA32(0x0F, 0x38, 0x40, 0xFF),
+    },
+    {
+        // Monokai-inspired palette
+        .border = RGBA32(0xF8, 0xF8, 0xF2, 0xFF),
+        .progress_done = RGBA32(0xA6, 0xE2, 0x2E, 0xFF),
+        .progress_bg = RGBA32(0x27, 0x28, 0x22, 0xFF),
+        .scrollbar_bg = RGBA32(0x3E, 0x3D, 0x32, 0xFF),
+        .scrollbar_inactive = RGBA32(0x49, 0x48, 0x3E, 0xFF),
+        .scrollbar_position = RGBA32(0x66, 0xD9, 0xEF, 0xFF),
+        .dialog_bg = RGBA32(0x1E, 0x1F, 0x1C, 0xFF),
+        .file_list_highlight = RGBA32(0x3A, 0x3B, 0x34, 0xFF),
+        .context_menu_highlight = RGBA32(0x3A, 0x3B, 0x34, 0xFF),
+        .tab_inactive_border = RGBA32(0x75, 0x71, 0x5E, 0xFF),
+        .tab_active_border = RGBA32(0xFD, 0x97, 0x1F, 0xFF),
+        .tab_inactive_bg = RGBA32(0x2B, 0x2C, 0x27, 0xFF),
+        .tab_active_bg = RGBA32(0x3A, 0x3B, 0x34, 0xFF),
+    },
+    {
+        // One Dark-inspired palette
+        .border = RGBA32(0xAB, 0xB2, 0xBF, 0xFF),
+        .progress_done = RGBA32(0x98, 0xC3, 0x79, 0xFF),
+        .progress_bg = RGBA32(0x28, 0x2C, 0x34, 0xFF),
+        .scrollbar_bg = RGBA32(0x21, 0x25, 0x2B, 0xFF),
+        .scrollbar_inactive = RGBA32(0x2F, 0x34, 0x3D, 0xFF),
+        .scrollbar_position = RGBA32(0x61, 0xAF, 0xEF, 0xFF),
+        .dialog_bg = RGBA32(0x1E, 0x22, 0x28, 0xFF),
+        .file_list_highlight = RGBA32(0x31, 0x36, 0x3F, 0xFF),
+        .context_menu_highlight = RGBA32(0x31, 0x36, 0x3F, 0xFF),
+        .tab_inactive_border = RGBA32(0x4B, 0x52, 0x5F, 0xFF),
+        .tab_active_border = RGBA32(0x61, 0xAF, 0xEF, 0xFF),
+        .tab_inactive_bg = RGBA32(0x21, 0x25, 0x2B, 0xFF),
+        .tab_active_bg = RGBA32(0x31, 0x36, 0x3F, 0xFF),
+    },
+    {
+        // Tokyo Night-inspired palette
+        .border = RGBA32(0xC0, 0xCA, 0xF5, 0xFF),
+        .progress_done = RGBA32(0x73, 0xD0, 0xFF, 0xFF),
+        .progress_bg = RGBA32(0x1A, 0x1B, 0x26, 0xFF),
+        .scrollbar_bg = RGBA32(0x1F, 0x23, 0x35, 0xFF),
+        .scrollbar_inactive = RGBA32(0x29, 0x2E, 0x42, 0xFF),
+        .scrollbar_position = RGBA32(0x7A, 0xA2, 0xF7, 0xFF),
+        .dialog_bg = RGBA32(0x14, 0x16, 0x1F, 0xFF),
+        .file_list_highlight = RGBA32(0x24, 0x27, 0x3A, 0xFF),
+        .context_menu_highlight = RGBA32(0x24, 0x27, 0x3A, 0xFF),
+        .tab_inactive_border = RGBA32(0x41, 0x4A, 0x6E, 0xFF),
+        .tab_active_border = RGBA32(0xBB, 0x9A, 0xF7, 0xFF),
+        .tab_inactive_bg = RGBA32(0x1A, 0x1D, 0x2D, 0xFF),
+        .tab_active_bg = RGBA32(0x26, 0x2A, 0x40, 0xFF),
+    },
+    {
+        // Catppuccin Mocha-inspired palette
+        .border = RGBA32(0xCD, 0xD6, 0xF4, 0xFF),
+        .progress_done = RGBA32(0xA6, 0xE3, 0xA1, 0xFF),
+        .progress_bg = RGBA32(0x1E, 0x1E, 0x2E, 0xFF),
+        .scrollbar_bg = RGBA32(0x31, 0x32, 0x44, 0xFF),
+        .scrollbar_inactive = RGBA32(0x45, 0x47, 0x5A, 0xFF),
+        .scrollbar_position = RGBA32(0x89, 0xB4, 0xFA, 0xFF),
+        .dialog_bg = RGBA32(0x18, 0x18, 0x25, 0xFF),
+        .file_list_highlight = RGBA32(0x30, 0x32, 0x47, 0xFF),
+        .context_menu_highlight = RGBA32(0x30, 0x32, 0x47, 0xFF),
+        .tab_inactive_border = RGBA32(0x58, 0x5B, 0x70, 0xFF),
+        .tab_active_border = RGBA32(0xF5, 0xC2, 0xE7, 0xFF),
+        .tab_inactive_bg = RGBA32(0x24, 0x25, 0x35, 0xFF),
+        .tab_active_bg = RGBA32(0x30, 0x32, 0x47, 0xFF),
+    },
+};
+
+static const char *ui_theme_names[] = {
+    "Classic",
+    "Solarized",
+    "Gruvbox",
+    "CRT Green",
+    "Retrowave",
+    "Nord",
+    "Dracula",
+    "Amber Terminal",
+    "Ocean Teal",
+    "Monokai",
+    "One Dark",
+    "Tokyo Night",
+    "Catppuccin",
+};
+
+static int active_theme_id = 0;
+static ui_theme_palette_t active_theme = {
+    .border = BORDER_COLOR,
+    .progress_done = PROGRESSBAR_DONE_COLOR,
+    .progress_bg = PROGRESSBAR_BG_COLOR,
+    .scrollbar_bg = SCROLLBAR_BG_COLOR,
+    .scrollbar_inactive = SCROLLBAR_INACTIVE_COLOR,
+    .scrollbar_position = SCROLLBAR_POSITION_COLOR,
+    .dialog_bg = DIALOG_BG_COLOR,
+    .file_list_highlight = FILE_LIST_HIGHLIGHT_COLOR,
+    .context_menu_highlight = CONTEXT_MENU_HIGHLIGHT_COLOR,
+    .tab_inactive_border = TAB_INACTIVE_BORDER_COLOR,
+    .tab_active_border = TAB_ACTIVE_BORDER_COLOR,
+    .tab_inactive_bg = TAB_INACTIVE_BACKGROUND_COLOR,
+    .tab_active_bg = TAB_ACTIVE_BACKGROUND_COLOR,
+};
+
+void ui_components_set_theme(int theme_id) {
+    int max_theme = (int)(sizeof(ui_theme_palettes) / sizeof(ui_theme_palettes[0])) - 1;
+    if (theme_id < 0 || theme_id > max_theme) {
+        theme_id = 0;
+    }
+    active_theme_id = theme_id;
+    active_theme = ui_theme_palettes[theme_id];
+    fonts_set_theme(theme_id);
+}
+
+int ui_components_get_theme(void) {
+    return active_theme_id;
+}
+
+const char *ui_components_theme_name(int theme_id) {
+    int max_theme = (int)(sizeof(ui_theme_names) / sizeof(ui_theme_names[0])) - 1;
+    if (theme_id < 0 || theme_id > max_theme) {
+        return ui_theme_names[0];
+    }
+    return ui_theme_names[theme_id];
+}
+
+int ui_components_theme_count(void) {
+    return (int)(sizeof(ui_theme_names) / sizeof(ui_theme_names[0]));
+}
+
+color_t ui_components_file_list_highlight_color(void) {
+    return active_theme.file_list_highlight;
+}
+
+color_t ui_components_context_menu_highlight_color(void) {
+    return active_theme.context_menu_highlight;
+}
+
 /**
  * @brief Draw a box with the specified color.
  * 
@@ -45,6 +341,33 @@ static void ui_components_border_draw_internal (int x0, int y0, int x1, int y1, 
     rdpq_mode_pop();
 }
 
+static void ui_components_text_panel_draw (int y0) {
+    if (!text_panel_enabled || text_panel_alpha == 0) {
+        return;
+    }
+
+    int x0 = VISIBLE_AREA_X0;
+    int x1 = VISIBLE_AREA_X1;
+    int y1 = LAYOUT_ACTIONS_SEPARATOR_Y + BORDER_THICKNESS;
+    if (y0 >= y1) {
+        return;
+    }
+
+    // Fill mode ignores alpha blending. Use standard mode + blender for proper translucency.
+    rdpq_mode_push();
+        rdpq_set_mode_standard();
+        rdpq_mode_combiner(RDPQ_COMBINER_FLAT);
+        rdpq_mode_blender(RDPQ_BLENDER_MULTIPLY);
+        rdpq_set_prim_color(RGBA32(0x00, 0x00, 0x00, text_panel_alpha));
+        rdpq_fill_rectangle(x0, y0, x1, y1);
+    rdpq_mode_pop();
+}
+
+void ui_components_set_text_panel (bool enabled, uint8_t alpha) {
+    text_panel_enabled = enabled;
+    text_panel_alpha = alpha;
+}
+
 /**
  * @brief Draw a border with the default border color.
  * 
@@ -54,13 +377,15 @@ static void ui_components_border_draw_internal (int x0, int y0, int x1, int y1, 
  * @param y1 The y-coordinate of the bottom-right corner.
  */
 void ui_components_border_draw (int x0, int y0, int x1, int y1) {
-    ui_components_border_draw_internal(x0, y0, x1, y1, BORDER_COLOR);
+    ui_components_border_draw_internal(x0, y0, x1, y1, active_theme.border);
 }
 
 /**
  * @brief Draw the layout with tabs.
  */
 void ui_components_layout_draw_tabbed (void) {
+    ui_components_text_panel_draw(VISIBLE_AREA_Y0 + TAB_HEIGHT + BORDER_THICKNESS);
+
     ui_components_border_draw(
         VISIBLE_AREA_X0,
         VISIBLE_AREA_Y0 + TAB_HEIGHT + BORDER_THICKNESS,
@@ -73,7 +398,7 @@ void ui_components_layout_draw_tabbed (void) {
         LAYOUT_ACTIONS_SEPARATOR_Y,
         VISIBLE_AREA_X1,
         LAYOUT_ACTIONS_SEPARATOR_Y + BORDER_THICKNESS,
-        BORDER_COLOR
+        active_theme.border
     );
 }
 
@@ -81,6 +406,8 @@ void ui_components_layout_draw_tabbed (void) {
  * @brief Draw the layout.
  */
 void ui_components_layout_draw (void) {
+    ui_components_text_panel_draw(VISIBLE_AREA_Y0 + BORDER_THICKNESS);
+
     ui_components_border_draw(
         VISIBLE_AREA_X0,
         VISIBLE_AREA_Y0,
@@ -92,7 +419,7 @@ void ui_components_layout_draw (void) {
         LAYOUT_ACTIONS_SEPARATOR_Y,
         VISIBLE_AREA_X1,
         LAYOUT_ACTIONS_SEPARATOR_Y + BORDER_THICKNESS,
-        BORDER_COLOR
+        active_theme.border
     );
 }
 
@@ -108,8 +435,8 @@ void ui_components_layout_draw (void) {
 void ui_components_progressbar_draw (int x0, int y0, int x1, int y1, float progress) {    
     float progress_width = progress * (x1 - x0);
 
-    ui_components_box_draw(x0, y0, x0 + progress_width, y1, PROGRESSBAR_DONE_COLOR);
-    ui_components_box_draw(x0 + progress_width, y0, x1, y1, PROGRESSBAR_BG_COLOR);
+    ui_components_box_draw(x0, y0, x0 + progress_width, y1, active_theme.progress_done);
+    ui_components_box_draw(x0 + progress_width, y0, x1, y1, active_theme.progress_bg);
 }
 
 /**
@@ -165,13 +492,13 @@ void ui_components_loader_draw (float progress, const char *msg) {
  */
 void ui_components_scrollbar_draw (int x, int y, int width, int height, int position, int items, int visible_items) {
     if (items <= 1 || items <= visible_items) {
-        ui_components_box_draw(x, y, x + width, y + height, SCROLLBAR_INACTIVE_COLOR);
+        ui_components_box_draw(x, y, x + width, y + height, active_theme.scrollbar_inactive);
     } else {
         int scroll_height = (int) ((visible_items / (float) (items)) * height);
         float scroll_position = ((position / (float) (items - 1)) * (height - scroll_height));
 
-        ui_components_box_draw(x, y, x + width, y + height, SCROLLBAR_BG_COLOR);
-        ui_components_box_draw(x, y + scroll_position, x + width, y + scroll_position + scroll_height, SCROLLBAR_POSITION_COLOR);
+        ui_components_box_draw(x, y, x + width, y + height, active_theme.scrollbar_bg);
+        ui_components_box_draw(x, y + scroll_position, x + width, y + scroll_position + scroll_height, active_theme.scrollbar_position);
     }
 }
 
@@ -207,7 +534,7 @@ void ui_components_dialog_draw (int width, int height) {
     int y1 = DISPLAY_CENTER_Y + (height / 2);
 
     ui_components_border_draw(x0, y0, x1, y1);
-    ui_components_box_draw(x0, y0, x1, y1, DIALOG_BG_COLOR);
+    ui_components_box_draw(x0, y0, x1, y1, active_theme.dialog_bg);
 }
 
 /**
@@ -353,7 +680,7 @@ void ui_components_tabs_draw(const char **text, int count, int selected, float w
                 y,
                 x + width,
                 y + height,
-                TAB_INACTIVE_BACKGROUND_COLOR
+                active_theme.tab_inactive_bg
             );
 
             ui_components_border_draw_internal(
@@ -361,7 +688,7 @@ void ui_components_tabs_draw(const char **text, int count, int selected, float w
                 y,
                 x + width,
                 y + height,
-                TAB_INACTIVE_BORDER_COLOR
+                active_theme.tab_inactive_border
             );
         }
         x += width;
@@ -376,7 +703,7 @@ void ui_components_tabs_draw(const char **text, int count, int selected, float w
             y,
             x + width,
             y + height,
-            TAB_ACTIVE_BACKGROUND_COLOR
+            active_theme.tab_active_bg
         );
 
         ui_components_border_draw_internal(
@@ -384,7 +711,7 @@ void ui_components_tabs_draw(const char **text, int count, int selected, float w
             y,
             x + width,
             y + height,
-            TAB_ACTIVE_BORDER_COLOR
+            active_theme.tab_active_border
         );
     }
 
@@ -424,7 +751,7 @@ void ui_component_value_editor(const char **header_text, const char **value_text
                 y,
                 x + field_width,
                 y + height + 24,
-                TAB_INACTIVE_BACKGROUND_COLOR
+                active_theme.tab_inactive_bg
             );
         }
         x += field_width;
@@ -439,7 +766,7 @@ void ui_component_value_editor(const char **header_text, const char **value_text
             y,
             x + field_width,
             y + height + 24,
-            TAB_ACTIVE_BACKGROUND_COLOR
+            active_theme.tab_active_bg
         );
     }
 
