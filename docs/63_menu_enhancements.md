@@ -31,6 +31,7 @@ Notes:
 - Relative directive paths are resolved from the playlist folder.
 - Absolute flashcart paths such as `sd:/menu/music/...` are supported.
 - Overrides are runtime-only and are restored automatically when you leave the playlist.
+- A short playlist intro toast appears when overrides are applied, summarizing the active profile (theme/BGM/viz/background).
 
 Example:
 ```m3u
@@ -92,6 +93,26 @@ Example:
   - `Oscilloscope`
 - Visualizer intensity can be set to `Subtle`, `Normal`, or `Full`.
 - Selected row text shimmer (theme-colored rainbow cycle) can be toggled in Menu Settings.
+
+### Asset Tooling (Backgrounds / Music / WAV64)
+The branch includes a helper script to speed up background/music prep:
+
+- `tools/sc64/menu_assets.sh bg <input> <output.png>`
+  - converts and crops to `640x480` PNG for menu backgrounds
+- `tools/sc64/menu_assets.sh screensaver <input> <output.png>`
+  - resizes/pads logos to `<=180x96`
+- `tools/sc64/menu_assets.sh music-mp3 <input> <output.mp3> [bitrate_kbps]`
+  - re-encodes menu-safe MP3 (`32 kHz`, stereo)
+- `tools/sc64/menu_assets.sh music-wav64 <input-audio>`
+  - converts one track to `WAV64` (ADPCM, `32 kHz`) next to the source file
+- `tools/sc64/menu_assets.sh music-wav64-batch <dir>`
+  - batch converts a music folder to `.wav64`
+- `tools/sc64/menu_assets.sh rewrite-m3u-wav64 <m3u-or-dir> [more...]`
+  - rewrites playlist `#SC64_BGM` / `#SC64_MUSIC` directives from `.mp3` to `.wav64` when a matching `.wav64` file exists
+
+Tool requirements:
+- `ffmpeg`
+- `audioconv64` (from libdragon toolchain)
 
 ### Screensaver
 - Idle DVD-logo screensaver is available.
