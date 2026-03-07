@@ -1230,6 +1230,8 @@ static void extract_rom_info (match_t *match, rom_header_t *rom_header, rom_info
     rom_info->settings.cheats_enabled = false;
     rom_info->settings.patches_enabled = false;
     rom_info->settings.patch_profile[0] = '\0';
+    rom_info->settings.virtual_pak_enabled = false;
+    rom_info->settings.virtual_pak_slot = 1;
 }
 
 static void load_rom_config_from_file (path_t *path, rom_info_t *rom_info) {
@@ -1253,6 +1255,14 @@ static void load_rom_config_from_file (path_t *path, rom_info_t *rom_info) {
             "%s",
             mini_get_string(rom_config_ini, NULL, "patch_profile", "")
         );
+        rom_info->settings.virtual_pak_enabled = mini_get_bool(rom_config_ini, NULL, "virtual_pak_enabled", rom_info->settings.virtual_pak_enabled);
+        int virtual_pak_slot = mini_get_int(rom_config_ini, NULL, "virtual_pak_slot", rom_info->settings.virtual_pak_slot);
+        if (virtual_pak_slot < 1) {
+            virtual_pak_slot = 1;
+        } else if (virtual_pak_slot > 8) {
+            virtual_pak_slot = 8;
+        }
+        rom_info->settings.virtual_pak_slot = (uint8_t)virtual_pak_slot;
 
         // metadata
         rom_info->metadata.esrb_age_rating = mini_get_int(rom_config_ini, "metadata", "esrb_age_rating", ROM_ESRB_AGE_RATING_NONE);
@@ -1627,6 +1637,21 @@ rom_err_t rom_config_override_tv_type (path_t *path, rom_info_t *rom_info, rom_t
 rom_err_t rom_config_setting_set_cheats (path_t *path, rom_info_t *rom_info, bool enabled) {
     rom_info->settings.cheats_enabled = enabled;
     return save_rom_config_setting_to_file(path, NULL, "cheats_enabled", enabled, false);
+}
+
+rom_err_t rom_config_setting_set_virtual_pak_enabled(path_t *path, rom_info_t *rom_info, bool enabled) {
+    rom_info->settings.virtual_pak_enabled = enabled;
+    return save_rom_config_setting_to_file(path, NULL, "virtual_pak_enabled", enabled, false);
+}
+
+rom_err_t rom_config_setting_set_virtual_pak_slot(path_t *path, rom_info_t *rom_info, uint8_t slot) {
+    if (slot < 1) {
+        slot = 1;
+    } else if (slot > 8) {
+        slot = 8;
+    }
+    rom_info->settings.virtual_pak_slot = slot;
+    return save_rom_config_setting_to_file(path, NULL, "virtual_pak_slot", slot, 1);
 }
 
 #ifdef FEATURE_PATCHER_GUI_ENABLED

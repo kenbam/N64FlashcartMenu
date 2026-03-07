@@ -183,6 +183,8 @@ typedef struct {
         bool cheats_enabled;        /**< Cheats enabled */
         bool patches_enabled;       /**< Patches enabled */
         char patch_profile[96];     /**< Selected patch manifest filename (e.g. default.ini) */
+        bool virtual_pak_enabled;   /**< Use a virtual controller pak for this ROM */
+        uint8_t virtual_pak_slot;   /**< Virtual controller pak slot (1-based) */
     } settings;                     /**< The ROM settings */
 
     struct {
@@ -303,6 +305,26 @@ rom_save_type_t rom_info_get_save_type(rom_info_t *rom_info);
  * @return rom_err_t Error code
  */
 rom_err_t rom_config_override_save_type(path_t *path, rom_info_t *rom_info, rom_save_type_t save_type);
+
+/**
+ * @brief Persist the virtual controller pak enabled flag for a ROM.
+ *
+ * @param path ROM path
+ * @param rom_info Loaded ROM info to update
+ * @param enabled Whether the virtual pak should be used
+ * @return rom_err_t Error code
+ */
+rom_err_t rom_config_setting_set_virtual_pak_enabled(path_t *path, rom_info_t *rom_info, bool enabled);
+
+/**
+ * @brief Persist the selected virtual controller pak slot for a ROM.
+ *
+ * @param path ROM path
+ * @param rom_info Loaded ROM info to update
+ * @param slot 1-based slot index
+ * @return rom_err_t Error code
+ */
+rom_err_t rom_config_setting_set_virtual_pak_slot(path_t *path, rom_info_t *rom_info, uint8_t slot);
 
 /**
  * @brief Get the TV type for the ROM.

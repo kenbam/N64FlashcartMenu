@@ -24,6 +24,7 @@
 #include "settings.h"
 #include "sound.h"
 #include "usb_comm.h"
+#include "virtual_pak.h"
 #include "utils/fs.h"
 #include "views/views.h"
 
@@ -930,6 +931,9 @@ static void menu_init (boot_params_t *boot_params) {
     time(&menu->current_time);
     playtime_finalize_active(&menu->playtime, menu->current_time);
     path_pop(path);
+
+    virtual_pak_init(menu->storage_prefix);
+    virtual_pak_try_sync_pending();
   
     if (menu->settings.pal60_compatibility_mode) { // hardware VI mods that dont really understand the output
         tv_type = get_tv_type();

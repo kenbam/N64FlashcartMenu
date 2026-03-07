@@ -4,6 +4,7 @@
 #include "../playtime.h"
 #include "../rom_info.h"
 #include "../sound.h"
+#include "../virtual_pak.h"
 #include "boot/boot.h"
 #include "utils/fs.h"
 #include "views.h"
@@ -536,6 +537,38 @@ static void add_favorite (menu_t *menu, void *arg) {
     bookkeeping_favorite_add(&menu->bookkeeping, menu->load.rom_path, NULL, BOOKKEEPING_TYPE_ROM);
 }
 
+static void set_virtual_pak_enabled(menu_t *menu, void *arg) {
+    bool enabled = (arg != NULL);
+    if (!menu->load.rom_info.features.controller_pak) {
+        menu_show_error(menu, "This game doesn't use a Controller Pak");
+        return;
+    }
+    rom_err_t err = rom_config_setting_set_virtual_pak_enabled(menu->load.rom_path, &menu->load.rom_info, enabled);
+    if (err != ROM_OK) {
+        menu_show_error(menu, convert_error_message(err));
+        return;
+    }
+    sound_play_effect(SFX_SETTING);
+}
+
+static void set_next_virtual_pak_slot(menu_t *menu, void *arg) {
+    (void)arg;
+    if (!menu->load.rom_info.features.controller_pak) {
+        menu_show_error(menu, "This game doesn't use a Controller Pak");
+        return;
+    }
+    uint8_t next_slot = (uint8_t)(menu->load.rom_info.settings.virtual_pak_slot + 1);
+    if (next_slot < 1 || next_slot > 8) {
+        next_slot = 1;
+    }
+    rom_err_t err = rom_config_setting_set_virtual_pak_slot(menu->load.rom_path, &menu->load.rom_info, next_slot);
+    if (err != ROM_OK) {
+        menu_show_error(menu, convert_error_message(err));
+        return;
+    }
+    sound_play_effect(SFX_SETTING);
+}
+
 static void iterate_metadata_image(menu_t *menu, int direction) {
     scan_metadata_images(menu);
 
@@ -611,6 +644,13 @@ static component_context_menu_t set_cheat_options_menu = { .list = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static component_context_menu_t set_virtual_pak_options_menu = { .list = {
+    { .text = "Enable", .action = set_virtual_pak_enabled, .arg = (void *) (true)},
+    { .text = "Disable", .action = set_virtual_pak_enabled, .arg = (void *) (false)},
+    { .text = "Next Slot", .action = set_next_virtual_pak_slot },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 #ifdef FEATURE_PATCHER_GUI_ENABLED
 static component_context_menu_t set_patcher_options_menu = { .list = {
     { .text = "Enable", .action = set_patcher_option, .arg = (void *) (true)},
@@ -633,6 +673,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Set ROM to autoload", .action = set_autoload_type },
 #endif
     { .text = "Use Cheats", .submenu = &set_cheat_options_menu },
+    { .text = "Virtual Controller Pak", .submenu = &set_virtual_pak_options_menu },
     { .text = "Datel Code Editor", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_DATEL_CODE_EDITOR) },
 #ifdef FEATURE_PATCHER_GUI_ENABLED
     { .text = "Use Patches", .submenu = &set_patcher_options_menu },
@@ -914,6 +955,8 @@ static void draw (menu_t *menu, surface_t *d) {
         const char *genre = (menu->load.rom_info.metadata.genre[0] != '\0') ? menu->load.rom_info.metadata.genre : "Unknown";
         const char *series = (menu->load.rom_info.metadata.series[0] != '\0') ? menu->load.rom_info.metadata.series : "Unknown";
         const char *modes = (menu->load.rom_info.metadata.modes[0] != '\0') ? menu->load.rom_info.metadata.modes : "Unknown";
+        char virtual_pak[128];
+        virtual_pak_describe(menu, virtual_pak, sizeof(virtual_pak));
         char age_rating[16];
         char release_year[16];
         char players[24];
@@ -968,6 +1011,7 @@ static void draw (menu_t *menu, surface_t *d) {
             "Series:\t\t\t%s\n"
             "Players:\t\t\t%s\n"
             "Modes:\t\t\t%s\n"
+            "Virtual PAK:\t\t%s\n"
             "ESRB Rating:\t\t%s\n"
             "Age Rating:\t\t%s\n\n"
             "Description:\n\t%s\n\n"
@@ -996,6 +1040,7 @@ static void draw (menu_t *menu, surface_t *d) {
             series,
             players,
             modes,
+            virtual_pak,
             format_esrb_age_rating(menu->load.rom_info.metadata.esrb_age_rating),
             age_rating,
             format_rom_description(menu),
@@ -1136,6 +1181,11 @@ static void draw_progress (float progress) {
 static void load (menu_t *menu) {
     debugf("Load ROM: load function called\n");
     cart_load_err_t err;
+    char virtual_pak_error[128];
+    if (!virtual_pak_prepare_launch(menu, virtual_pak_error, sizeof(virtual_pak_error))) {
+        menu_show_error(menu, virtual_pak_error);
+        return;
+    }
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (!menu->settings.loading_progress_bar_enabled) {
         err = cart_load_n64_rom_and_save(menu, NULL);
