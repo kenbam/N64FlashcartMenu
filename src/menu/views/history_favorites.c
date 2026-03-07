@@ -27,6 +27,54 @@ static uint16_t item_max = 0;
 static playtime_entry_t **playtime_ranked = NULL;
 static uint16_t playtime_ranked_count = 0;
 
+static bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len) {
+    if (!current_path || current_path[0] == '\0' || !out || out_len == 0) {
+        return false;
+    }
+    if (file_exists((char *)current_path)) {
+        snprintf(out, out_len, "%s", current_path);
+        return true;
+    }
+    if (storage_prefix && current_path[0] == '/') {
+        path_t *prefixed = path_init(storage_prefix, (char *)current_path);
+        if (prefixed && file_exists(path_get(prefixed))) {
+            snprintf(out, out_len, "%s", path_get(prefixed));
+            path_free(prefixed);
+            return true;
+        }
+        path_free(prefixed);
+    }
+    return false;
+}
+
+static bool resolve_playtime_entry_path(menu_t *menu, playtime_entry_t *entry) {
+    if (!menu || !entry) {
+        return false;
+    }
+
+    char resolved_path[512];
+    if (resolve_existing_rom_path(menu->storage_prefix, entry->path, resolved_path, sizeof(resolved_path))) {
+        if (!entry->path || strcmp(entry->path, resolved_path) != 0) {
+            free(entry->path);
+            entry->path = strdup(resolved_path);
+            playtime_save(&menu->playtime);
+        }
+        return true;
+    }
+    if (entry->game_id[0] == '\0') {
+        return false;
+    }
+
+    if (!rom_info_resolve_stable_id_path(menu->storage_prefix, entry->game_id, entry->path, resolved_path, sizeof(resolved_path))) {
+        return false;
+    }
+
+    free(entry->path);
+    entry->path = strdup(resolved_path);
+    playtime_save(&menu->playtime);
+    return (entry->path != NULL);
+}
+
 static void buffer_appendf(char *buffer, size_t length, int *cursor, const char *fmt, ...) {
     if (!buffer || !cursor || *cursor < 0 || (size_t)(*cursor) >= length) {
         return;
@@ -202,13 +250,15 @@ static void process(menu_t *menu) {
     } else if (menu->actions.enter && item_index_valid(selected_item)) {
         if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME) {
             playtime_entry_t *entry = playtime_ranked[selected_item];
-            if (entry && entry->path) {
+            if (entry && resolve_playtime_entry_path(menu, entry) && entry->path) {
                 if (menu->browser.select_file) {
                     path_free(menu->browser.select_file);
                 }
                 menu->browser.select_file = path_create(entry->path);
                 menu->next_mode = MENU_MODE_BROWSER;
                 sound_play_effect(SFX_ENTER);
+            } else {
+                menu_show_error(menu, "Couldn't locate ROM");
             }
             return;
         }

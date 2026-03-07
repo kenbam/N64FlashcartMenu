@@ -410,6 +410,59 @@ static void scan_patch_profiles_in_dir(path_t *dir_path, char names[][128], int 
     }
 }
 
+static bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len) {
+    if (!current_path || current_path[0] == '\0' || !out || out_len == 0) {
+        return false;
+    }
+    if (file_exists((char *)current_path)) {
+        snprintf(out, out_len, "%s", current_path);
+        return true;
+    }
+    if (storage_prefix && current_path[0] == '/') {
+        path_t *prefixed = path_init(storage_prefix, (char *)current_path);
+        if (prefixed && file_exists(path_get(prefixed))) {
+            snprintf(out, out_len, "%s", path_get(prefixed));
+            path_free(prefixed);
+            return true;
+        }
+        path_free(prefixed);
+    }
+    return false;
+}
+
+static bool resolve_bookkeeping_rom_path(menu_t *menu, bookkeeping_item_t *item) {
+    if (!menu || !item) {
+        return false;
+    }
+
+    const char *current_path = item->primary_path ? path_get(item->primary_path) : NULL;
+    char resolved_path[512];
+    if (resolve_existing_rom_path(menu->storage_prefix, current_path, resolved_path, sizeof(resolved_path))) {
+        if (!item->primary_path || strcmp(path_get(item->primary_path), resolved_path) != 0) {
+            if (item->primary_path) {
+                path_free(item->primary_path);
+            }
+            item->primary_path = path_create(resolved_path);
+            bookkeeping_save(&menu->bookkeeping);
+        }
+        return true;
+    }
+    if (item->game_id[0] == '\0') {
+        return false;
+    }
+
+    if (!rom_info_resolve_stable_id_path(menu->storage_prefix, item->game_id, current_path, resolved_path, sizeof(resolved_path))) {
+        return false;
+    }
+
+    if (item->primary_path) {
+        path_free(item->primary_path);
+    }
+    item->primary_path = path_create(resolved_path);
+    bookkeeping_save(&menu->bookkeeping);
+    return true;
+}
+
 static bool find_next_patch_profile(menu_t *menu, char *out, size_t out_len) {
     char c0[2] = { menu->load.rom_info.game_code[0], '\0' };
     char c1[2] = { menu->load.rom_info.game_code[1], '\0' };
@@ -1137,9 +1190,13 @@ void view_load_rom_init (menu_t *menu) {
         }
 
         if(menu->load.load_history_id != -1) {
-            menu->load.rom_path = path_clone(menu->bookkeeping.history_items[menu->load.load_history_id].primary_path);
+            bookkeeping_item_t *item = &menu->bookkeeping.history_items[menu->load.load_history_id];
+            resolve_bookkeeping_rom_path(menu, item);
+            menu->load.rom_path = item->primary_path ? path_clone(item->primary_path) : NULL;
         } else if(menu->load.load_favorite_id != -1) {
-            menu->load.rom_path = path_clone(menu->bookkeeping.favorite_items[menu->load.load_favorite_id].primary_path);
+            bookkeeping_item_t *item = &menu->bookkeeping.favorite_items[menu->load.load_favorite_id];
+            resolve_bookkeeping_rom_path(menu, item);
+            menu->load.rom_path = item->primary_path ? path_clone(item->primary_path) : NULL;
         } else {
             if (menu->browser.entry && menu->browser.entry->path) {
                 menu->load.rom_path = path_create(menu->browser.entry->path);
@@ -1148,13 +1205,18 @@ void view_load_rom_init (menu_t *menu) {
             }
         }
 
-        rom_filename = path_last_get(menu->load.rom_path);
+        rom_filename = menu->load.rom_path ? path_last_get(menu->load.rom_path) : NULL;
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     }
 #endif 
 
     if (show_extra_info_message) {
         show_extra_info_message = false;
+    }
+
+    if (!menu->load.rom_path || !path_has_value(menu->load.rom_path)) {
+        menu_show_error(menu, "Couldn't locate ROM");
+        return;
     }
 
     debugf("Load ROM: loading ROM info from %s\n", path_get(menu->load.rom_path));

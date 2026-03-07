@@ -238,6 +238,28 @@ bool rom_info_get_stable_id(const rom_info_t *rom_info, char *out, size_t out_le
 bool rom_info_get_stable_id_for_path(const char *path, char *out, size_t out_len);
 
 /**
+ * @brief Resolve a ROM path by stable identity, scanning storage on demand.
+ *
+ * This is intended for recovering bookmarks/stats after a ROM is moved or
+ * renamed. The resolver prefers the existing path when still valid, otherwise
+ * it scans the storage root for a matching ROM stable ID.
+ *
+ * @param storage_prefix Storage prefix such as `sd:`
+ * @param game_id Stable ROM identity string
+ * @param preferred_path Existing stored path to try first
+ * @param out Output buffer for the resolved absolute path
+ * @param out_len Output buffer length
+ * @return true if a matching ROM path was found
+ */
+bool rom_info_resolve_stable_id_path(
+    const char *storage_prefix,
+    const char *game_id,
+    const char *preferred_path,
+    char *out,
+    size_t out_len
+);
+
+/**
  * @brief Get the CIC type for the ROM.
  * 
  * @param rom_info Pointer to the ROM information structure

@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <libdragon.h>
 #include <mini.c/src/mini.h>
 
 #include "boot/cic.h"
@@ -577,7 +578,15 @@ typedef struct {
     uint32_t last_used_tick;
 } rom_stable_id_cache_entry_t;
 
+typedef struct {
+    bool valid;
+    char stable_id[ROM_STABLE_ID_LENGTH];
+    char *path;
+    uint32_t last_used_tick;
+} rom_resolved_path_cache_entry_t;
+
 static rom_stable_id_cache_entry_t rom_stable_id_cache[ROM_STABLE_ID_CACHE_SIZE];
+static rom_resolved_path_cache_entry_t rom_resolved_path_cache[ROM_STABLE_ID_CACHE_SIZE];
 static uint32_t rom_stable_id_cache_tick = 1;
 
 static rom_stable_id_cache_entry_t *rom_stable_id_cache_find(const char *path) {
@@ -621,6 +630,57 @@ static rom_stable_id_cache_entry_t *rom_stable_id_cache_alloc(const char *path) 
     rom_stable_id_cache_entry_t *slot = empty ? empty : oldest;
     free(slot->path);
     memset(slot, 0, sizeof(*slot));
+    slot->path = strdup(path);
+    if (!slot->path) {
+        return NULL;
+    }
+    slot->valid = true;
+    slot->last_used_tick = ++rom_stable_id_cache_tick;
+    return slot;
+}
+
+static rom_resolved_path_cache_entry_t *rom_resolved_path_cache_find(const char *stable_id) {
+    if (!stable_id || stable_id[0] == '\0') {
+        return NULL;
+    }
+
+    for (int i = 0; i < ROM_STABLE_ID_CACHE_SIZE; i++) {
+        rom_resolved_path_cache_entry_t *entry = &rom_resolved_path_cache[i];
+        if (!entry->valid || !entry->path) {
+            continue;
+        }
+        if (strcmp(entry->stable_id, stable_id) == 0) {
+            entry->last_used_tick = ++rom_stable_id_cache_tick;
+            return entry;
+        }
+    }
+
+    return NULL;
+}
+
+static rom_resolved_path_cache_entry_t *rom_resolved_path_cache_alloc(const char *stable_id, const char *path) {
+    if (!stable_id || stable_id[0] == '\0' || !path || path[0] == '\0') {
+        return NULL;
+    }
+
+    rom_resolved_path_cache_entry_t *empty = NULL;
+    rom_resolved_path_cache_entry_t *oldest = &rom_resolved_path_cache[0];
+
+    for (int i = 0; i < ROM_STABLE_ID_CACHE_SIZE; i++) {
+        rom_resolved_path_cache_entry_t *entry = &rom_resolved_path_cache[i];
+        if (!entry->valid) {
+            empty = entry;
+            break;
+        }
+        if (entry->last_used_tick < oldest->last_used_tick) {
+            oldest = entry;
+        }
+    }
+
+    rom_resolved_path_cache_entry_t *slot = empty ? empty : oldest;
+    free(slot->path);
+    memset(slot, 0, sizeof(*slot));
+    snprintf(slot->stable_id, sizeof(slot->stable_id), "%s", stable_id);
     slot->path = strdup(path);
     if (!slot->path) {
         return NULL;
@@ -1107,6 +1167,68 @@ static void load_rom_config_from_file (path_t *path, rom_info_t *rom_info) {
     path_free(rom_info_path);
 }
 
+static bool rom_identity_should_scan_dir(const char *dirname) {
+    if (!dirname || dirname[0] == '\0') {
+        return false;
+    }
+    if (strcmp(dirname, ".") == 0 || strcmp(dirname, "..") == 0) {
+        return false;
+    }
+    if (dirname[0] == '.') {
+        return false;
+    }
+    if (strcmp(dirname, "menu") == 0 ||
+        strcmp(dirname, "ED64") == 0 ||
+        strcmp(dirname, "ED64P") == 0 ||
+        strcmp(dirname, "System Volume Information") == 0) {
+        return false;
+    }
+    return true;
+}
+
+static bool rom_identity_scan_dir(path_t *dir_path, const char *target_game_id, char *out, size_t out_len, int depth) {
+    static const char *rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
+
+    if (!dir_path || !target_game_id || !out || out_len == 0 || depth > 12) {
+        return false;
+    }
+    if (!directory_exists(path_get(dir_path))) {
+        return false;
+    }
+
+    dir_t info;
+    int result = dir_findfirst(path_get(dir_path), &info);
+    while (result == 0) {
+        if (info.d_type == DT_DIR) {
+            if (rom_identity_should_scan_dir(info.d_name)) {
+                path_t *subdir = path_clone_push(dir_path, info.d_name);
+                if (subdir) {
+                    bool found = rom_identity_scan_dir(subdir, target_game_id, out, out_len, depth + 1);
+                    path_free(subdir);
+                    if (found) {
+                        return true;
+                    }
+                }
+            }
+        } else if (file_has_extensions(info.d_name, rom_extensions)) {
+            path_t *candidate = path_clone_push(dir_path, info.d_name);
+            if (candidate) {
+                char candidate_game_id[ROM_STABLE_ID_LENGTH] = {0};
+                if (rom_info_get_stable_id_for_path(path_get(candidate), candidate_game_id, sizeof(candidate_game_id)) &&
+                    strcmp(candidate_game_id, target_game_id) == 0) {
+                    snprintf(out, out_len, "%s", path_get(candidate));
+                    path_free(candidate);
+                    return true;
+                }
+                path_free(candidate);
+            }
+        }
+        result = dir_findnext(path_get(dir_path), &info);
+    }
+
+    return false;
+}
+
 bool rom_info_get_stable_id(const rom_info_t *rom_info, char *out, size_t out_len) {
     if (!rom_info || !out || out_len < ROM_STABLE_ID_LENGTH) {
         return false;
@@ -1161,6 +1283,60 @@ bool rom_info_get_stable_id_for_path(const char *path, char *out, size_t out_len
     }
 
     return true;
+}
+
+bool rom_info_resolve_stable_id_path(
+    const char *storage_prefix,
+    const char *game_id,
+    const char *preferred_path,
+    char *out,
+    size_t out_len
+) {
+    if (!storage_prefix || !game_id || game_id[0] == '\0' || !out || out_len == 0) {
+        return false;
+    }
+
+    if (preferred_path && preferred_path[0] != '\0') {
+        char absolute_preferred[512];
+        const char *preferred_candidate = preferred_path;
+        if (!file_exists((char *)preferred_candidate) && preferred_path[0] == '/') {
+            path_t *prefixed = path_init(storage_prefix, (char *)preferred_path);
+            if (prefixed) {
+                snprintf(absolute_preferred, sizeof(absolute_preferred), "%s", path_get(prefixed));
+                preferred_candidate = absolute_preferred;
+                path_free(prefixed);
+            }
+        }
+
+        if (file_exists((char *)preferred_candidate)) {
+            char preferred_game_id[ROM_STABLE_ID_LENGTH] = {0};
+            if (rom_info_get_stable_id_for_path(preferred_candidate, preferred_game_id, sizeof(preferred_game_id)) &&
+                strcmp(preferred_game_id, game_id) == 0) {
+                snprintf(out, out_len, "%s", preferred_candidate);
+                rom_resolved_path_cache_alloc(game_id, preferred_candidate);
+                return true;
+            }
+        }
+    }
+
+    rom_resolved_path_cache_entry_t *cached = rom_resolved_path_cache_find(game_id);
+    if (cached && file_exists(cached->path)) {
+        snprintf(out, out_len, "%s", cached->path);
+        return true;
+    }
+
+    path_t *root = path_init(storage_prefix, "/");
+    if (!root) {
+        return false;
+    }
+
+    bool found = rom_identity_scan_dir(root, game_id, out, out_len, 0);
+    path_free(root);
+
+    if (found) {
+        rom_resolved_path_cache_alloc(game_id, out);
+    }
+    return found;
 }
 
 static rom_err_t save_rom_config_setting_to_file (path_t *path, const char *type, const char *id, int value, int default_value) {
