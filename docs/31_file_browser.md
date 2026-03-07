@@ -10,6 +10,7 @@ The File Browser allows you to navigate and manage files on your N64 flashcart. 
 - **Load files**: Load files from the file system.
 - **Extract files**: Extract files from ZIP archives.
 - **Switching tabs**: Switch between the file browser, favorites and history tabs.
+- **Playlist views**: Open `.m3u` playlists with fixed entries or metadata-driven smart rules.
 
 ### Usage Instructions
 <!-- Maybe all the Control pages could be merged into this section? -->
@@ -32,6 +33,11 @@ The File Browser allows you to navigate and manage files on your N64 flashcart. 
     - Press the `A` Button on a ZIP file to open the archive.
     - Navigate to the file you want to extract.
     - Press the `A` button to open the file info and press `A` again to extract the file.
+
+6. **Opening playlists**:
+    - Press the `A` Button on an `.m3u` playlist to open it like a virtual folder.
+    - Playlist files can mix explicit ROM paths with `#SC64_SMART_*` / `#SC64_FILTER_*` directives to auto-build a curated list from metadata.
+    - When a playlist sets appearance overrides, those changes apply only while that playlist is open.
 
 ### Tips
 

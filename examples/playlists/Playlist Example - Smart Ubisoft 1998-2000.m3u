@@ -1,0 +1,10 @@
+#SC64_THEME=Nord
+#SC64_BG=/menu/backgrounds/forest-ruins-menu.png
+#SC64_BGM=/menu/music/Final Fantasy IX OST - Crossing Those HIlls.wav64
+#SC64_DESC=Auto-built Ubisoft-heavy late-90s picks from your USA shelf.
+#SC64_VIEW=GRID
+#SC64_SMART_ROOT=/N64 - USA
+#SC64_FILTER_PUBLISHER=Ubisoft
+#SC64_FILTER_YEAR=1998-2000
+#SC64_SMART_SORT=YEAR
+

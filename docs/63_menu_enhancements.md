@@ -28,12 +28,23 @@ Supported directives:
 - `#SC64_TEXT_PANEL=<On|Off>`
 - `#SC64_TEXT_PANEL_ALPHA=<0..255>`
 - `#SC64_SCREENSAVER_LOGO=<path to png>`
+- `#SC64_SMART_ROOT=<path>` or `#SC64_ROOT=<path>`
+- `#SC64_FILTER_TITLE=<text>`
+- `#SC64_FILTER_PUBLISHER=<text>`
+- `#SC64_FILTER_DESCRIPTION=<text>`
+- `#SC64_FILTER_YEAR=<1998 | 1998-2000 | >=1998 | <=2000>`
+- `#SC64_FILTER_AGE=<3 | 10-17 | >=13>`
+- `#SC64_FILTER_REGION=<E | P | J | USA | PAL | JPN>`
+- `#SC64_SMART_SORT=<Title | Year | Publisher | Random>`
 
 Notes:
 - Relative directive paths are resolved from the playlist folder.
 - Absolute flashcart paths such as `sd:/menu/music/...` are supported.
 - Overrides are runtime-only and are restored automatically when you leave the playlist.
 - A short playlist intro toast appears when overrides are applied, summarizing the active profile (theme/BGM/viz/background).
+- Smart playlists scan the configured roots recursively, then append matching ROMs after any explicit `.m3u` entries.
+- If a smart playlist has filters but no `SMART_ROOT`, it defaults to scanning the flashcart root.
+- Matching uses loaded ROM metadata (`name`, `author`, `description`, `release_year`, `age_rating`) plus ROM region code.
 
 Example:
 ```m3u
@@ -46,6 +57,15 @@ Example:
 #SC64_TEXT_PANEL_ALPHA=160
 ../../N64 - USA/Mario Kart 64 (USA).z64
 ../../N64 - USA/F-Zero X (USA).z64
+```
+
+Smart playlist example:
+```m3u
+#SC64_DESC=Ubisoft late-90s picks, auto-built from metadata.
+#SC64_SMART_ROOT=/N64 - USA
+#SC64_FILTER_PUBLISHER=Ubisoft
+#SC64_FILTER_YEAR=1998-2000
+#SC64_SMART_SORT=YEAR
 ```
 
 ### Browser Sorting and Random Selection
