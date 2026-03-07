@@ -987,7 +987,7 @@ static bool parse_player_count_from_value(const char *value, int32_t *out_min, i
     return true;
 }
 
-static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom_info) {
+static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom_info, bool include_long_description) {
     if ((directory == NULL) || (rom_info == NULL)) {
         return;
     }
@@ -1101,7 +1101,9 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
 
     fclose(metadata_file);
 
-    if ((rom_info->metadata.long_desc[0] == '\0') && (long_desc_file[0] != '\0')) {
+    if (include_long_description &&
+        (rom_info->metadata.long_desc[0] == '\0') &&
+        (long_desc_file[0] != '\0')) {
         path_t *description_path = path_clone(directory);
         path_push(description_path, long_desc_file);
         read_text_file_to_buffer(path_get(description_path), rom_info->metadata.long_desc,
@@ -1110,7 +1112,7 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
     }
 
     // Common metadata fallback used by our generated sets.
-    if (rom_info->metadata.long_desc[0] == '\0') {
+    if (include_long_description && rom_info->metadata.long_desc[0] == '\0') {
         path_t *description_path = path_clone(directory);
         path_push(description_path, "description.txt");
         if (file_exists(path_get(description_path))) {
@@ -1121,7 +1123,7 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
     }
 }
 
-static void load_rom_metadata (path_t *rom_path, rom_info_t *rom_info) {
+static void load_rom_metadata (path_t *rom_path, rom_info_t *rom_info, bool include_long_description) {
     if ((rom_path == NULL) || (rom_info == NULL)) {
         return;
     }
@@ -1155,11 +1157,11 @@ static void load_rom_metadata (path_t *rom_path, rom_info_t *rom_info) {
         path_push(metadata_directory, component);
     }
 
-    load_rom_metadata_from_directory(metadata_directory, rom_info);
+    load_rom_metadata_from_directory(metadata_directory, rom_info, include_long_description);
 
     // Region-agnostic fallback: /menu/metadata/<category>/<unique0>/<unique1>/metadata.ini
     path_pop(metadata_directory);
-    load_rom_metadata_from_directory(metadata_directory, rom_info);
+    load_rom_metadata_from_directory(metadata_directory, rom_info, include_long_description);
 
     path_free(metadata_directory);
 }
@@ -1671,9 +1673,14 @@ rom_err_t rom_config_setting_set_patch_profile (path_t *path, rom_info_t *rom_in
 }
 #endif
 
-rom_err_t rom_config_load (path_t *path, rom_info_t *rom_info) {
+rom_err_t rom_config_load_ex(path_t *path, rom_info_t *rom_info, const rom_load_options_t *options) {
     FILE *f;
     rom_header_t rom_header;
+    rom_load_options_t defaults = {
+        .include_config = true,
+        .include_long_description = true,
+    };
+    const rom_load_options_t *effective = options ? options : &defaults;
 
     if ((f = fopen(path_get(path), "rb")) == NULL) {
         return ROM_ERR_NO_FILE;
@@ -1693,8 +1700,14 @@ rom_err_t rom_config_load (path_t *path, rom_info_t *rom_info) {
 
     extract_rom_info(&match, &rom_header, rom_info);
 
-    load_rom_config_from_file(path, rom_info);
-    load_rom_metadata(path, rom_info);
+    if (effective->include_config) {
+        load_rom_config_from_file(path, rom_info);
+    }
+    load_rom_metadata(path, rom_info, effective->include_long_description);
 
     return ROM_OK;
+}
+
+rom_err_t rom_config_load (path_t *path, rom_info_t *rom_info) {
+    return rom_config_load_ex(path, rom_info, NULL);
 }

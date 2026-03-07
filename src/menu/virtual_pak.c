@@ -22,6 +22,7 @@ typedef struct {
     char game_id[ROM_STABLE_ID_LENGTH];
     char rom_path[512];
     char pak_path[512];
+    char backup_path[512];
 } virtual_pak_session_t;
 
 static char g_session_path[512];
@@ -59,6 +60,7 @@ static void virtual_pak_session_load(virtual_pak_session_t *session) {
     snprintf(session->game_id, sizeof(session->game_id), "%s", mini_get_string(ini, "session", "game_id", ""));
     snprintf(session->rom_path, sizeof(session->rom_path), "%s", mini_get_string(ini, "session", "rom_path", ""));
     snprintf(session->pak_path, sizeof(session->pak_path), "%s", mini_get_string(ini, "session", "pak_path", ""));
+    snprintf(session->backup_path, sizeof(session->backup_path), "%s", mini_get_string(ini, "session", "backup_path", ""));
 
     mini_free(ini);
 }
@@ -75,6 +77,7 @@ static void virtual_pak_session_save(const virtual_pak_session_t *session) {
     mini_set_string(ini, "session", "game_id", session->game_id);
     mini_set_string(ini, "session", "rom_path", session->rom_path);
     mini_set_string(ini, "session", "pak_path", session->pak_path);
+    mini_set_string(ini, "session", "backup_path", session->backup_path);
     mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
     mini_free(ini);
 }
@@ -94,6 +97,20 @@ static bool virtual_pak_ensure_parent_dir(const char *path) {
     bool error = directory_create(path_get(dir));
     path_free(dir);
     return !error;
+}
+
+static bool virtual_pak_build_physical_backup_path(int controller, char *out, size_t out_len) {
+    if (!out || out_len == 0 || controller < 0 || controller > 3 || !g_root_path[0]) {
+        return false;
+    }
+
+    path_t *path = path_create(g_root_path);
+    char filename[64];
+    snprintf(filename, sizeof(filename), "_controller%d_physical_backup.pak", controller + 1);
+    path_push(path, filename);
+    snprintf(out, out_len, "%s", path_get(path));
+    path_free(path);
+    return true;
 }
 
 static bool virtual_pak_dump_controller_to_file(int controller, const char *out_path) {
@@ -206,6 +223,7 @@ static bool virtual_pak_create_blank_file(int controller, const char *pak_path) 
     if (!has_cpak(controller)) {
         return false;
     }
+    cpakfs_unmount(controller);
     if (cpakfs_format(controller, false) < 0) {
         return false;
     }
@@ -261,6 +279,11 @@ void virtual_pak_try_sync_pending(void) {
     if (!virtual_pak_dump_controller_to_file(session.controller, session.pak_path)) {
         return;
     }
+    if (session.backup_path[0] && file_exists(session.backup_path)) {
+        if (!virtual_pak_restore_file_to_controller(session.controller, session.backup_path)) {
+            return;
+        }
+    }
     virtual_pak_session_clear();
 }
 
@@ -292,12 +315,24 @@ bool virtual_pak_prepare_launch(menu_t *menu, char *error, size_t error_len) {
         return false;
     }
 
+    char backup_path[512];
+    if (!virtual_pak_build_physical_backup_path(VIRTUAL_PAK_CONTROLLER, backup_path, sizeof(backup_path))) {
+        snprintf(error, error_len, "Couldn't build Controller Pak backup path");
+        return false;
+    }
+    if (!virtual_pak_dump_controller_to_file(VIRTUAL_PAK_CONTROLLER, backup_path)) {
+        snprintf(error, error_len, "Couldn't back up controller 1 pak");
+        return false;
+    }
+
     if (!file_exists(pak_path) && !virtual_pak_create_blank_file(VIRTUAL_PAK_CONTROLLER, pak_path)) {
+        virtual_pak_restore_file_to_controller(VIRTUAL_PAK_CONTROLLER, backup_path);
         snprintf(error, error_len, "Couldn't create virtual pak slot");
         return false;
     }
 
     if (!virtual_pak_restore_file_to_controller(VIRTUAL_PAK_CONTROLLER, pak_path)) {
+        virtual_pak_restore_file_to_controller(VIRTUAL_PAK_CONTROLLER, backup_path);
         snprintf(error, error_len, "Couldn't restore virtual pak to controller 1");
         return false;
     }
@@ -309,6 +344,7 @@ bool virtual_pak_prepare_launch(menu_t *menu, char *error, size_t error_len) {
     session.slot = menu->load.rom_info.settings.virtual_pak_slot;
     snprintf(session.rom_path, sizeof(session.rom_path), "%s", path_get(menu->load.rom_path));
     snprintf(session.pak_path, sizeof(session.pak_path), "%s", pak_path);
+    snprintf(session.backup_path, sizeof(session.backup_path), "%s", backup_path);
     rom_info_get_stable_id(&menu->load.rom_info, session.game_id, sizeof(session.game_id));
     virtual_pak_session_save(&session);
     return true;
@@ -328,6 +364,11 @@ bool virtual_pak_describe(menu_t *menu, char *out, size_t out_len) {
     }
     if (!menu->load.rom_info.settings.virtual_pak_enabled) {
         snprintf(out, out_len, "Off");
+        return true;
+    }
+
+    if (virtual_pak_has_pending_sync()) {
+        snprintf(out, out_len, "Pending backup");
         return true;
     }
 

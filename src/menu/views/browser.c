@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 #include "../cart_load.h"
@@ -274,8 +275,8 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
 static bool browser_use_playlist_grid(menu_t *menu);
 static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work);
 static void browser_playlist_grid_draw(menu_t *menu);
-static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path);
-static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalized_path);
+static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path, int *capacity);
+static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalized_path, int *capacity);
 
 typedef struct {
     bool active;
@@ -1859,6 +1860,10 @@ static bool smart_playlist_matches(menu_t *menu, const smart_playlist_query_t *q
     return true;
 }
 
+static bool smart_playlist_query_needs_long_description(const smart_playlist_query_t *query) {
+    return query && query->description_contains[0] != '\0';
+}
+
 static int smart_playlist_entry_compare(const void *a, const void *b, void *ctx) {
     const smart_playlist_query_t *query = (const smart_playlist_query_t *)ctx;
     const smart_playlist_entry_t *lhs = (const smart_playlist_entry_t *)a;
@@ -1907,16 +1912,39 @@ static bool playlist_has_path(menu_t *menu, const char *path) {
     return false;
 }
 
-static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path) {
+static bool playlist_reserve_entry_capacity(menu_t *menu, int *capacity, int extra_entries) {
+    if (!menu || !capacity || extra_entries <= 0) {
+        return false;
+    }
+
+    int needed = menu->browser.entries + extra_entries;
+    if (*capacity >= needed) {
+        return true;
+    }
+
+    int next_capacity = (*capacity > 0) ? *capacity : 16;
+    while (next_capacity < needed) {
+        next_capacity *= 2;
+    }
+
+    entry_t *next = realloc(menu->browser.list, (size_t)next_capacity * sizeof(entry_t));
+    if (!next) {
+        return false;
+    }
+
+    menu->browser.list = next;
+    *capacity = next_capacity;
+    return true;
+}
+
+static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path, int *capacity) {
     if (!menu || !normalized_path || !normalized_path[0]) {
         return false;
     }
 
-    entry_t *next = realloc(menu->browser.list, (size_t)(menu->browser.entries + 1) * sizeof(entry_t));
-    if (!next) {
+    if (!playlist_reserve_entry_capacity(menu, capacity, 1)) {
         return false;
     }
-    menu->browser.list = next;
 
     entry_t *entry = &menu->browser.list[menu->browser.entries++];
     memset(entry, 0, sizeof(*entry));
@@ -1935,11 +1963,11 @@ static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path)
     return true;
 }
 
-static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalized_path) {
+static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalized_path, int *capacity) {
     if (playlist_has_path(menu, normalized_path)) {
         return true;
     }
-    return playlist_append_rom_entry(menu, normalized_path);
+    return playlist_append_rom_entry(menu, normalized_path, capacity);
 }
 
 static bool smart_playlist_collect_dir(
@@ -1948,9 +1976,10 @@ static bool smart_playlist_collect_dir(
     const smart_playlist_query_t *query,
     smart_playlist_entry_t **entries,
     int *count,
+    int *capacity,
     int depth
 ) {
-    if (!menu || !dir_path || !query || !entries || !count || depth > 12) {
+    if (!menu || !dir_path || !query || !entries || !count || !capacity || depth > 12) {
         return false;
     }
     if (!directory_exists(path_get(dir_path))) {
@@ -1966,7 +1995,7 @@ static bool smart_playlist_collect_dir(
                 if (!subdir) {
                     return false;
                 }
-                bool ok = smart_playlist_collect_dir(menu, subdir, query, entries, count, depth + 1);
+                bool ok = smart_playlist_collect_dir(menu, subdir, query, entries, count, capacity, depth + 1);
                 path_free(subdir);
                 if (!ok) {
                     return false;
@@ -1982,41 +2011,75 @@ static bool smart_playlist_collect_dir(
             if (!normalized) {
                 return false;
             }
-            if (!playlist_has_path(menu, normalized)) {
-                bool duplicate = false;
-                for (int i = 0; i < *count; i++) {
-                    if ((*entries)[i].path && strcmp((*entries)[i].path, normalized) == 0) {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (!duplicate) {
-                    path_t *rom_path = path_create(normalized);
-                    rom_info_t rom_info = {0};
-                    if (rom_path && rom_config_load(rom_path, &rom_info) == ROM_OK) {
-                        smart_playlist_entry_t candidate = {0};
-                        if (smart_playlist_matches(menu, query, normalized, &rom_info, &candidate)) {
-                            smart_playlist_entry_t *next = realloc(*entries, (size_t)(*count + 1) * sizeof(**entries));
-                            if (!next) {
-                                free(normalized);
-                                path_free(rom_path);
-                                smart_playlist_entry_free(&candidate);
-                                return false;
-                            }
-                            *entries = next;
-                            (*entries)[*count] = candidate;
-                            (*count)++;
+            path_t *rom_path = path_create(normalized);
+            rom_info_t rom_info = {0};
+            rom_load_options_t load_options = {
+                .include_config = false,
+                .include_long_description = smart_playlist_query_needs_long_description(query),
+            };
+            if (rom_path && rom_config_load_ex(rom_path, &rom_info, &load_options) == ROM_OK) {
+                smart_playlist_entry_t candidate = {0};
+                if (smart_playlist_matches(menu, query, normalized, &rom_info, &candidate)) {
+                    int needed = *count + 1;
+                    if (*capacity < needed) {
+                        int next_capacity = (*capacity > 0) ? *capacity : 32;
+                        while (next_capacity < needed) {
+                            next_capacity *= 2;
                         }
+                        smart_playlist_entry_t *next = realloc(*entries, (size_t)next_capacity * sizeof(**entries));
+                        if (!next) {
+                            free(normalized);
+                            path_free(rom_path);
+                            smart_playlist_entry_free(&candidate);
+                            return false;
+                        }
+                        *entries = next;
+                        *capacity = next_capacity;
                     }
-                    path_free(rom_path);
+                    (*entries)[*count] = candidate;
+                    (*count)++;
                 }
             }
+            path_free(rom_path);
             free(normalized);
         }
         result = dir_findnext(path_get(dir_path), &info);
     }
 
     return true;
+}
+
+static int smart_playlist_entry_compare_path(const void *a, const void *b) {
+    const smart_playlist_entry_t *lhs = (const smart_playlist_entry_t *)a;
+    const smart_playlist_entry_t *rhs = (const smart_playlist_entry_t *)b;
+    const char *lhs_path = lhs->path ? lhs->path : "";
+    const char *rhs_path = rhs->path ? rhs->path : "";
+    return strcmp(lhs_path, rhs_path);
+}
+
+static int smart_playlist_deduplicate_entries(smart_playlist_entry_t *entries, int count) {
+    if (!entries || count <= 1) {
+        return count;
+    }
+
+    qsort(entries, (size_t)count, sizeof(*entries), smart_playlist_entry_compare_path);
+
+    int write_index = 1;
+    for (int read_index = 1; read_index < count; read_index++) {
+        if (entries[read_index].path &&
+            entries[write_index - 1].path &&
+            strcmp(entries[write_index - 1].path, entries[read_index].path) == 0) {
+            smart_playlist_entry_free(&entries[read_index]);
+            continue;
+        }
+        if (write_index != read_index) {
+            entries[write_index] = entries[read_index];
+            memset(&entries[read_index], 0, sizeof(entries[read_index]));
+        }
+        write_index++;
+    }
+
+    return write_index;
 }
 
 static void smart_playlist_sort_entries(smart_playlist_entry_t *entries, int count, const smart_playlist_query_t *query) {
@@ -2475,6 +2538,7 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
 
 static bool load_playlist (menu_t *menu) {
     browser_list_free(menu);
+    int playlist_capacity = 0;
 
     FILE *f = fopen(path_get(menu->browser.directory), "r");
     if (f == NULL) {
@@ -2539,7 +2603,7 @@ static bool load_playlist (menu_t *menu) {
             continue;
         }
 
-        if (!playlist_append_rom_entry(menu, normalized)) {
+        if (!playlist_append_rom_entry(menu, normalized, &playlist_capacity)) {
             free(normalized);
             path_free(entry_path);
             fclose(f);
@@ -2560,6 +2624,7 @@ static bool load_playlist (menu_t *menu) {
     if (smart_query.enabled) {
         smart_playlist_entry_t *generated = NULL;
         int generated_count = 0;
+        int generated_capacity = 0;
 
         if (smart_query.root_count == 0) {
             path_t *default_root = path_init(menu->storage_prefix, "/");
@@ -2583,7 +2648,7 @@ static bool load_playlist (menu_t *menu) {
             if (!root) {
                 continue;
             }
-            bool ok = smart_playlist_collect_dir(menu, root, &smart_query, &generated, &generated_count, 0);
+            bool ok = smart_playlist_collect_dir(menu, root, &smart_query, &generated, &generated_count, &generated_capacity, 0);
             path_free(root);
             if (!ok) {
                 for (int j = 0; j < generated_count; j++) {
@@ -2602,9 +2667,10 @@ static bool load_playlist (menu_t *menu) {
             }
         }
 
+        generated_count = smart_playlist_deduplicate_entries(generated, generated_count);
         smart_playlist_sort_entries(generated, generated_count, &smart_query);
         for (int i = 0; i < generated_count; i++) {
-            if (!playlist_append_rom_entry_unique(menu, generated[i].path)) {
+            if (!playlist_append_rom_entry_unique(menu, generated[i].path, &playlist_capacity)) {
                 for (int j = i; j < generated_count; j++) {
                     smart_playlist_entry_free(&generated[j]);
                 }

@@ -205,6 +205,14 @@ typedef struct {
 } rom_info_t;
 
 /**
+ * @brief Optional controls for ROM info loading.
+ */
+typedef struct {
+    bool include_config;           /**< Load per-ROM .ini settings/config overrides */
+    bool include_long_description; /**< Load external long description text when available */
+} rom_load_options_t;
+
+/**
  * @brief Get the CIC seed for the ROM.
  * 
  * @param rom_info Pointer to the ROM information structure
@@ -221,6 +229,16 @@ bool rom_info_get_cic_seed(rom_info_t *rom_info, uint8_t *seed);
  * @return rom_err_t Error code
  */
 rom_err_t rom_config_load(path_t *path, rom_info_t *rom_info);
+
+/**
+ * @brief Load ROM information with optional config/metadata controls.
+ *
+ * @param path Pointer to the path structure
+ * @param rom_info Pointer to the ROM information structure
+ * @param options Optional load behavior; NULL uses full/default loading
+ * @return rom_err_t Error code
+ */
+rom_err_t rom_config_load_ex(path_t *path, rom_info_t *rom_info, const rom_load_options_t *options);
 
 /**
  * @brief Build a stable ROM identity string from loaded ROM information.
