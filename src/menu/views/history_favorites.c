@@ -11,7 +11,6 @@
 #include "utils/fs.h"
 #include "views.h"
 
-#define PLAYTIME_LEADERBOARD_MAX 10
 #define BOOKKEEPING_BUFFER_LEN 3072
 
 typedef enum {
@@ -86,9 +85,6 @@ static void playtime_list_rebuild(menu_t *menu) {
         qsort(playtime_ranked, playtime_ranked_count, sizeof(playtime_entry_t *), playtime_compare);
     }
 
-    if (playtime_ranked_count > PLAYTIME_LEADERBOARD_MAX) {
-        playtime_ranked_count = PLAYTIME_LEADERBOARD_MAX;
-    }
 }
 
 static void format_duration(char *out, size_t out_len, uint64_t seconds) {
