@@ -46,6 +46,12 @@ typedef enum {
     CART_LOAD_ERR_EXP_PAK_NOT_FOUND,
     /** @brief An unexpected response. */
     CART_LOAD_ERR_FUNCTION_NOT_SUPPORTED,
+    /** @brief Patch manifest or file had invalid format. */
+    CART_LOAD_ERR_PATCH_FORMAT,
+    /** @brief Patch pipeline hit an I/O error. */
+    CART_LOAD_ERR_PATCH_IO,
+    /** @brief Patch is incompatible with the selected ROM build. */
+    CART_LOAD_ERR_PATCH_INCOMPATIBLE,
 } cart_load_err_t;
 
 /** @brief Cart load type enumeration */

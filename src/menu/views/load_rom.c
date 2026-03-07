@@ -10,8 +10,10 @@
 #include "../ui_components/constants.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <libdragon.h>
 
 static bool show_extra_info_message = false;
 static component_boxart_t *boxart;
@@ -377,6 +379,104 @@ static void set_patcher_option(menu_t *menu, void *arg) {
     rom_config_setting_set_patches(menu->load.rom_path, &menu->load.rom_info, enabled);
     menu->browser.reload = true;
 }
+
+static void append_manifest_name_unique(char names[][128], int *count, const char *name) {
+    if (!name || !name[0] || !names || !count) {
+        return;
+    }
+    for (int i = 0; i < *count; i++) {
+        if (strcasecmp(names[i], name) == 0) {
+            return;
+        }
+    }
+    if (*count >= 32) {
+        return;
+    }
+    snprintf(names[*count], 128, "%s", name);
+    (*count)++;
+}
+
+static void scan_patch_profiles_in_dir(path_t *dir_path, char names[][128], int *count) {
+    if (!dir_path || !directory_exists(path_get(dir_path))) {
+        return;
+    }
+    dir_t info;
+    int result = dir_findfirst(path_get(dir_path), &info);
+    while (result == 0) {
+        if ((info.d_type != DT_DIR) && file_has_extensions(info.d_name, (const char *[]){"ini", NULL})) {
+            append_manifest_name_unique(names, count, info.d_name);
+        }
+        result = dir_findnext(path_get(dir_path), &info);
+    }
+}
+
+static bool find_next_patch_profile(menu_t *menu, char *out, size_t out_len) {
+    char c0[2] = { menu->load.rom_info.game_code[0], '\0' };
+    char c1[2] = { menu->load.rom_info.game_code[1], '\0' };
+    char c2[2] = { menu->load.rom_info.game_code[2], '\0' };
+    char c3[2] = { menu->load.rom_info.game_code[3], '\0' };
+
+    char names[32][128];
+    int count = 0;
+
+    path_t *region_dir = path_init(menu->storage_prefix, "menu/patches");
+    path_push(region_dir, c0);
+    path_push(region_dir, c1);
+    path_push(region_dir, c2);
+    path_push(region_dir, c3);
+    scan_patch_profiles_in_dir(region_dir, names, &count);
+
+    path_t *global_dir = path_clone(region_dir);
+    path_pop(global_dir);
+    scan_patch_profiles_in_dir(global_dir, names, &count);
+
+    path_free(region_dir);
+    path_free(global_dir);
+
+    if (count <= 0) {
+        return false;
+    }
+
+    for (int i = 1; i < count; i++) {
+        char tmp[128];
+        snprintf(tmp, sizeof(tmp), "%s", names[i]);
+        int j = i - 1;
+        while (j >= 0 && strcasecmp(names[j], tmp) > 0) {
+            snprintf(names[j + 1], sizeof(names[j + 1]), "%s", names[j]);
+            j--;
+        }
+        snprintf(names[j + 1], sizeof(names[j + 1]), "%s", tmp);
+    }
+
+    const char *current = menu->load.rom_info.settings.patch_profile;
+    int current_idx = -1;
+    for (int i = 0; i < count; i++) {
+        if (current && current[0] && strcasecmp(names[i], current) == 0) {
+            current_idx = i;
+            break;
+        }
+    }
+
+    int next_idx = (current_idx + 1) % count;
+    snprintf(out, out_len, "%s", names[next_idx]);
+    return true;
+}
+
+static void set_next_patch_profile(menu_t *menu, void *arg) {
+    (void)arg;
+    char next_profile[128];
+    if (!find_next_patch_profile(menu, next_profile, sizeof(next_profile))) {
+        menu_show_error(menu, "No patch profiles found");
+        return;
+    }
+    rom_err_t err = rom_config_setting_set_patch_profile(menu->load.rom_path, &menu->load.rom_info, next_profile);
+    if (err != ROM_OK) {
+        menu_show_error(menu, convert_error_message(err));
+        return;
+    }
+    sound_play_effect(SFX_SETTING);
+    menu->browser.reload = true;
+}
 #endif
 
 static void add_favorite (menu_t *menu, void *arg) {
@@ -462,6 +562,7 @@ static component_context_menu_t set_cheat_options_menu = { .list = {
 static component_context_menu_t set_patcher_options_menu = { .list = {
     { .text = "Enable", .action = set_patcher_option, .arg = (void *) (true)},
     { .text = "Disable", .action = set_patcher_option, .arg = (void *) (false)},
+    { .text = "Next Profile", .action = set_next_patch_profile },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 #endif
@@ -794,6 +895,7 @@ static void draw (menu_t *menu, surface_t *d) {
             "Description:\n\t%s\n\n"
             "Datel Cheats:\t\t%s\n"
             "Patches:\t\t\t%s\n"
+            "Patch profile:\t\t%s\n"
             "TV region:\t\t%s\n"
             "Expansion PAK:\t%s\n"
             "Rumble PAK:\t\t%s\n"
@@ -816,6 +918,7 @@ static void draw (menu_t *menu, surface_t *d) {
             format_rom_description(menu),
             format_boolean_type(menu->load.rom_info.settings.cheats_enabled),
             format_boolean_type(menu->load.rom_info.settings.patches_enabled),
+            (menu->load.rom_info.settings.patch_profile[0] != '\0') ? menu->load.rom_info.settings.patch_profile : "auto/default",
             format_rom_tv_type(rom_info_get_tv_type(&menu->load.rom_info)),
             format_rom_expansion_pak_info(menu->load.rom_info.features.expansion_pak),
             format_rom_pak_feature_info(menu->load.rom_info.features.rumble_pak),

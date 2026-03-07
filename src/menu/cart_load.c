@@ -8,6 +8,7 @@
 #include <libdragon.h>
 #include "cart_load.h"
 #include "path.h"
+#include "rom_patch.h"
 #include "utils/fs.h"
 #include "utils/utils.h"
 
@@ -85,6 +86,9 @@ char *cart_load_convert_error_message (cart_load_err_t err) {
         case CART_LOAD_ERR_CREATE_SAVES_SUBDIR_FAIL: return "Couldn't create saves subdirectory";
         case CART_LOAD_ERR_EXP_PAK_NOT_FOUND: return "Mandatory Expansion Pak accessory was not found";
         case CART_LOAD_ERR_FUNCTION_NOT_SUPPORTED: return "Your flashcart doesn't support required functionality";
+        case CART_LOAD_ERR_PATCH_FORMAT: return "ROM patch format is invalid or unsupported";
+        case CART_LOAD_ERR_PATCH_IO: return "ROM patch I/O error";
+        case CART_LOAD_ERR_PATCH_INCOMPATIBLE: return "ROM patch is incompatible with this ROM revision";
         default: return "Unknown error [CART_LOAD]";
     }
 }
@@ -98,11 +102,37 @@ char *cart_load_convert_error_message (cart_load_err_t err) {
  */
 cart_load_err_t cart_load_n64_rom_and_save (menu_t *menu, flashcart_progress_callback_t progress) {
     path_t *path = path_clone(menu->load.rom_path);
+    const char *rom_path_to_load = path_get(path);
+    char patched_rom_path[512];
 
     bool byte_swap = (menu->load.rom_info.endianness == ENDIANNESS_BYTE_SWAP);
     flashcart_save_type_t save_type = convert_save_type(rom_info_get_save_type(&menu->load.rom_info));
 
-    menu->flashcart_err = flashcart_load_rom(path_get(path), byte_swap, progress);
+    if (menu->load.rom_info.settings.patches_enabled) {
+        rom_patch_result_t patch_result = rom_patch_prepare_launch(menu, path_get(path), patched_rom_path, sizeof(patched_rom_path));
+        switch (patch_result) {
+            case ROM_PATCH_OK:
+                rom_path_to_load = patched_rom_path;
+                byte_swap = false; // Patched cache files are always generated as .z64 big-endian.
+                break;
+            case ROM_PATCH_SKIPPED:
+                break;
+            case ROM_PATCH_INCOMPATIBLE:
+                path_free(path);
+                return CART_LOAD_ERR_PATCH_INCOMPATIBLE;
+            case ROM_PATCH_IO_ERROR:
+                path_free(path);
+                return CART_LOAD_ERR_PATCH_IO;
+            case ROM_PATCH_FORMAT_ERROR:
+                path_free(path);
+                return CART_LOAD_ERR_PATCH_FORMAT;
+            default:
+                path_free(path);
+                return CART_LOAD_ERR_PATCH_IO;
+        }
+    }
+
+    menu->flashcart_err = flashcart_load_rom((char *)rom_path_to_load, byte_swap, progress);
     if (menu->flashcart_err != FLASHCART_OK) {
         path_free(path);
         return CART_LOAD_ERR_ROM_LOAD_FAIL;

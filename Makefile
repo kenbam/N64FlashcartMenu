@@ -56,6 +56,7 @@ SRCS = \
 	menu/path.c \
 	menu/playtime.c \
 	menu/png_decoder.c \
+	menu/rom_patch.c \
 	menu/rom_info.c \
 	menu/settings.c \
 	menu/sound.c \

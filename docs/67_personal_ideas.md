@@ -35,6 +35,10 @@
 - Controller hotkey bridge for return-to-menu (only if technically safe per game context).
 - Runtime heartbeat hook from game to firmware (idle vs active precision).
 - Local companion tool (USB) for playlist/metadata/session analytics editing.
+- Live ROM patching system:
+  - Download/manage patch packs (e.g., GoldenEye texture/quality mods) and apply at launch time.
+  - Prefer non-destructive layered patching (base ROM kept untouched), with patch profile selection per game.
+  - Feasibility note: viable for IPS/BPS/APS at launch in menu flow; true in-game/on-the-fly patching is much harder and likely not safe.
 
 ## Active Issues To Fix Alongside New Features
 - Keep non-user-facing sidecar files hidden in browser (e.g. `*.datel.txt`).
