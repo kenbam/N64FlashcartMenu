@@ -100,6 +100,10 @@ typedef struct {
     flashcart_err_t (*set_save_writeback) (char *save_path);
     /** @brief The flashcart set boot mode function */
     flashcart_err_t (*set_next_boot_mode) (flashcart_reboot_mode_t boot_mode);
+    /** @brief Read a vendor-specific persistent setting */
+    flashcart_err_t (*get_setting_u32) (uint32_t id, uint32_t *value);
+    /** @brief Write a vendor-specific persistent setting */
+    flashcart_err_t (*set_setting_u32) (uint32_t id, uint32_t value);
 } flashcart_t;
 
 /**
@@ -187,5 +191,7 @@ flashcart_err_t flashcart_load_64dd_ipl (char *ipl_path, flashcart_progress_call
  */
 flashcart_err_t flashcart_load_64dd_disk (char *disk_path, flashcart_disk_parameters_t *disk_parameters);
 flashcart_err_t flashcart_set_next_boot_mode (flashcart_reboot_mode_t boot_mode);
+flashcart_err_t flashcart_get_setting_u32 (uint32_t id, uint32_t *value);
+flashcart_err_t flashcart_set_setting_u32 (uint32_t id, uint32_t value);
 
 #endif /* FLASHCART_H__ */

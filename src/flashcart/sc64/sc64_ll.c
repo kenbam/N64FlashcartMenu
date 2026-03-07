@@ -30,6 +30,8 @@ typedef enum {
     CMD_ID_VERSION_GET          = 'V',
     CMD_ID_CONFIG_GET           = 'c',
     CMD_ID_CONFIG_SET           = 'C',
+    CMD_ID_SETTING_GET          = 'a',
+    CMD_ID_SETTING_SET          = 'A',
     CMD_ID_DISK_MAPPING_SET     = 'D',
     CMD_ID_WRITEBACK_PENDING    = 'w',
     CMD_ID_WRITEBACK_SD_INFO    = 'W',
@@ -124,6 +126,24 @@ sc64_error_t sc64_ll_get_config (sc64_cfg_id_t id, uint32_t *value) {
 sc64_error_t sc64_ll_set_config (sc64_cfg_id_t id, uint32_t value) {
     sc64_cmd_t cmd = {
         .id = CMD_ID_CONFIG_SET,
+        .arg = { id, value }
+    };
+    return sc64_ll_execute_cmd(&cmd);
+}
+
+sc64_error_t sc64_ll_get_setting (uint32_t id, uint32_t *value) {
+    sc64_cmd_t cmd = {
+        .id = CMD_ID_SETTING_GET,
+        .arg = { id }
+    };
+    sc64_error_t error = sc64_ll_execute_cmd(&cmd);
+    *value = cmd.rsp[1];
+    return error;
+}
+
+sc64_error_t sc64_ll_set_setting (uint32_t id, uint32_t value) {
+    sc64_cmd_t cmd = {
+        .id = CMD_ID_SETTING_SET,
         .arg = { id, value }
     };
     return sc64_ll_execute_cmd(&cmd);

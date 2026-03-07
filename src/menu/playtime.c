@@ -9,10 +9,75 @@
 
 #include <mini.c/src/mini.h>
 
+#include "../flashcart/flashcart.h"
 #include "playtime.h"
 #include "utils/fs.h"
 
 static char *playtime_path = NULL;
+
+typedef enum {
+    SC64_SETTING_ID_PLAYTIME_ACTIVE = 1,
+    SC64_SETTING_ID_PLAYTIME_ROM_HASH = 2,
+    SC64_SETTING_ID_PLAYTIME_SECONDS = 3,
+} sc64_playtime_setting_id_t;
+
+static uint32_t playtime_path_hash(const char *path) {
+    uint32_t h = 2166136261u;
+    if (!path) {
+        return 0;
+    }
+    for (const unsigned char *p = (const unsigned char *)path; *p; p++) {
+        h ^= (uint32_t)(*p);
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static bool playtime_sc64_tracker_read(uint32_t *active, uint32_t *rom_hash, uint32_t *seconds) {
+    if (!active || !rom_hash || !seconds) {
+        return false;
+    }
+    if (flashcart_get_setting_u32(SC64_SETTING_ID_PLAYTIME_ACTIVE, active) != FLASHCART_OK) {
+        return false;
+    }
+    if (flashcart_get_setting_u32(SC64_SETTING_ID_PLAYTIME_ROM_HASH, rom_hash) != FLASHCART_OK) {
+        return false;
+    }
+    if (flashcart_get_setting_u32(SC64_SETTING_ID_PLAYTIME_SECONDS, seconds) != FLASHCART_OK) {
+        return false;
+    }
+    return true;
+}
+
+static bool playtime_sc64_tracker_clear(void) {
+    if (flashcart_set_setting_u32(SC64_SETTING_ID_PLAYTIME_SECONDS, 0) != FLASHCART_OK) {
+        return false;
+    }
+    if (flashcart_set_setting_u32(SC64_SETTING_ID_PLAYTIME_ROM_HASH, 0) != FLASHCART_OK) {
+        return false;
+    }
+    if (flashcart_set_setting_u32(SC64_SETTING_ID_PLAYTIME_ACTIVE, 0) != FLASHCART_OK) {
+        return false;
+    }
+    return true;
+}
+
+static bool playtime_sc64_tracker_start(const char *path) {
+    uint32_t rom_hash = playtime_path_hash(path);
+    if (rom_hash == 0) {
+        return false;
+    }
+    if (flashcart_set_setting_u32(SC64_SETTING_ID_PLAYTIME_SECONDS, 0) != FLASHCART_OK) {
+        return false;
+    }
+    if (flashcart_set_setting_u32(SC64_SETTING_ID_PLAYTIME_ROM_HASH, rom_hash) != FLASHCART_OK) {
+        return false;
+    }
+    if (flashcart_set_setting_u32(SC64_SETTING_ID_PLAYTIME_ACTIVE, 1) != FLASHCART_OK) {
+        return false;
+    }
+    return true;
+}
 
 static void playtime_entry_free(playtime_entry_t *entry) {
     if (!entry) {
@@ -205,18 +270,49 @@ void playtime_finalize_active (playtime_db_t *db, time_t now) {
     }
 
     bool changed = false;
+
+    uint32_t active = 0;
+    uint32_t rom_hash = 0;
+    uint32_t seconds = 0;
+    bool sc64_tracker_available = playtime_sc64_tracker_read(&active, &rom_hash, &seconds);
+    if (sc64_tracker_available) {
+        if ((active != 0) && (rom_hash != 0) && (seconds > 0)) {
+            for (uint32_t i = 0; i < db->count; i++) {
+                playtime_entry_t *entry = &db->entries[i];
+                if (!entry->path) {
+                    continue;
+                }
+                if (playtime_path_hash(entry->path) != rom_hash) {
+                    continue;
+                }
+                entry->total_seconds += (uint64_t)seconds;
+                entry->last_session_seconds = (uint64_t)seconds;
+                entry->last_played = (int64_t)now;
+                playtime_push_recent_session(entry, (uint64_t)seconds, (int64_t)now);
+                changed = true;
+                break;
+            }
+        }
+        playtime_sc64_tracker_clear();
+    }
+
     for (uint32_t i = 0; i < db->count; i++) {
         playtime_entry_t *entry = &db->entries[i];
         if (!entry->active) {
             continue;
         }
 
-        if (entry->active_start > 0 && now >= entry->active_start) {
-            uint64_t delta = (uint64_t)(now - entry->active_start);
-            entry->total_seconds += delta;
-            entry->last_session_seconds = delta;
-            playtime_push_recent_session(entry, delta, (int64_t)now);
+        if (sc64_tracker_available) {
+            // SC64 firmware tracker is authoritative; clear legacy marker to avoid double-counting.
             changed = true;
+        } else {
+            if (entry->active_start > 0 && now >= entry->active_start) {
+                uint64_t delta = (uint64_t)(now - entry->active_start);
+                entry->total_seconds += delta;
+                entry->last_session_seconds = delta;
+                playtime_push_recent_session(entry, delta, (int64_t)now);
+                changed = true;
+            }
         }
 
         entry->active = false;
@@ -240,8 +336,13 @@ void playtime_start_session (playtime_db_t *db, const char *path, time_t now) {
     }
 
     entry->last_played = (int64_t)now;
-    entry->active = true;
-    entry->active_start = (int64_t)now;
+    if (playtime_sc64_tracker_start(path)) {
+        entry->active = false;
+        entry->active_start = 0;
+    } else {
+        entry->active = true;
+        entry->active_start = (int64_t)now;
+    }
     entry->play_count++;
 
     playtime_save(db);

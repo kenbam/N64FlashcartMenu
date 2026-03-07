@@ -35,3 +35,15 @@ sc64deployer.exe firmware update B:\dev\SummerCart64\sc64-firmware-playtime-mcu-
 - Replug USB-C to SC64.
 - Run `sc64deployer.exe list` again.
 - Confirm no other app is holding SC64 USB connection.
+
+## Build Note (LLM / Automation)
+If menu build fails with:
+`Could not find n64.mk under N64_INST=''`
+then build with:
+
+```bash
+N64_INST=/mnt/b/dev/N64Toolchain make sc64 -j4
+```
+
+This environment has `n64.mk` at:
+`/mnt/b/dev/N64Toolchain/include/n64.mk`.

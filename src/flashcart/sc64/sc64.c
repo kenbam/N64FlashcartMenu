@@ -686,6 +686,23 @@ static flashcart_err_t sc64_set_bootmode (flashcart_reboot_mode_t boot_mode) {
     return FLASHCART_OK;
 }
 
+static flashcart_err_t sc64_get_setting_u32 (uint32_t id, uint32_t *value) {
+    if (!value) {
+        return FLASHCART_ERR_ARGS;
+    }
+    if (sc64_ll_get_setting(id, value) != SC64_OK) {
+        return FLASHCART_ERR_INT;
+    }
+    return FLASHCART_OK;
+}
+
+static flashcart_err_t sc64_set_setting_u32 (uint32_t id, uint32_t value) {
+    if (sc64_ll_set_setting(id, value) != SC64_OK) {
+        return FLASHCART_ERR_INT;
+    }
+    return FLASHCART_OK;
+}
+
 
 static flashcart_t flashcart_sc64 = {
     .init = sc64_init,
@@ -700,6 +717,8 @@ static flashcart_t flashcart_sc64 = {
     .set_save_type = sc64_set_save_type,
     .set_save_writeback = sc64_set_save_writeback,
     .set_next_boot_mode = sc64_set_bootmode,
+    .get_setting_u32 = sc64_get_setting_u32,
+    .set_setting_u32 = sc64_set_setting_u32,
 };
 
 

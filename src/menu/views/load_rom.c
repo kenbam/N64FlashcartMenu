@@ -757,10 +757,16 @@ static void draw (menu_t *menu, surface_t *d) {
         const char *display_name = (menu->load.rom_info.metadata.name[0] != '\0') ? menu->load.rom_info.metadata.name : rom_filename;
         const char *publisher = (menu->load.rom_info.metadata.author[0] != '\0') ? menu->load.rom_info.metadata.author : "Unknown";
         char age_rating[16];
+        char release_year[16];
         if (menu->load.rom_info.metadata.age_rating >= 0) {
             snprintf(age_rating, sizeof(age_rating), "%d+", (int)menu->load.rom_info.metadata.age_rating);
         } else {
             snprintf(age_rating, sizeof(age_rating), "Unknown");
+        }
+        if (menu->load.rom_info.metadata.release_year >= 0) {
+            snprintf(release_year, sizeof(release_year), "%d", (int)menu->load.rom_info.metadata.release_year);
+        } else {
+            snprintf(release_year, sizeof(release_year), "Unknown");
         }
 
         rom_save_type_t effective_save_type = rom_info_get_save_type(&menu->load.rom_info);
@@ -782,6 +788,7 @@ static void draw (menu_t *menu, surface_t *d) {
         snprintf(details, sizeof(details),
             "Title:\t\t\t%s\n"
             "Publisher:\t\t%s\n"
+            "Year:\t\t\t%s\n"
             "ESRB Rating:\t\t%s\n"
             "Age Rating:\t\t%s\n\n"
             "Description:\n\t%s\n\n"
@@ -803,6 +810,7 @@ static void draw (menu_t *menu, surface_t *d) {
             "Recent sessions:\n%s\n",
             display_name,
             publisher,
+            release_year,
             format_esrb_age_rating(menu->load.rom_info.metadata.esrb_age_rating),
             age_rating,
             format_rom_description(menu),

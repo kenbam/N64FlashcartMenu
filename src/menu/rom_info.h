@@ -183,6 +183,7 @@ typedef struct {
     struct {
         rom_esrb_age_rating_t esrb_age_rating; /**< The game age rating */
         int32_t age_rating;                    /**< Generic age rating (0-18), -1 when unavailable */
+        int32_t release_year;                  /**< Release year (e.g. 1998), -1 when unavailable */
         char name[ROM_METADATA_NAME_LENGTH];   /**< Metadata title */
         char author[ROM_METADATA_AUTHOR_LENGTH]; /**< Metadata author/publisher */
         char short_desc[ROM_METADATA_SHORT_DESC_LENGTH]; /**< Metadata short description */

@@ -358,3 +358,20 @@ flashcart_err_t flashcart_set_next_boot_mode (flashcart_reboot_mode_t boot_mode)
 
     return flashcart->set_next_boot_mode(boot_mode);
 }
+
+flashcart_err_t flashcart_get_setting_u32 (uint32_t id, uint32_t *value) {
+    if (!flashcart->get_setting_u32) {
+        return FLASHCART_ERR_FUNCTION_NOT_SUPPORTED;
+    }
+    if (!value) {
+        return FLASHCART_ERR_ARGS;
+    }
+    return flashcart->get_setting_u32(id, value);
+}
+
+flashcart_err_t flashcart_set_setting_u32 (uint32_t id, uint32_t value) {
+    if (!flashcart->set_setting_u32) {
+        return FLASHCART_ERR_FUNCTION_NOT_SUPPORTED;
+    }
+    return flashcart->set_setting_u32(id, value);
+}

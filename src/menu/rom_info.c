@@ -751,6 +751,40 @@ static char *trim_whitespace (char *string) {
     return string;
 }
 
+static void lowercase_ascii (char *string) {
+    if (string == NULL) {
+        return;
+    }
+    for (; *string != '\0'; string++) {
+        *string = (char)tolower((unsigned char)*string);
+    }
+}
+
+static int32_t parse_release_year_from_value (const char *value) {
+    if (value == NULL) {
+        return -1;
+    }
+
+    for (const char *cursor = value; *cursor != '\0'; cursor++) {
+        if (!isdigit((unsigned char)cursor[0]) ||
+            !isdigit((unsigned char)cursor[1]) ||
+            !isdigit((unsigned char)cursor[2]) ||
+            !isdigit((unsigned char)cursor[3])) {
+            continue;
+        }
+
+        int32_t year = (int32_t)((cursor[0] - '0') * 1000 +
+                                 (cursor[1] - '0') * 100 +
+                                 (cursor[2] - '0') * 10 +
+                                 (cursor[3] - '0'));
+        if ((year >= 1980) && (year <= 2099)) {
+            return year;
+        }
+    }
+
+    return -1;
+}
+
 static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom_info) {
     if ((directory == NULL) || (rom_info == NULL)) {
         return;
@@ -791,7 +825,9 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
                 continue;
             }
             *section_end = '\0';
-            in_meta_section = (strcmp(trim_whitespace(cursor + 1), "meta") == 0);
+            char *section_name = trim_whitespace(cursor + 1);
+            lowercase_ascii(section_name);
+            in_meta_section = ((strcmp(section_name, "meta") == 0) || (strcmp(section_name, "metadata") == 0));
             continue;
         }
 
@@ -807,6 +843,7 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
         *equal_sign = '\0';
         char *key = trim_whitespace(cursor);
         char *value = trim_whitespace(equal_sign + 1);
+        lowercase_ascii(key);
 
         if ((strcmp(key, "name") == 0)) {
             metadata_copy_if_empty(rom_info->metadata.name, sizeof(rom_info->metadata.name), value);
@@ -821,6 +858,16 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
             long parsed = strtol(value, &parse_end, 10);
             if ((parse_end != value) && (parsed >= 0) && (parsed <= 18)) {
                 rom_info->metadata.age_rating = (int32_t)parsed;
+            }
+        } else if (((strcmp(key, "release-date") == 0) ||
+                    (strcmp(key, "release_date") == 0) ||
+                    (strcmp(key, "releaseyear") == 0) ||
+                    (strcmp(key, "release-year") == 0) ||
+                    (strcmp(key, "year") == 0)) &&
+                   (rom_info->metadata.release_year < 0)) {
+            int32_t year = parse_release_year_from_value(value);
+            if (year >= 0) {
+                rom_info->metadata.release_year = year;
             }
         }
     }
@@ -942,6 +989,7 @@ static void extract_rom_info (match_t *match, rom_header_t *rom_header, rom_info
 
     rom_info->metadata.esrb_age_rating = ROM_ESRB_AGE_RATING_NONE;
     rom_info->metadata.age_rating = -1;
+    rom_info->metadata.release_year = -1;
     rom_info->metadata.name[0] = '\0';
     rom_info->metadata.author[0] = '\0';
     rom_info->metadata.short_desc[0] = '\0';

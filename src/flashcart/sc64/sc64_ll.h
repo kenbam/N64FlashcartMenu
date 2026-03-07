@@ -161,6 +161,24 @@ sc64_error_t sc64_ll_get_config(sc64_cfg_id_t cfg, uint32_t *value);
 sc64_error_t sc64_ll_set_config(sc64_cfg_id_t cfg, uint32_t value);
 
 /**
+ * @brief Get a persistent SC64 setting value.
+ *
+ * @param id Setting ID.
+ * @param value Pointer to store the setting value.
+ * @return sc64_error_t Error code.
+ */
+sc64_error_t sc64_ll_get_setting(uint32_t id, uint32_t *value);
+
+/**
+ * @brief Set a persistent SC64 setting value.
+ *
+ * @param id Setting ID.
+ * @param value New setting value.
+ * @return sc64_error_t Error code.
+ */
+sc64_error_t sc64_ll_set_setting(uint32_t id, uint32_t value);
+
+/**
  * @brief Set the SC64 disk mapping.
  * 
  * @param disk_mapping Pointer to the disk mapping structure.
