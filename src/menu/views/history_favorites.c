@@ -129,7 +129,7 @@ static void item_reset_selected(menu_t *menu) {
     }
 }
 
-static void item_move_next() {
+static bool item_move_next() {
     int last = selected_item;
     do {
         selected_item++;
@@ -138,20 +138,19 @@ static void item_move_next() {
                 selected_item = last;
                 break;
             }
-            sound_play_effect(SFX_CURSOR);
-            break;
+            return true;
         }
         if (selected_item >= item_max) {
             selected_item = last;
             break;
         } else if (item_list[selected_item].bookkeeping_type != BOOKKEEPING_TYPE_EMPTY) {
-            sound_play_effect(SFX_CURSOR);
-            break;
+            return true;
         }
     } while (true);
+    return false;
 }
 
-static void item_move_previous() {
+static bool item_move_previous() {
     int last = selected_item;
     do {
         selected_item--;
@@ -160,21 +159,46 @@ static void item_move_previous() {
             break;
         }
         if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME) {
-            sound_play_effect(SFX_CURSOR);
-            break;
+            return true;
         }
         if (item_list[selected_item].bookkeeping_type != BOOKKEEPING_TYPE_EMPTY) {
-            sound_play_effect(SFX_CURSOR);
-            break;
+            return true;
         }
     } while (true);
+    return false;
 }
 
 static void process(menu_t *menu) {
     if (menu->actions.go_down) {
-        item_move_next();
+        int steps = 1;
+        if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME && menu->actions.go_fast) {
+            steps = 10;
+        }
+        bool moved = false;
+        for (int i = 0; i < steps; i++) {
+            if (!item_move_next()) {
+                break;
+            }
+            moved = true;
+        }
+        if (moved) {
+            sound_play_effect(SFX_CURSOR);
+        }
     } else if (menu->actions.go_up) {
-        item_move_previous();
+        int steps = 1;
+        if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME && menu->actions.go_fast) {
+            steps = 10;
+        }
+        bool moved = false;
+        for (int i = 0; i < steps; i++) {
+            if (!item_move_previous()) {
+                break;
+            }
+            moved = true;
+        }
+        if (moved) {
+            sound_play_effect(SFX_CURSOR);
+        }
     } else if (menu->actions.enter && item_index_valid(selected_item)) {
         if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME) {
             playtime_entry_t *entry = playtime_ranked[selected_item];
@@ -282,18 +306,6 @@ static void draw_bookkeeping_list(void) {
 }
 
 static void draw_playtime_leaderboard(void) {
-    if (selected_item != -1) {
-        int row_height = 19;
-        float highlight_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL + (selected_item * row_height);
-        ui_components_box_draw(
-            VISIBLE_AREA_X0,
-            highlight_y,
-            VISIBLE_AREA_X0 + FILE_LIST_HIGHLIGHT_WIDTH + LIST_SCROLLBAR_WIDTH,
-            highlight_y + row_height,
-            FILE_LIST_HIGHLIGHT_COLOR
-        );
-    }
-
     if (playtime_ranked_count == 0) {
         ui_components_main_text_draw(
             STL_DEFAULT,
@@ -305,12 +317,58 @@ static void draw_playtime_leaderboard(void) {
         return;
     }
 
+    const int row_height = 19;
+    const int list_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL;
+    const int list_bottom = LAYOUT_ACTIONS_SEPARATOR_Y - TEXT_MARGIN_VERTICAL;
+    int list_height = list_bottom - list_y;
+    if (list_height < row_height) {
+        list_height = row_height;
+    }
+
+    int max_visible_entries = list_height / row_height;
+    if (max_visible_entries < 1) {
+        max_visible_entries = 1;
+    } else if (max_visible_entries > LIST_ENTRIES) {
+        max_visible_entries = LIST_ENTRIES;
+    }
+
+    int starting_position = 0;
+    if ((int)playtime_ranked_count > max_visible_entries && selected_item >= (max_visible_entries / 2)) {
+        starting_position = selected_item - (max_visible_entries / 2);
+        int max_start = (int)playtime_ranked_count - max_visible_entries;
+        if (starting_position > max_start) {
+            starting_position = max_start;
+        }
+    }
+
+    int visible_entries = (int)playtime_ranked_count - starting_position;
+    if (visible_entries > max_visible_entries) {
+        visible_entries = max_visible_entries;
+    }
+    if (visible_entries < 0) {
+        visible_entries = 0;
+    }
+
+    ui_components_list_scrollbar_draw(selected_item, playtime_ranked_count, max_visible_entries);
+
+    if ((selected_item >= starting_position) && (selected_item < (starting_position + visible_entries))) {
+        float highlight_y = (float)(list_y + (selected_item - starting_position) * row_height);
+        ui_components_box_draw(
+            VISIBLE_AREA_X0,
+            highlight_y,
+            VISIBLE_AREA_X0 + FILE_LIST_HIGHLIGHT_WIDTH + LIST_SCROLLBAR_WIDTH,
+            highlight_y + row_height,
+            FILE_LIST_HIGHLIGHT_COLOR
+        );
+    }
+
     char buffer[BOOKKEEPING_BUFFER_LEN];
     int cursor = 0;
     buffer[0] = '\0';
 
-    for (uint16_t i = 0; i < playtime_ranked_count; i++) {
-        playtime_entry_t *entry = playtime_ranked[i];
+    for (int i = 0; i < visible_entries; i++) {
+        int absolute_index = starting_position + i;
+        playtime_entry_t *entry = playtime_ranked[absolute_index];
         if (!entry || !entry->path) {
             continue;
         }
@@ -320,7 +378,7 @@ static void draw_playtime_leaderboard(void) {
         if (!name || name[0] == '\0') {
             name = entry->path;
         }
-        buffer_appendf(buffer, BOOKKEEPING_BUFFER_LEN, &cursor, "%2d. %-42.42s  %s\n", (int)(i + 1), name, duration);
+        buffer_appendf(buffer, BOOKKEEPING_BUFFER_LEN, &cursor, "%2d. %-42.42s  %s\n", absolute_index + 1, name, duration);
         if (cursor >= (BOOKKEEPING_BUFFER_LEN - 64)) {
             break;
         }
@@ -330,7 +388,7 @@ static void draw_playtime_leaderboard(void) {
     rdpq_text_printn(
         &(rdpq_textparms_t) {
             .width = VISIBLE_AREA_WIDTH - (TEXT_MARGIN_HORIZONTAL * 2),
-            .height = LAYOUT_ACTIONS_SEPARATOR_Y - OVERSCAN_HEIGHT - (TEXT_MARGIN_VERTICAL * 2),
+            .height = list_height,
             .align = ALIGN_LEFT,
             .valign = VALIGN_TOP,
             .wrap = WRAP_ELLIPSES,
@@ -338,7 +396,7 @@ static void draw_playtime_leaderboard(void) {
         },
         FNT_DEFAULT,
         VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL,
-        VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL,
+        list_y,
         buffer,
         nbytes
     );

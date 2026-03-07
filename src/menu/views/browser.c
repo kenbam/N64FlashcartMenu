@@ -11,6 +11,7 @@
 #include "../fonts.h"
 #include "../png_decoder.h"
 #include "../rom_info.h"
+#include "../ui_components/constants.h"
 #include "utils/fs.h"
 #include "views.h"
 #include "../sound.h"
@@ -74,6 +75,106 @@ static bool string_ends_with_ignore_case(const char *value, const char *suffix) 
     return true;
 }
 
+static char *playlist_read_description_file(const char *path) {
+    if (!path || !path[0] || !file_exists((char *)path)) {
+        return NULL;
+    }
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+
+    char *buffer = calloc(1, 2048);
+    if (!buffer) {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t n = fread(buffer, 1, 2047, f);
+    buffer[n] = '\0';
+    fclose(f);
+
+    char *trimmed = buffer;
+    while (*trimmed == ' ' || *trimmed == '\t' || *trimmed == '\r' || *trimmed == '\n') {
+        trimmed++;
+    }
+    char *end = trimmed + strlen(trimmed);
+    while (end > trimmed && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n')) {
+        end--;
+    }
+    *end = '\0';
+    if (!trimmed || !trimmed[0]) {
+        free(buffer);
+        return NULL;
+    }
+
+    if (trimmed != buffer) {
+        memmove(buffer, trimmed, strlen(trimmed) + 1);
+    }
+    return buffer;
+}
+
+static int playlist_description_build_lines(const char *description, char lines[][96], int max_lines) {
+    if (!description || !description[0] || !lines || max_lines <= 0) {
+        return 0;
+    }
+
+    const int max_cols = 72;
+    int line_count = 0;
+    int col = 0;
+    lines[0][0] = '\0';
+
+    const char *p = description;
+    while (*p != '\0' && line_count < max_lines) {
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
+            if (*p == '\n' && col > 0 && line_count + 1 < max_lines) {
+                lines[line_count][col] = '\0';
+                line_count++;
+                col = 0;
+                lines[line_count][0] = '\0';
+            }
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
+
+        char word[64];
+        int w = 0;
+        while (*p != '\0' && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' && w + 1 < (int)sizeof(word)) {
+            word[w++] = *p++;
+        }
+        word[w] = '\0';
+        if (w == 0) {
+            continue;
+        }
+
+        int needed = w + (col > 0 ? 1 : 0);
+        if (col > 0 && (col + needed) > max_cols && line_count + 1 < max_lines) {
+            lines[line_count][col] = '\0';
+            line_count++;
+            col = 0;
+            lines[line_count][0] = '\0';
+        }
+        if (col > 0 && col + 1 < 95) {
+            lines[line_count][col++] = ' ';
+        }
+        for (int i = 0; i < w && col + 1 < 95; i++) {
+            lines[line_count][col++] = word[i];
+        }
+        lines[line_count][col] = '\0';
+    }
+
+    if (col > 0 || line_count == 0) {
+        line_count++;
+    }
+    if (line_count > max_lines) {
+        line_count = max_lines;
+    }
+    return line_count;
+}
+
 struct substr { const char *str; size_t len; };
 #define substr(str) ((struct substr){ str, sizeof(str) - 1 })
 
@@ -90,6 +191,7 @@ static const struct substr hidden_prefixes[] = {
 #define HIDDEN_PREFIXES_COUNT (sizeof(hidden_prefixes) / sizeof(hidden_prefixes[0]))
 
 static uint32_t random_entry_state = 0x9E3779B9u;
+static uint32_t playlist_description_tick = 0;
 
 typedef enum {
     RANDOM_MODE_ANY_GAME = 0,
@@ -104,7 +206,9 @@ typedef struct {
 } random_candidate_t;
 
 static char *normalize_path (const char *path);
+static char *trim_line (char *line);
 static const char *format_clock_12h(time_t now, char *buffer, size_t buffer_len);
+static char *playlist_read_description_file(const char *path);
 static int random_candidate_compare(const void *a, const void *b);
 static bool browser_entry_is_game(const entry_t *entry);
 static char *browser_entry_path(menu_t *menu, int index);
@@ -871,6 +975,8 @@ static void browser_list_free (menu_t *menu) {
     menu->browser.entries = 0;
     menu->browser.entry = NULL;
     menu->browser.selected = -1;
+    free(menu->browser.playlist_description);
+    menu->browser.playlist_description = NULL;
 }
 
 static bool load_archive (menu_t *menu) {
@@ -1347,7 +1453,7 @@ static char *playlist_resolve_path(menu_t *menu, path_t *playlist_dir, const cha
     return normalized;
 }
 
-static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path, int *viz_style, int *viz_intensity, int *text_panel_enabled, int *text_panel_alpha, char **screensaver_logo_path, int *grid_view_enabled) {
+static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path, int *viz_style, int *viz_intensity, int *text_panel_enabled, int *text_panel_alpha, char **screensaver_logo_path, int *grid_view_enabled, char **playlist_description) {
     (void)menu;
     if (!line || line[0] != '#') {
         return;
@@ -1470,6 +1576,26 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
             *grid_view_enabled = 1;
         } else if (strcasecmp(value, "LIST") == 0) {
             *grid_view_enabled = 0;
+        }
+        return;
+    }
+
+    if (strcasecmp(key, "DESC") == 0 || strcasecmp(key, "DESCRIPTION") == 0) {
+        free(*playlist_description);
+        *playlist_description = strdup(value);
+        return;
+    }
+
+    if (strcasecmp(key, "DESC_FILE") == 0 || strcasecmp(key, "DESCRIPTION_FILE") == 0) {
+        char *resolved = playlist_resolve_path(menu, playlist_dir, value);
+        if (!resolved) {
+            return;
+        }
+        char *loaded = playlist_read_description_file(resolved);
+        free(resolved);
+        if (loaded) {
+            free(*playlist_description);
+            *playlist_description = loaded;
         }
         return;
     }
@@ -1643,6 +1769,7 @@ static bool load_playlist (menu_t *menu) {
     int playlist_text_panel_alpha = -1;
     char *playlist_screensaver_logo = NULL;
     int playlist_grid_view = -1;
+    char *playlist_description = NULL;
 
     char line[1024];
     while (fgets(line, sizeof(line), f) != NULL) {
@@ -1651,7 +1778,7 @@ static bool load_playlist (menu_t *menu) {
             continue;
         }
         if (trimmed[0] == '#') {
-            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg, &playlist_viz_style, &playlist_viz_intensity, &playlist_text_panel_enabled, &playlist_text_panel_alpha, &playlist_screensaver_logo, &playlist_grid_view);
+            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg, &playlist_viz_style, &playlist_viz_intensity, &playlist_text_panel_enabled, &playlist_text_panel_alpha, &playlist_screensaver_logo, &playlist_grid_view, &playlist_description);
             continue;
         }
 
@@ -1672,6 +1799,7 @@ static bool load_playlist (menu_t *menu) {
             free(playlist_theme);
             free(playlist_bgm);
             free(playlist_bg);
+            free(playlist_description);
             browser_list_free(menu);
             return true;
         }
@@ -1693,6 +1821,7 @@ static bool load_playlist (menu_t *menu) {
             free(playlist_theme);
             free(playlist_bgm);
             free(playlist_bg);
+            free(playlist_description);
             browser_list_free(menu);
             return true;
         }
@@ -1705,6 +1834,7 @@ static bool load_playlist (menu_t *menu) {
             free(playlist_theme);
             free(playlist_bgm);
             free(playlist_bg);
+            free(playlist_description);
             browser_list_free(menu);
             return true;
         }
@@ -1726,12 +1856,16 @@ static bool load_playlist (menu_t *menu) {
     browser_apply_sort(menu);
 
     browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
+    free(menu->browser.playlist_description);
+    menu->browser.playlist_description = playlist_description;
+    playlist_description = NULL;
     path_free(playlist_dir);
     fclose(f);
     free(playlist_theme);
     free(playlist_bgm);
     free(playlist_bg);
     free(playlist_screensaver_logo);
+    free(playlist_description);
 
     return false;
 }
@@ -1862,6 +1996,11 @@ static bool load_directory (menu_t *menu) {
         if (!hide) {
             // Datel sidecar cheat files are ROM implementation details and clutter normal browsing.
             if (info.d_type != DT_DIR && string_ends_with_ignore_case(info.d_name, ".datel.txt")) {
+                result = dir_findnext(path_get(path), &info);
+                continue;
+            }
+            // Hide metadata/config sidecars from normal browsing.
+            if (info.d_type != DT_DIR && string_ends_with_ignore_case(info.d_name, ".ini")) {
                 result = dir_findnext(path_get(path), &info);
                 continue;
             }
@@ -2002,25 +2141,69 @@ static bool pop_directory (menu_t *menu) {
 
 static bool select_file (menu_t *menu, path_t *file) {
     path_t *previous_directory = path_clone(menu->browser.directory);
+    path_t *target_file = NULL;
+
+    const char *raw = file ? path_get(file) : NULL;
+    if (raw == NULL || raw[0] == '\0') {
+        path_free(previous_directory);
+        return true;
+    }
+
+    if (strstr(raw, ":/") != NULL) {
+        target_file = path_clone(file);
+    } else if (raw[0] == '/') {
+        // Backward compatibility: historical entries may store root-relative SD paths.
+        char *raw_copy = strdup(raw);
+        if (!raw_copy) {
+            path_free(previous_directory);
+            return true;
+        }
+        target_file = path_init(menu->storage_prefix, raw_copy);
+        free(raw_copy);
+    } else {
+        target_file = path_init(menu->storage_prefix, "/");
+        char *raw_copy = strdup(raw);
+        if (!raw_copy) {
+            path_free(previous_directory);
+            path_free(target_file);
+            return true;
+        }
+        path_push(target_file, raw_copy);
+        free(raw_copy);
+    }
+
+    if (!target_file) {
+        path_free(previous_directory);
+        return true;
+    }
 
     path_free(menu->browser.directory);
-    menu->browser.directory = path_clone(file);
+    menu->browser.directory = path_clone(target_file);
     path_pop(menu->browser.directory);
 
     if (load_directory(menu)) {
         path_free(menu->browser.directory);
         menu->browser.directory = previous_directory;
+        path_free(target_file);
         return true;
     }
 
+    bool found = false;
     for (uint16_t i = 0; i < menu->browser.entries; i++) {
-        if (strcmp(menu->browser.list[i].name, path_last_get(file)) == 0) {
+        if (strcmp(menu->browser.list[i].name, path_last_get(target_file)) == 0) {
             menu->browser.selected = i;
             menu->browser.entry = &menu->browser.list[menu->browser.selected];
+            found = true;
             break;
         }
     }
 
+    if (!found && menu->browser.entries > 0) {
+        menu->browser.selected = 0;
+        menu->browser.entry = &menu->browser.list[0];
+    }
+
+    path_free(target_file);
     path_free(previous_directory);
 
     return false;
@@ -2373,9 +2556,44 @@ static void draw (menu_t *menu, surface_t *d) {
 
     ui_components_layout_draw_tabbed();
 
-    if (browser_use_playlist_grid(menu)) {
+    bool use_playlist_grid = browser_use_playlist_grid(menu);
+    bool show_playlist_desc_panel = menu->browser.playlist &&
+                                    !use_playlist_grid &&
+                                    menu->browser.playlist_description &&
+                                    menu->browser.playlist_description[0] != '\0';
+    int playlist_desc_top_inset = show_playlist_desc_panel ? 34 : 0;
+
+    ui_components_set_file_list_top_inset(playlist_desc_top_inset);
+
+    if (show_playlist_desc_panel) {
+        const int panel_x0 = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
+        const int panel_x1 = VISIBLE_AREA_X1 - TEXT_MARGIN_HORIZONTAL - LIST_SCROLLBAR_WIDTH;
+        const int panel_y0 = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + 1;
+        const int panel_y1 = panel_y0 + 28;
+        char lines[12][96];
+        int line_count = playlist_description_build_lines(menu->browser.playlist_description, lines, 12);
+        int start_line = 0;
+        if (line_count > 2) {
+            int range = line_count - 2;
+            int phase = (int)((playlist_description_tick / 28u) % (uint32_t)(range * 2));
+            start_line = (phase <= range) ? phase : ((range * 2) - phase);
+        }
+        playlist_description_tick++;
+
+        ui_components_box_draw(panel_x0, panel_y0, panel_x1, panel_y1, RGBA32(0x00, 0x00, 0x00, 0x72));
+        ui_components_border_draw(panel_x0, panel_y0, panel_x1, panel_y1);
+        rdpq_text_printf(&(rdpq_textparms_t){ .width = panel_x1 - panel_x0 - 12, .height = 12, .wrap = WRAP_ELLIPSES, .style_id = STL_BLUE },
+                         FNT_DEFAULT, panel_x0 + 6, panel_y0 + 3, "%s", lines[start_line]);
+        if (start_line + 1 < line_count) {
+            rdpq_text_printf(&(rdpq_textparms_t){ .width = panel_x1 - panel_x0 - 12, .height = 12, .wrap = WRAP_ELLIPSES, .style_id = STL_DEFAULT },
+                             FNT_DEFAULT, panel_x0 + 6, panel_y0 + 15, "%s", lines[start_line + 1]);
+        }
+    }
+
+    if (use_playlist_grid) {
         browser_playlist_grid_draw(menu);
     } else {
+        ui_components_set_file_list_last_played_context(&menu->playtime, menu->current_time);
         ui_components_file_list_draw(menu->browser.list, menu->browser.entries, menu->browser.selected);
     }
 

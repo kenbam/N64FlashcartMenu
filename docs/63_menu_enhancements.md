@@ -21,6 +21,8 @@ Supported directives:
 - `#SC64_BG=<path to png>` (alias)
 - `#SC64_BGM=<path to mp3|wav64>`
 - `#SC64_MUSIC=<path to mp3|wav64>` (alias)
+- `#SC64_DESC=<single line playlist description>`
+- `#SC64_DESC_FILE=<path to text file>` (loads first ~2KB and shows compact line in playlist view)
 - `#SC64_VIZ_STYLE=<Bars|Pulse Wash|Sunburst|Oscilloscope|id>`
 - `#SC64_VIZ_INTENSITY=<Subtle|Normal|Full|0..2>`
 - `#SC64_TEXT_PANEL=<On|Off>`
@@ -38,6 +40,7 @@ Example:
 #SC64_THEME=Retrowave
 #SC64_BACKGROUND=/menu/backgrounds/Countach.png
 #SC64_BGM=/menu/music/Need For Speed 4 High Stakes Soundtrack - Quantum Singularity (HD 1080p).wav64
+#SC64_DESC=High-speed classics and arcade chaos.
 #SC64_VIZ_STYLE=Oscilloscope
 #SC64_VIZ_INTENSITY=Subtle
 #SC64_TEXT_PANEL_ALPHA=160

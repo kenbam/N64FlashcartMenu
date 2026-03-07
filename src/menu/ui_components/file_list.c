@@ -24,6 +24,9 @@ static const char *directory_icon = "[DIR] ";
 // static const char *other_icon = "[?] ";
 
 static bool selected_row_shimmer_enabled = true;
+static playtime_db_t *file_list_playtime_db = NULL;
+static time_t file_list_now = 0;
+static int file_list_top_inset = 0;
 
 static menu_font_style_t selected_shimmer_style(void) {
     static const menu_font_style_t cycle[] = {
@@ -39,6 +42,21 @@ static menu_font_style_t selected_shimmer_style(void) {
 
 void ui_components_set_selected_row_shimmer(bool enabled) {
     selected_row_shimmer_enabled = enabled;
+}
+
+void ui_components_set_file_list_last_played_context(playtime_db_t *db, time_t now) {
+    file_list_playtime_db = db;
+    file_list_now = now;
+}
+
+void ui_components_set_file_list_top_inset(int inset_pixels) {
+    if (inset_pixels < 0) {
+        inset_pixels = 0;
+    }
+    if (inset_pixels > 120) {
+        inset_pixels = 120;
+    }
+    file_list_top_inset = inset_pixels;
 }
 
 /**
@@ -64,6 +82,40 @@ static int format_file_size(char *buffer, int64_t size) {
     }
 }
 
+static int format_last_played(char *buffer, const entry_t *entry) {
+    if (!buffer || !entry || !entry->path || !file_list_playtime_db) {
+        return sprintf(buffer, "--");
+    }
+
+    if (entry->type != ENTRY_TYPE_ROM && entry->type != ENTRY_TYPE_DISK && entry->type != ENTRY_TYPE_EMULATOR) {
+        return sprintf(buffer, "--");
+    }
+
+    playtime_entry_t *pt = playtime_get(file_list_playtime_db, entry->path);
+    if (!pt || pt->last_played <= 0) {
+        buffer[0] = '\0';
+        return 0;
+    }
+    if (file_list_now <= 0) {
+        return sprintf(buffer, "Played");
+    }
+
+    int64_t delta = (int64_t)file_list_now - (int64_t)pt->last_played;
+    if (delta < 0) {
+        delta = 0;
+    }
+    if (delta < 86400) {
+        return sprintf(buffer, "Today");
+    }
+    if (delta < (86400 * 7)) {
+        return sprintf(buffer, "%lldd ago", (long long)(delta / 86400));
+    }
+    if (delta < (86400 * 30)) {
+        return sprintf(buffer, "%lldw ago", (long long)(delta / (86400 * 7)));
+    }
+    return sprintf(buffer, "%lldmo ago", (long long)(delta / (86400 * 30)));
+}
+
 /**
  * @brief Draw the file list UI component.
  *
@@ -77,7 +129,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
     const int nominal_row_height = 19;
     int starting_position = 0;
     int list_x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
-    int list_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL;
+    int list_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL + file_list_top_inset;
     int list_bottom = LAYOUT_ACTIONS_SEPARATOR_Y - TEXT_MARGIN_VERTICAL;
     int list_height = list_bottom - list_y;
     if (list_height < 0) {
@@ -240,7 +292,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
             NULL
         );
 
-        char file_size[16];
+        char second_col[20];
 
         for (int i = 0; i < visible_entries; i++) {
             int entry_index = starting_position + i;
@@ -253,8 +305,8 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
             }
 
             if (entry->type != ENTRY_TYPE_DIR) {
-                // TODO: add option to use font icons instead of file sizes.
-                rdpq_paragraph_builder_span(file_size, format_file_size(file_size, entry->size));
+                // Playlists typically have unknown entry sizes; last-played is higher-value.
+                rdpq_paragraph_builder_span(second_col, format_last_played(second_col, entry));
             }
             else {
                 rdpq_paragraph_builder_span(directory_icon, 5);

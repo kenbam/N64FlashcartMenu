@@ -150,6 +150,7 @@ typedef struct {
         path_t* select_file;
         browser_sort_t sort_mode;
         browser_picker_t picker;
+        char *playlist_description;
     } browser;
 
     struct {
