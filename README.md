@@ -63,12 +63,14 @@ Playlist support (M3U):
 * Playlist order preserved as authored.
 * Better path handling when jumping from Favorites/Recent/Playtime.
 * Browser sort modes (Custom/M3U order, A-Z, Z-A).
+* Support for playlist-based organization without duplicating ROM/save files.
 
 Playlist personalization:
 * Per-playlist theme/background/music.
 * Per-playlist view mode (list/grid).
 * Per-playlist description text.
 * Per-playlist screensaver logo and visualizer settings.
+* Per-playlist text panel/alpha and immersion profile behavior.
 
 Playtime and browsing:
 * Last played, total time, recent sessions, and leaderboard.
@@ -76,13 +78,16 @@ Playtime and browsing:
 * Fast scroll behavior in Playtime list.
 * Quick random game jump and smart-random mode options.
 * Cleaner browser view (sidecar clutter hidden, safer empty-folder behavior).
+* Favorites/Recent/Playtime-to-browser pathing fixes.
 
 ROM details + metadata:
 * Expanded ROM details view with richer metadata display.
 * Title, publisher, year, rating fields, save/feature info, and long description rendering.
 * Year field shown on ROM details page.
+* ROM details page scrolling support (long content no longer clipped/overlapped).
 * Metadata parser accepts both `[meta]` and `[metadata]`.
 * Expanded year key parsing (`year`, `release-year`, `release-date`, etc).
+* Metadata-to-ROM matching and coverage audits/backfills for large sets.
 
 ### Playtime + SC64 firmware integration
 This is a major custom feature set in this branch.
@@ -108,15 +113,18 @@ Themes and UI polish:
 * Additional built-in themes.
 * Optional shimmer/highlight styling.
 * Improved playlist description presentation (dedicated panel under tabs).
+* Improved text/background contrast controls (text panel + alpha).
 
 Screensaver:
 * DVD-style bouncing logo mode.
 * Selectable logo assets.
 * Motion/collision tuning improvements.
+* Idle behavior integration with menu runtime settings.
 
 Audio pipeline:
 * WAV64 menu BGM support (alongside MP3).
 * Better stability for long sessions and heavy UI scenes.
+* Menu music selector flow and playlist BGM override handling.
 
 ### Beta / experimental (use with caution)
 Visualizer system (experimental):
@@ -127,6 +135,11 @@ Visualizer system (experimental):
 Grid view for playlists (experimental):
 * Boxart grid mode with caching/prefetch.
 * Ongoing perf tuning; behavior can vary with SD speed and metadata state.
+
+Additional branch-level additions:
+* Datel cheat files support and cleaner cheat-sidecar handling in browser.
+* By-Year playlist generation and large curated playlist packs (ranked/history/studio/fun).
+* Asset conversion/optimization workflow for backgrounds, boxart thumbs, and music.
 
 ### Notes and references
 * See `CHANGELOG.md` for an ongoing log.
