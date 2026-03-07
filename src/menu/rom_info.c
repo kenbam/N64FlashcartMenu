@@ -26,6 +26,7 @@
 #define PI_CONFIG_64DD_IPL      (0x80270740)
 
 #define CLOCK_RATE_DEFAULT      (0x0000000F)
+#define ROM_STABLE_ID_CACHE_SIZE (48)
 
 
 /** @brief ROM File Information Structure. */
@@ -569,6 +570,66 @@ static const match_t database[] = {
 };
 // clang-format on
 
+typedef struct {
+    bool valid;
+    char *path;
+    char stable_id[ROM_STABLE_ID_LENGTH];
+    uint32_t last_used_tick;
+} rom_stable_id_cache_entry_t;
+
+static rom_stable_id_cache_entry_t rom_stable_id_cache[ROM_STABLE_ID_CACHE_SIZE];
+static uint32_t rom_stable_id_cache_tick = 1;
+
+static rom_stable_id_cache_entry_t *rom_stable_id_cache_find(const char *path) {
+    if (!path) {
+        return NULL;
+    }
+
+    for (int i = 0; i < ROM_STABLE_ID_CACHE_SIZE; i++) {
+        rom_stable_id_cache_entry_t *entry = &rom_stable_id_cache[i];
+        if (!entry->valid || !entry->path) {
+            continue;
+        }
+        if (strcmp(entry->path, path) == 0) {
+            entry->last_used_tick = ++rom_stable_id_cache_tick;
+            return entry;
+        }
+    }
+
+    return NULL;
+}
+
+static rom_stable_id_cache_entry_t *rom_stable_id_cache_alloc(const char *path) {
+    if (!path) {
+        return NULL;
+    }
+
+    rom_stable_id_cache_entry_t *empty = NULL;
+    rom_stable_id_cache_entry_t *oldest = &rom_stable_id_cache[0];
+
+    for (int i = 0; i < ROM_STABLE_ID_CACHE_SIZE; i++) {
+        rom_stable_id_cache_entry_t *entry = &rom_stable_id_cache[i];
+        if (!entry->valid) {
+            empty = entry;
+            break;
+        }
+        if (entry->last_used_tick < oldest->last_used_tick) {
+            oldest = entry;
+        }
+    }
+
+    rom_stable_id_cache_entry_t *slot = empty ? empty : oldest;
+    free(slot->path);
+    memset(slot, 0, sizeof(*slot));
+    slot->path = strdup(path);
+    if (!slot->path) {
+        return NULL;
+    }
+    slot->valid = true;
+    slot->last_used_tick = ++rom_stable_id_cache_tick;
+    return slot;
+}
+
 
 static void fix_rom_header_endianness (rom_header_t *rom_header, rom_info_t *rom_info) {
     uint8_t *raw = (uint8_t *) (rom_header);
@@ -1044,6 +1105,62 @@ static void load_rom_config_from_file (path_t *path, rom_info_t *rom_info) {
     }
 
     path_free(rom_info_path);
+}
+
+bool rom_info_get_stable_id(const rom_info_t *rom_info, char *out, size_t out_len) {
+    if (!rom_info || !out || out_len < ROM_STABLE_ID_LENGTH) {
+        return false;
+    }
+
+    char game_code[5];
+    for (int i = 0; i < 4; i++) {
+        unsigned char c = (unsigned char)rom_info->game_code[i];
+        game_code[i] = isprint(c) ? (char)c : '_';
+    }
+    game_code[4] = '\0';
+
+    snprintf(
+        out,
+        out_len,
+        "%s-%02X-%016llX",
+        game_code,
+        (unsigned int)rom_info->version,
+        (unsigned long long)rom_info->check_code
+    );
+    return true;
+}
+
+bool rom_info_get_stable_id_for_path(const char *path, char *out, size_t out_len) {
+    if (!path || !out || out_len < ROM_STABLE_ID_LENGTH) {
+        return false;
+    }
+
+    rom_stable_id_cache_entry_t *cached = rom_stable_id_cache_find(path);
+    if (cached) {
+        snprintf(out, out_len, "%s", cached->stable_id);
+        return true;
+    }
+
+    path_t *rom_path = path_create(path);
+    if (!rom_path) {
+        return false;
+    }
+
+    rom_info_t rom_info = {0};
+    bool ok = (rom_config_load(rom_path, &rom_info) == ROM_OK) &&
+        rom_info_get_stable_id(&rom_info, out, out_len);
+    path_free(rom_path);
+
+    if (!ok) {
+        return false;
+    }
+
+    rom_stable_id_cache_entry_t *slot = rom_stable_id_cache_alloc(path);
+    if (slot) {
+        snprintf(slot->stable_id, sizeof(slot->stable_id), "%s", out);
+    }
+
+    return true;
 }
 
 static rom_err_t save_rom_config_setting_to_file (path_t *path, const char *type, const char *id, int value, int default_value) {

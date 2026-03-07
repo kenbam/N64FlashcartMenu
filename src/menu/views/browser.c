@@ -854,12 +854,20 @@ static bool path_is_favorite(menu_t *menu, const char *path) {
         return false;
     }
 
+    char game_id[ROM_STABLE_ID_LENGTH] = {0};
+    rom_info_get_stable_id_for_path(path, game_id, sizeof(game_id));
+
     for (int i = 0; i < FAVORITES_COUNT; i++) {
         bookkeeping_item_t *item = &menu->bookkeeping.favorite_items[i];
         if (item->bookkeeping_type == BOOKKEEPING_TYPE_EMPTY || item->primary_path == NULL) {
             continue;
         }
         if (strcmp(path_get(item->primary_path), path) == 0) {
+            return true;
+        }
+        if (game_id[0] != '\0' &&
+            item->game_id[0] != '\0' &&
+            strcmp(item->game_id, game_id) == 0) {
             return true;
         }
     }

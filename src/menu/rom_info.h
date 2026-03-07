@@ -17,6 +17,7 @@
 #define ROM_METADATA_AUTHOR_LENGTH      96
 #define ROM_METADATA_SHORT_DESC_LENGTH  256
 #define ROM_METADATA_LONG_DESC_LENGTH   1536
+#define ROM_STABLE_ID_LENGTH            32
 
 /** @brief ROM error enumeration. */
 typedef enum {
@@ -209,6 +210,32 @@ bool rom_info_get_cic_seed(rom_info_t *rom_info, uint8_t *seed);
  * @return rom_err_t Error code
  */
 rom_err_t rom_config_load(path_t *path, rom_info_t *rom_info);
+
+/**
+ * @brief Build a stable ROM identity string from loaded ROM information.
+ *
+ * The identity is derived from normalized ROM header fields so stats can
+ * survive path changes for the same ROM revision.
+ *
+ * @param rom_info Pointer to the loaded ROM information
+ * @param out Output buffer for the stable ID
+ * @param out_len Output buffer length
+ * @return true if the stable ID was written, false otherwise
+ */
+bool rom_info_get_stable_id(const rom_info_t *rom_info, char *out, size_t out_len);
+
+/**
+ * @brief Load ROM information from a path and build a stable ROM identity.
+ *
+ * The function keeps a small in-memory cache to avoid re-reading ROM headers
+ * for repeated lookups in the menu UI.
+ *
+ * @param path ROM path
+ * @param out Output buffer for the stable ID
+ * @param out_len Output buffer length
+ * @return true if the stable ID was written, false otherwise
+ */
+bool rom_info_get_stable_id_for_path(const char *path, char *out, size_t out_len);
 
 /**
  * @brief Get the CIC type for the ROM.

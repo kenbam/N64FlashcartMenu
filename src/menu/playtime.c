@@ -21,16 +21,32 @@ typedef enum {
     SC64_SETTING_ID_PLAYTIME_SECONDS = 3,
 } sc64_playtime_setting_id_t;
 
-static uint32_t playtime_path_hash(const char *path) {
+static uint32_t playtime_hash_string(const char *value) {
     uint32_t h = 2166136261u;
-    if (!path) {
+    if (!value) {
         return 0;
     }
-    for (const unsigned char *p = (const unsigned char *)path; *p; p++) {
+    for (const unsigned char *p = (const unsigned char *)value; *p; p++) {
         h ^= (uint32_t)(*p);
         h *= 16777619u;
     }
     return h;
+}
+
+static uint32_t playtime_tracker_key_hash(const playtime_entry_t *entry, const char *path, const char *game_id) {
+    if (game_id && game_id[0] != '\0') {
+        return playtime_hash_string(game_id);
+    }
+    if (entry && entry->game_id[0] != '\0') {
+        return playtime_hash_string(entry->game_id);
+    }
+    if (path && path[0] != '\0') {
+        return playtime_hash_string(path);
+    }
+    if (entry && entry->path) {
+        return playtime_hash_string(entry->path);
+    }
+    return 0;
 }
 
 static bool playtime_sc64_tracker_read(uint32_t *active, uint32_t *rom_hash, uint32_t *seconds) {
@@ -63,7 +79,9 @@ static bool playtime_sc64_tracker_clear(void) {
 }
 
 static bool playtime_sc64_tracker_start(const char *path) {
-    uint32_t rom_hash = playtime_path_hash(path);
+    char game_id[ROM_STABLE_ID_LENGTH] = {0};
+    rom_info_get_stable_id_for_path(path, game_id, sizeof(game_id));
+    uint32_t rom_hash = playtime_tracker_key_hash(NULL, path, game_id);
     if (rom_hash == 0) {
         return false;
     }
@@ -87,6 +105,34 @@ static void playtime_entry_free(playtime_entry_t *entry) {
     entry->path = NULL;
 }
 
+static bool playtime_entry_matches(const playtime_entry_t *entry, const char *path, const char *game_id) {
+    if (!entry) {
+        return false;
+    }
+    if (path && entry->path && strcmp(entry->path, path) == 0) {
+        return true;
+    }
+    if (game_id && game_id[0] != '\0' && entry->game_id[0] != '\0' && strcmp(entry->game_id, game_id) == 0) {
+        return true;
+    }
+    return false;
+}
+
+static void playtime_entry_set_identity(playtime_entry_t *entry, const char *path, const char *game_id) {
+    if (!entry) {
+        return;
+    }
+
+    if (path && path[0] != '\0' && (!entry->path || strcmp(entry->path, path) != 0)) {
+        free(entry->path);
+        entry->path = strdup(path);
+    }
+
+    if (game_id && game_id[0] != '\0') {
+        snprintf(entry->game_id, sizeof(entry->game_id), "%s", game_id);
+    }
+}
+
 void playtime_init (char *path) {
     if (playtime_path) {
         free(playtime_path);
@@ -106,11 +152,14 @@ void playtime_free (playtime_db_t *db) {
     db->count = 0;
 }
 
-static void playtime_add_entry(playtime_db_t *db, const char *path) {
+static void playtime_add_entry(playtime_db_t *db, const char *path, const char *game_id) {
     db->entries = realloc(db->entries, (db->count + 1) * sizeof(playtime_entry_t));
     playtime_entry_t *entry = &db->entries[db->count];
     memset(entry, 0, sizeof(*entry));
-    entry->path = strdup(path);
+    entry->path = path ? strdup(path) : NULL;
+    if (game_id && game_id[0] != '\0') {
+        snprintf(entry->game_id, sizeof(entry->game_id), "%s", game_id);
+    }
     entry->total_seconds = 0;
     entry->last_session_seconds = 0;
     entry->last_played = 0;
@@ -142,8 +191,12 @@ playtime_entry_t *playtime_get (playtime_db_t *db, const char *path) {
     if (!db || !path) {
         return NULL;
     }
+
+    char game_id[ROM_STABLE_ID_LENGTH] = {0};
+    rom_info_get_stable_id_for_path(path, game_id, sizeof(game_id));
+
     for (uint32_t i = 0; i < db->count; i++) {
-        if (db->entries[i].path && strcmp(db->entries[i].path, path) == 0) {
+        if (playtime_entry_matches(&db->entries[i], path, game_id)) {
             return &db->entries[i];
         }
     }
@@ -167,6 +220,7 @@ void playtime_load (playtime_db_t *db) {
         count = 0;
     }
 
+    bool migrated = false;
     for (int64_t i = 0; i < count; i++) {
         char key[64];
         sprintf(key, "%lld_path", (long long)i);
@@ -175,8 +229,14 @@ void playtime_load (playtime_db_t *db) {
             continue;
         }
 
-        playtime_add_entry(db, path);
+        sprintf(key, "%lld_game_id", (long long)i);
+        const char *game_id = mini_get_string(ini, "stats", key, "");
+
+        playtime_add_entry(db, path, game_id);
         playtime_entry_t *entry = &db->entries[db->count - 1];
+        if (entry->game_id[0] == '\0' && rom_info_get_stable_id_for_path(path, entry->game_id, sizeof(entry->game_id))) {
+            migrated = true;
+        }
 
         sprintf(key, "%lld_total", (long long)i);
         entry->total_seconds = (uint64_t)mini_get_int(ini, "stats", key, 0);
@@ -214,6 +274,10 @@ void playtime_load (playtime_db_t *db) {
     }
 
     mini_free(ini);
+
+    if (migrated) {
+        playtime_save(db);
+    }
 }
 
 void playtime_save (playtime_db_t *db) {
@@ -231,6 +295,9 @@ void playtime_save (playtime_db_t *db) {
 
         sprintf(key, "%u_path", (unsigned int)i);
         mini_set_string(ini, "stats", key, entry->path ? entry->path : "");
+
+        sprintf(key, "%u_game_id", (unsigned int)i);
+        mini_set_string(ini, "stats", key, entry->game_id);
 
         sprintf(key, "%u_total", (unsigned int)i);
         mini_set_int(ini, "stats", key, (long long)entry->total_seconds);
@@ -282,7 +349,7 @@ void playtime_finalize_active (playtime_db_t *db, time_t now) {
                 if (!entry->path) {
                     continue;
                 }
-                if (playtime_path_hash(entry->path) != rom_hash) {
+                if (playtime_tracker_key_hash(entry, NULL, NULL) != rom_hash) {
                     continue;
                 }
                 entry->total_seconds += (uint64_t)seconds;
@@ -329,10 +396,15 @@ void playtime_start_session (playtime_db_t *db, const char *path, time_t now) {
         return;
     }
 
+    char game_id[ROM_STABLE_ID_LENGTH] = {0};
+    rom_info_get_stable_id_for_path(path, game_id, sizeof(game_id));
+
     playtime_entry_t *entry = playtime_get(db, path);
     if (!entry) {
-        playtime_add_entry(db, path);
+        playtime_add_entry(db, path, game_id);
         entry = &db->entries[db->count - 1];
+    } else {
+        playtime_entry_set_identity(entry, path, game_id);
     }
 
     entry->last_played = (int64_t)now;

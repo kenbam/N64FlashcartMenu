@@ -7,6 +7,7 @@
 #ifndef BOOKKEEPING_H__
 #define BOOKKEEPING_H__
 
+#include "rom_info.h"
 #include "path.h"
 
 #define FAVORITES_COUNT 8 /**< Maximum number of favorite items */
@@ -23,6 +24,7 @@ typedef enum {
 typedef struct {
     path_t *primary_path; /**< Primary path */
     path_t *secondary_path; /**< Secondary path */
+    char game_id[ROM_STABLE_ID_LENGTH]; /**< Stable ROM identity (when available) */
     bookkeeping_item_types_t bookkeeping_type; /**< Bookkeeping item type */
 } bookkeeping_item_t;
 

@@ -14,6 +14,25 @@
 static char *history_path = NULL;
 static bookkeeping_t init;
 
+static bool bookkeeping_item_fill_game_id(bookkeeping_item_t *item) {
+    if (!item || item->game_id[0] != '\0') {
+        return (item != NULL);
+    }
+
+    const char *source_path = NULL;
+    if (item->bookkeeping_type == BOOKKEEPING_TYPE_ROM && item->primary_path) {
+        source_path = path_get(item->primary_path);
+    } else if (item->bookkeeping_type == BOOKKEEPING_TYPE_DISK && item->secondary_path) {
+        source_path = path_get(item->secondary_path);
+    }
+
+    if (!source_path || source_path[0] == '\0') {
+        return false;
+    }
+
+    return rom_info_get_stable_id_for_path(source_path, item->game_id, sizeof(item->game_id));
+}
+
 /**
  * @brief Initialize the bookkeeping system with the specified path.
  * 
@@ -42,9 +61,13 @@ void bookkeeping_ini_load_list(bookkeeping_item_t *list, uint16_t count, mini_t 
 
         sprintf(buf, "%d_secondary_path", i);
         list[i].secondary_path = path_create(mini_get_string(ini, group, buf, ""));
+
+        sprintf(buf, "%d_game_id", i);
+        snprintf(list[i].game_id, sizeof(list[i].game_id), "%s", mini_get_string(ini, group, buf, ""));
         
         sprintf(buf, "%d_type", i);
         list[i].bookkeeping_type = mini_get_int(ini, group, buf, BOOKKEEPING_TYPE_EMPTY);
+        bookkeeping_item_fill_game_id(&list[i]);
     }
 }
 
@@ -84,6 +107,9 @@ static void bookkeeping_ini_save_list(bookkeeping_item_t *list, uint16_t count, 
         path = list[i].secondary_path;
         mini_set_string(ini, group, buf, path != NULL ? path_get(path) : "");   
 
+        sprintf(buf, "%d_game_id", i);
+        mini_set_string(ini, group, buf, list[i].game_id);
+
         sprintf(buf, "%d_type", i);
         mini_set_int(ini, group, buf, list[i].bookkeeping_type);           
     }
@@ -113,6 +139,15 @@ void bookkeeping_save (bookkeeping_t *history) {
  */
 static bool bookkeeping_item_match(bookkeeping_item_t *left, bookkeeping_item_t *right) {
     if(left != NULL && right != NULL) {
+        bookkeeping_item_fill_game_id(left);
+        bookkeeping_item_fill_game_id(right);
+        if (left->bookkeeping_type == BOOKKEEPING_TYPE_ROM &&
+            right->bookkeeping_type == BOOKKEEPING_TYPE_ROM &&
+            left->game_id[0] != '\0' &&
+            right->game_id[0] != '\0' &&
+            strcmp(left->game_id, right->game_id) == 0) {
+            return true;
+        }
         return path_are_match(left->primary_path, right->primary_path) && path_are_match(left->secondary_path, right->secondary_path) && left->bookkeeping_type == right->bookkeeping_type;
     }
 
@@ -145,6 +180,7 @@ static void bookkeeping_clear_item(bookkeeping_item_t *item, bool leave_null) {
         }
     }
     item->bookkeeping_type = BOOKKEEPING_TYPE_EMPTY;
+    item->game_id[0] = '\0';
 }
 
 /**
@@ -158,6 +194,7 @@ static void bookkeeping_copy_item(bookkeeping_item_t *source, bookkeeping_item_t
 
     destination->primary_path =  source->primary_path != NULL ? path_clone(source->primary_path) : path_create("");   
     destination->secondary_path = source->secondary_path != NULL ? path_clone(source->secondary_path) : path_create("");
+    snprintf(destination->game_id, sizeof(destination->game_id), "%s", source->game_id);
     destination->bookkeeping_type = source->bookkeeping_type;
 }
 
@@ -248,6 +285,7 @@ void bookkeeping_history_add(bookkeeping_t *bookkeeping, path_t *primary_path, p
         .secondary_path = secondary_path,
         .bookkeeping_type = type
     };
+    bookkeeping_item_fill_game_id(&new_item);
 
     bookkeeping_insert_top(bookkeeping->history_items, HISTORY_COUNT, &new_item);
     bookkeeping_save(bookkeeping);
@@ -267,6 +305,7 @@ void bookkeeping_favorite_add(bookkeeping_t *bookkeeping, path_t *primary_path, 
         .secondary_path = secondary_path,
         .bookkeeping_type = type
     };
+    bookkeeping_item_fill_game_id(&new_item);
 
     bookkeeping_insert_top(bookkeeping->favorite_items, FAVORITES_COUNT, &new_item);
     bookkeeping_save(bookkeeping);

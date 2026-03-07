@@ -11,6 +11,8 @@
 #include <stdint.h>
 #include <time.h>
 
+#include "rom_info.h"
+
 #define PLAYTIME_RECENT_SESSIONS_MAX 5
 
 typedef struct {
@@ -20,6 +22,7 @@ typedef struct {
 
 typedef struct {
     char *path;
+    char game_id[ROM_STABLE_ID_LENGTH];
     uint64_t total_seconds;
     uint64_t last_session_seconds;
     int64_t last_played;
