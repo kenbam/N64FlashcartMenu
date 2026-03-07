@@ -113,6 +113,7 @@ Operational note:
 ### Visual and media enhancements
 Themes and UI polish:
 * Additional built-in themes.
+* Includes presets such as Gruvbox, Nord, Solarized, Dracula, CRT Green, Retrowave, and more.
 * Optional shimmer/highlight styling.
 * Improved playlist description presentation (dedicated panel under tabs).
 * Improved text/background contrast controls (text panel + alpha).

@@ -58,3 +58,13 @@ See:
 - `examples/playlists/Playlist Example - Minimal.m3u`
 
 These are safe templates and can be copied/renamed directly.
+
+## Full personal playlist snapshot (in-repo)
+The full current SD playlist set is tracked at:
+- `playlists/personal/`
+
+To refresh that snapshot from SD:
+
+```bash
+rsync -a /mnt/d/Playlists/ /mnt/b/dev/N64FlashcartMenu/playlists/personal/
+```
