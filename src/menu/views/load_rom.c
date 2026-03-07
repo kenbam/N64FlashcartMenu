@@ -910,8 +910,13 @@ static void draw (menu_t *menu, surface_t *d) {
         char details[4608];
         const char *display_name = (menu->load.rom_info.metadata.name[0] != '\0') ? menu->load.rom_info.metadata.name : rom_filename;
         const char *publisher = (menu->load.rom_info.metadata.author[0] != '\0') ? menu->load.rom_info.metadata.author : "Unknown";
+        const char *developer = (menu->load.rom_info.metadata.developer[0] != '\0') ? menu->load.rom_info.metadata.developer : "Unknown";
+        const char *genre = (menu->load.rom_info.metadata.genre[0] != '\0') ? menu->load.rom_info.metadata.genre : "Unknown";
+        const char *series = (menu->load.rom_info.metadata.series[0] != '\0') ? menu->load.rom_info.metadata.series : "Unknown";
+        const char *modes = (menu->load.rom_info.metadata.modes[0] != '\0') ? menu->load.rom_info.metadata.modes : "Unknown";
         char age_rating[16];
         char release_year[16];
+        char players[24];
         if (menu->load.rom_info.metadata.age_rating >= 0) {
             snprintf(age_rating, sizeof(age_rating), "%d+", (int)menu->load.rom_info.metadata.age_rating);
         } else {
@@ -921,6 +926,21 @@ static void draw (menu_t *menu, surface_t *d) {
             snprintf(release_year, sizeof(release_year), "%d", (int)menu->load.rom_info.metadata.release_year);
         } else {
             snprintf(release_year, sizeof(release_year), "Unknown");
+        }
+        if ((menu->load.rom_info.metadata.players_min > 0) && (menu->load.rom_info.metadata.players_max > 0)) {
+            if (menu->load.rom_info.metadata.players_min == menu->load.rom_info.metadata.players_max) {
+                snprintf(players, sizeof(players), "%d", (int)menu->load.rom_info.metadata.players_max);
+            } else if (menu->load.rom_info.metadata.players_max >= 99) {
+                snprintf(players, sizeof(players), "%d+", (int)menu->load.rom_info.metadata.players_min);
+            } else {
+                snprintf(players, sizeof(players), "%d-%d",
+                         (int)menu->load.rom_info.metadata.players_min,
+                         (int)menu->load.rom_info.metadata.players_max);
+            }
+        } else if (menu->load.rom_info.metadata.players_max > 0) {
+            snprintf(players, sizeof(players), "%d", (int)menu->load.rom_info.metadata.players_max);
+        } else {
+            snprintf(players, sizeof(players), "Unknown");
         }
 
         rom_save_type_t effective_save_type = rom_info_get_save_type(&menu->load.rom_info);
@@ -942,7 +962,12 @@ static void draw (menu_t *menu, surface_t *d) {
         snprintf(details, sizeof(details),
             "Title:\t\t\t%s\n"
             "Publisher:\t\t%s\n"
+            "Developer:\t\t%s\n"
             "Year:\t\t\t%s\n"
+            "Genre:\t\t\t%s\n"
+            "Series:\t\t\t%s\n"
+            "Players:\t\t\t%s\n"
+            "Modes:\t\t\t%s\n"
             "ESRB Rating:\t\t%s\n"
             "Age Rating:\t\t%s\n\n"
             "Description:\n\t%s\n\n"
@@ -965,7 +990,12 @@ static void draw (menu_t *menu, surface_t *d) {
             "Recent sessions:\n%s\n",
             display_name,
             publisher,
+            developer,
             release_year,
+            genre,
+            series,
+            players,
+            modes,
             format_esrb_age_rating(menu->load.rom_info.metadata.esrb_age_rating),
             age_rating,
             format_rom_description(menu),

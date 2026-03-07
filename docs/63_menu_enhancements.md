@@ -31,9 +31,14 @@ Supported directives:
 - `#SC64_SMART_ROOT=<path>` or `#SC64_ROOT=<path>`
 - `#SC64_FILTER_TITLE=<text>`
 - `#SC64_FILTER_PUBLISHER=<text>`
+- `#SC64_FILTER_DEVELOPER=<text>`
+- `#SC64_FILTER_GENRE=<text>`
+- `#SC64_FILTER_SERIES=<text>`
+- `#SC64_FILTER_MODES=<text>`
 - `#SC64_FILTER_DESCRIPTION=<text>`
 - `#SC64_FILTER_YEAR=<1998 | 1998-2000 | >=1998 | <=2000>`
 - `#SC64_FILTER_AGE=<3 | 10-17 | >=13>`
+- `#SC64_FILTER_PLAYERS=<1 | 1-4 | >=2 | <=4>`
 - `#SC64_FILTER_REGION=<E | P | J | USA | PAL | JPN>`
 - `#SC64_SMART_SORT=<Title | Year | Publisher | Random>`
 
@@ -44,7 +49,7 @@ Notes:
 - A short playlist intro toast appears when overrides are applied, summarizing the active profile (theme/BGM/viz/background).
 - Smart playlists scan the configured roots recursively, then append matching ROMs after any explicit `.m3u` entries.
 - If a smart playlist has filters but no `SMART_ROOT`, it defaults to scanning the flashcart root.
-- Matching uses loaded ROM metadata (`name`, `author`, `description`, `release_year`, `age_rating`) plus ROM region code.
+- Matching uses loaded ROM metadata (`name`, `author`, `developer`, `genre`, `series`, `modes`, `players`, `description`, `release_year`, `age_rating`) plus ROM region code.
 
 Example:
 ```m3u
@@ -66,6 +71,31 @@ Smart playlist example:
 #SC64_FILTER_PUBLISHER=Ubisoft
 #SC64_FILTER_YEAR=1998-2000
 #SC64_SMART_SORT=YEAR
+```
+
+Another smart playlist example:
+```m3u
+#SC64_DESC=Local multiplayer shelf built from metadata.
+#SC64_SMART_ROOT=/N64 - USA
+#SC64_FILTER_GENRE=Racing
+#SC64_FILTER_PLAYERS=>=2
+#SC64_FILTER_MODES=Battle
+#SC64_SMART_SORT=TITLE
+```
+
+Suggested metadata keys for `metadata.ini`:
+```ini
+[metadata]
+name=Mario Kart 64
+author=Nintendo
+developer=Nintendo EAD
+genre=Racing
+series=Mario Kart
+players=1-4
+modes=Grand Prix, Versus, Battle
+release-year=1996
+age-rating=3
+short-desc=Arcade kart racer with battle arenas and four-player split-screen.
 ```
 
 ### Browser Sorting and Random Selection

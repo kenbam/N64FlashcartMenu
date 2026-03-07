@@ -1,0 +1,10 @@
+#SC64_THEME=Gruvbox
+#SC64_BG=/menu/backgrounds/Countach.png
+#SC64_BGM=/menu/music/Need For Speed 4 High Stakes Soundtrack - Quantum Singularity (HD 1080p).wav64
+#SC64_DESC=Auto-built split-screen racers with multiplayer metadata.
+#SC64_VIEW=GRID
+#SC64_SMART_ROOT=/N64 - USA
+#SC64_FILTER_GENRE=Racing
+#SC64_FILTER_PLAYERS=>=2
+#SC64_SMART_SORT=TITLE
+

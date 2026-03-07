@@ -906,6 +906,87 @@ static int32_t parse_release_year_from_value (const char *value) {
     return -1;
 }
 
+static bool parse_player_count_from_value(const char *value, int32_t *out_min, int32_t *out_max) {
+    if (!value || !out_min || !out_max) {
+        return false;
+    }
+
+    char normalized[128];
+    snprintf(normalized, sizeof(normalized), "%s", value);
+    lowercase_ascii(normalized);
+    char *trimmed = trim_whitespace(normalized);
+    if (trimmed[0] == '\0') {
+        return false;
+    }
+
+    if (strncmp(trimmed, ">=", 2) == 0) {
+        int32_t parsed = (int32_t)atoi(trimmed + 2);
+        if (parsed > 0) {
+            *out_min = parsed;
+            *out_max = 99;
+            return true;
+        }
+    }
+    if (strncmp(trimmed, "<=", 2) == 0) {
+        int32_t parsed = (int32_t)atoi(trimmed + 2);
+        if (parsed > 0) {
+            *out_min = 1;
+            *out_max = parsed;
+            return true;
+        }
+    }
+    if (strncmp(trimmed, "up to ", 6) == 0) {
+        int32_t parsed = (int32_t)atoi(trimmed + 6);
+        if (parsed > 0) {
+            *out_min = 1;
+            *out_max = parsed;
+            return true;
+        }
+    }
+
+    int32_t values[2] = {0};
+    int value_count = 0;
+    for (char *cursor = trimmed; *cursor != '\0'; ) {
+        if (!isdigit((unsigned char)*cursor)) {
+            cursor++;
+            continue;
+        }
+
+        char *end = cursor;
+        long parsed = strtol(cursor, &end, 10);
+        if ((end == cursor) || (parsed <= 0)) {
+            break;
+        }
+        if (value_count < 2) {
+            values[value_count++] = (int32_t)parsed;
+        }
+        cursor = end;
+    }
+
+    if (value_count == 0) {
+        return false;
+    }
+    if (strchr(trimmed, '+') != NULL) {
+        *out_min = values[0];
+        *out_max = 99;
+        return true;
+    }
+    if (value_count >= 2) {
+        *out_min = values[0];
+        *out_max = values[1];
+        if (*out_min > *out_max) {
+            int32_t swap = *out_min;
+            *out_min = *out_max;
+            *out_max = swap;
+        }
+        return true;
+    }
+
+    *out_min = values[0];
+    *out_max = values[0];
+    return true;
+}
+
 static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom_info) {
     if ((directory == NULL) || (rom_info == NULL)) {
         return;
@@ -966,11 +1047,36 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
         char *value = trim_whitespace(equal_sign + 1);
         lowercase_ascii(key);
 
-        if ((strcmp(key, "name") == 0)) {
+        if ((strcmp(key, "name") == 0) || (strcmp(key, "title") == 0)) {
             metadata_copy_if_empty(rom_info->metadata.name, sizeof(rom_info->metadata.name), value);
-        } else if ((strcmp(key, "author") == 0)) {
+        } else if ((strcmp(key, "author") == 0) || (strcmp(key, "publisher") == 0)) {
             metadata_copy_if_empty(rom_info->metadata.author, sizeof(rom_info->metadata.author), value);
-        } else if ((strcmp(key, "short-desc") == 0)) {
+        } else if ((strcmp(key, "developer") == 0) || (strcmp(key, "dev") == 0) || (strcmp(key, "studio") == 0)) {
+            metadata_copy_if_empty(rom_info->metadata.developer, sizeof(rom_info->metadata.developer), value);
+        } else if ((strcmp(key, "genre") == 0) || (strcmp(key, "genres") == 0) || (strcmp(key, "category") == 0)) {
+            metadata_copy_if_empty(rom_info->metadata.genre, sizeof(rom_info->metadata.genre), value);
+        } else if ((strcmp(key, "series") == 0) || (strcmp(key, "franchise") == 0)) {
+            metadata_copy_if_empty(rom_info->metadata.series, sizeof(rom_info->metadata.series), value);
+        } else if ((strcmp(key, "modes") == 0) || (strcmp(key, "mode") == 0) || (strcmp(key, "tags") == 0)) {
+            metadata_copy_if_empty(rom_info->metadata.modes, sizeof(rom_info->metadata.modes), value);
+        } else if (((strcmp(key, "players") == 0) ||
+                    (strcmp(key, "player-count") == 0) ||
+                    (strcmp(key, "player_count") == 0) ||
+                    (strcmp(key, "playercount") == 0)) &&
+                   (rom_info->metadata.players_max < 0)) {
+            int32_t players_min = -1;
+            int32_t players_max = -1;
+            if (parse_player_count_from_value(value, &players_min, &players_max)) {
+                rom_info->metadata.players_min = players_min;
+                rom_info->metadata.players_max = players_max;
+            }
+        } else if (((strcmp(key, "players-min") == 0) || (strcmp(key, "players_min") == 0)) &&
+                   (rom_info->metadata.players_min < 0)) {
+            rom_info->metadata.players_min = (int32_t)atoi(value);
+        } else if (((strcmp(key, "players-max") == 0) || (strcmp(key, "players_max") == 0)) &&
+                   (rom_info->metadata.players_max < 0)) {
+            rom_info->metadata.players_max = (int32_t)atoi(value);
+        } else if ((strcmp(key, "short-desc") == 0) || (strcmp(key, "short_desc") == 0) || (strcmp(key, "summary") == 0)) {
             metadata_copy_if_empty(rom_info->metadata.short_desc, sizeof(rom_info->metadata.short_desc), value);
         } else if ((strcmp(key, "long-desc") == 0) && (long_desc_file[0] == '\0') && (value[0] != '\0')) {
             snprintf(long_desc_file, sizeof(long_desc_file), "%s", value);
@@ -1111,8 +1217,14 @@ static void extract_rom_info (match_t *match, rom_header_t *rom_header, rom_info
     rom_info->metadata.esrb_age_rating = ROM_ESRB_AGE_RATING_NONE;
     rom_info->metadata.age_rating = -1;
     rom_info->metadata.release_year = -1;
+    rom_info->metadata.players_min = -1;
+    rom_info->metadata.players_max = -1;
     rom_info->metadata.name[0] = '\0';
     rom_info->metadata.author[0] = '\0';
+    rom_info->metadata.developer[0] = '\0';
+    rom_info->metadata.genre[0] = '\0';
+    rom_info->metadata.series[0] = '\0';
+    rom_info->metadata.modes[0] = '\0';
     rom_info->metadata.short_desc[0] = '\0';
     rom_info->metadata.long_desc[0] = '\0';
     rom_info->settings.cheats_enabled = false;

@@ -59,6 +59,23 @@ See:
 
 These are safe templates and can be copied/renamed directly.
 
+## Metadata key example
+Smart playlists can now filter on richer metadata fields. A minimal `metadata.ini` example:
+
+```ini
+[metadata]
+name=Wave Race 64
+author=Nintendo
+developer=Nintendo EAD
+genre=Racing
+series=Wave Race
+players=1-2
+modes=Championship, Time Trials, Stunt, Versus
+release-year=1996
+age-rating=3
+short-desc=Arcade jet-ski racing with strong split-screen versus.
+```
+
 ## Full personal playlist snapshot (in-repo)
 The full current SD playlist set is tracked at:
 - `playlists/personal/`

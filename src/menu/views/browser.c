@@ -225,6 +225,10 @@ typedef struct {
     int root_count;
     char title_contains[96];
     char publisher_contains[96];
+    char developer_contains[96];
+    char genre_contains[64];
+    char series_contains[64];
+    char modes_contains[96];
     char description_contains[128];
     bool filter_year;
     int year_min;
@@ -232,6 +236,9 @@ typedef struct {
     bool filter_age;
     int age_min;
     int age_max;
+    bool filter_players;
+    int players_min;
+    int players_max;
     bool filter_region;
     char region_code;
     smart_playlist_sort_t sort;
@@ -1646,6 +1653,10 @@ static bool smart_playlist_parse_range(const char *value, int *out_min, int *out
     return true;
 }
 
+static bool smart_playlist_ranges_overlap(int lhs_min, int lhs_max, int rhs_min, int rhs_max) {
+    return (lhs_min <= rhs_max) && (rhs_min <= lhs_max);
+}
+
 static bool smart_playlist_parse_region(const char *value, char *out_region) {
     if (!value || !value[0] || !out_region) {
         return false;
@@ -1749,6 +1760,10 @@ static bool smart_playlist_matches(menu_t *menu, const smart_playlist_query_t *q
     char title[ROM_METADATA_NAME_LENGTH];
     smart_playlist_title_from_rom_info(rom_info, title, sizeof(title));
     const char *publisher = rom_info->metadata.author;
+    const char *developer = rom_info->metadata.developer;
+    const char *genre = rom_info->metadata.genre;
+    const char *series = rom_info->metadata.series;
+    const char *modes = rom_info->metadata.modes;
 
     if (query->title_contains[0] != '\0') {
         if (title[0] == '\0' || !string_contains_ignore_case(title, query->title_contains)) {
@@ -1757,6 +1772,26 @@ static bool smart_playlist_matches(menu_t *menu, const smart_playlist_query_t *q
     }
     if (query->publisher_contains[0] != '\0') {
         if (publisher[0] == '\0' || !string_contains_ignore_case(publisher, query->publisher_contains)) {
+            return false;
+        }
+    }
+    if (query->developer_contains[0] != '\0') {
+        if (developer[0] == '\0' || !string_contains_ignore_case(developer, query->developer_contains)) {
+            return false;
+        }
+    }
+    if (query->genre_contains[0] != '\0') {
+        if (genre[0] == '\0' || !string_contains_ignore_case(genre, query->genre_contains)) {
+            return false;
+        }
+    }
+    if (query->series_contains[0] != '\0') {
+        if (series[0] == '\0' || !string_contains_ignore_case(series, query->series_contains)) {
+            return false;
+        }
+    }
+    if (query->modes_contains[0] != '\0') {
+        if (modes[0] == '\0' || !string_contains_ignore_case(modes, query->modes_contains)) {
             return false;
         }
     }
@@ -1776,6 +1811,22 @@ static bool smart_playlist_matches(menu_t *menu, const smart_playlist_query_t *q
     }
     if (query->filter_age) {
         if (rom_info->metadata.age_rating < query->age_min || rom_info->metadata.age_rating > query->age_max) {
+            return false;
+        }
+    }
+    if (query->filter_players) {
+        int players_min = rom_info->metadata.players_min;
+        int players_max = rom_info->metadata.players_max;
+        if ((players_min < 0) && (players_max < 0)) {
+            return false;
+        }
+        if (players_min < 0) {
+            players_min = players_max;
+        }
+        if (players_max < 0) {
+            players_max = players_min;
+        }
+        if (!smart_playlist_ranges_overlap(players_min, players_max, query->players_min, query->players_max)) {
             return false;
         }
     }
@@ -1986,6 +2037,18 @@ static char *smart_playlist_build_description(const smart_playlist_query_t *quer
     if (query->publisher_contains[0] != '\0' && used < sizeof(buffer)) {
         used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | publisher:%s", query->publisher_contains);
     }
+    if (query->developer_contains[0] != '\0' && used < sizeof(buffer)) {
+        used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | developer:%s", query->developer_contains);
+    }
+    if (query->genre_contains[0] != '\0' && used < sizeof(buffer)) {
+        used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | genre:%s", query->genre_contains);
+    }
+    if (query->series_contains[0] != '\0' && used < sizeof(buffer)) {
+        used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | series:%s", query->series_contains);
+    }
+    if (query->modes_contains[0] != '\0' && used < sizeof(buffer)) {
+        used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | modes:%s", query->modes_contains);
+    }
     if (query->description_contains[0] != '\0' && used < sizeof(buffer)) {
         used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | desc:%s", query->description_contains);
     }
@@ -1994,6 +2057,17 @@ static char *smart_playlist_build_description(const smart_playlist_query_t *quer
     }
     if (query->filter_age && used < sizeof(buffer)) {
         used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | age:%d-%d", query->age_min, query->age_max);
+    }
+    if (query->filter_players && used < sizeof(buffer)) {
+        if (query->players_min == query->players_max) {
+            used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | players:%d", query->players_min);
+        } else if (query->players_max >= 9999) {
+            used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | players:%d+", query->players_min);
+        } else if (query->players_min <= -9999) {
+            used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | players:<=%d", query->players_max);
+        } else {
+            used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | players:%d-%d", query->players_min, query->players_max);
+        }
     }
     if (query->filter_region && used < sizeof(buffer)) {
         used += (size_t)snprintf(buffer + used, sizeof(buffer) - used, " | region:%c", query->region_code);
@@ -2169,8 +2243,33 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
         return;
     }
 
-    if (strcasecmp(key, "FILTER_PUBLISHER") == 0 || strcasecmp(key, "FILTER_AUTHOR") == 0 || strcasecmp(key, "FILTER_STUDIO") == 0) {
+    if (strcasecmp(key, "FILTER_PUBLISHER") == 0 || strcasecmp(key, "FILTER_AUTHOR") == 0) {
         snprintf(smart_query->publisher_contains, sizeof(smart_query->publisher_contains), "%s", value);
+        smart_query->enabled = true;
+        return;
+    }
+
+    if (strcasecmp(key, "FILTER_DEVELOPER") == 0 || strcasecmp(key, "FILTER_DEV") == 0 ||
+        strcasecmp(key, "FILTER_STUDIO") == 0 || strcasecmp(key, "DEVELOPER") == 0) {
+        snprintf(smart_query->developer_contains, sizeof(smart_query->developer_contains), "%s", value);
+        smart_query->enabled = true;
+        return;
+    }
+
+    if (strcasecmp(key, "FILTER_GENRE") == 0 || strcasecmp(key, "GENRE") == 0) {
+        snprintf(smart_query->genre_contains, sizeof(smart_query->genre_contains), "%s", value);
+        smart_query->enabled = true;
+        return;
+    }
+
+    if (strcasecmp(key, "FILTER_SERIES") == 0 || strcasecmp(key, "SERIES") == 0 || strcasecmp(key, "FRANCHISE") == 0) {
+        snprintf(smart_query->series_contains, sizeof(smart_query->series_contains), "%s", value);
+        smart_query->enabled = true;
+        return;
+    }
+
+    if (strcasecmp(key, "FILTER_MODES") == 0 || strcasecmp(key, "FILTER_MODE") == 0 || strcasecmp(key, "MODES") == 0) {
+        snprintf(smart_query->modes_contains, sizeof(smart_query->modes_contains), "%s", value);
         smart_query->enabled = true;
         return;
     }
@@ -2192,6 +2291,14 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
     if (strcasecmp(key, "FILTER_AGE") == 0 || strcasecmp(key, "AGE") == 0) {
         if (smart_playlist_parse_range(value, &smart_query->age_min, &smart_query->age_max)) {
             smart_query->filter_age = true;
+            smart_query->enabled = true;
+        }
+        return;
+    }
+
+    if (strcasecmp(key, "FILTER_PLAYERS") == 0 || strcasecmp(key, "PLAYERS") == 0) {
+        if (smart_playlist_parse_range(value, &smart_query->players_min, &smart_query->players_max)) {
+            smart_query->filter_players = true;
             smart_query->enabled = true;
         }
         return;

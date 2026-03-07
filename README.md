@@ -71,6 +71,7 @@ Playlist personalization:
 * Per-playlist description text.
 * Per-playlist screensaver logo and visualizer settings.
 * Per-playlist text panel/alpha and immersion profile behavior.
+* Metadata-based smart playlists (publisher/year/genre/series/players/modes/etc).
 
 Playtime and browsing:
 * Last played, total time, recent sessions, and leaderboard.
@@ -82,11 +83,12 @@ Playtime and browsing:
 
 ROM details + metadata:
 * Expanded ROM details view with richer metadata display.
-* Title, publisher, year, rating fields, save/feature info, and long description rendering.
+* Title, publisher, developer, genre, series, players, modes, year, rating fields, save/feature info, and long description rendering.
 * Year field shown on ROM details page.
 * ROM details page scrolling support (long content no longer clipped/overlapped).
 * Metadata parser accepts both `[meta]` and `[metadata]`.
 * Expanded year key parsing (`year`, `release-year`, `release-date`, etc).
+* Supports richer metadata keys such as `developer`, `genre`, `series`, `players`, and `modes`.
 * Metadata-to-ROM matching and coverage audits/backfills for large sets.
 
 ### Playtime + SC64 firmware integration
