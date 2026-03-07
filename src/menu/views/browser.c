@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <miniz.h>
 #include <miniz_zip.h>
 #include <stdlib.h>
@@ -50,6 +51,35 @@ static const char *hidden_root_paths[] = {
     NULL,
 };
 
+#define PLAYLIST_CACHE_MAGIC   (0x504C4331u)
+#define PLAYLIST_CACHE_VERSION (1u)
+#define PLAYLIST_CACHE_DIR     "menu/cache/playlists"
+
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint64_t source_size;
+    int64_t source_mtime;
+    uint32_t entry_count;
+    int32_t viz_style;
+    int32_t viz_intensity;
+    int32_t text_panel_enabled;
+    int32_t text_panel_alpha;
+    int32_t grid_view_enabled;
+} playlist_cache_header_t;
+
+static uint64_t fnv1a64_str(const char *s) {
+    uint64_t h = 1469598103934665603ULL;
+    if (!s) {
+        return h;
+    }
+    while (*s) {
+        h ^= (uint8_t)(*s++);
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
 static bool string_ends_with_ignore_case(const char *value, const char *suffix) {
     if (!value || !suffix) {
         return false;
@@ -75,6 +105,9 @@ static bool string_ends_with_ignore_case(const char *value, const char *suffix) 
     }
     return true;
 }
+
+static void browser_list_free(menu_t *menu);
+static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path, int *capacity);
 
 static char *playlist_read_description_file(const char *path) {
     if (!path || !path[0] || !file_exists((char *)path)) {
@@ -114,6 +147,234 @@ static char *playlist_read_description_file(const char *path) {
         memmove(buffer, trimmed, strlen(trimmed) + 1);
     }
     return buffer;
+}
+
+static bool playlist_cache_write_string(FILE *f, const char *value) {
+    uint32_t len = (value && value[0] != '\0') ? (uint32_t)strlen(value) : 0;
+    if (fwrite(&len, sizeof(len), 1, f) != 1) {
+        return false;
+    }
+    if (len > 0 && fwrite(value, 1, len, f) != len) {
+        return false;
+    }
+    return true;
+}
+
+static bool playlist_cache_read_string(FILE *f, char **out) {
+    uint32_t len = 0;
+    if (out) {
+        *out = NULL;
+    }
+    if (fread(&len, sizeof(len), 1, f) != 1) {
+        return false;
+    }
+    if (len == 0) {
+        return true;
+    }
+    char *value = calloc(1, (size_t)len + 1);
+    if (!value) {
+        return false;
+    }
+    if (fread(value, 1, len, f) != len) {
+        free(value);
+        return false;
+    }
+    if (out) {
+        *out = value;
+    } else {
+        free(value);
+    }
+    return true;
+}
+
+static char *playlist_cache_build_path(menu_t *menu, const char *playlist_path) {
+    if (!menu || !playlist_path || !playlist_path[0]) {
+        return NULL;
+    }
+
+    path_t *cache_dir = path_init(menu->storage_prefix, PLAYLIST_CACHE_DIR);
+    if (!cache_dir) {
+        return NULL;
+    }
+    if (directory_create(path_get(cache_dir))) {
+        path_free(cache_dir);
+        return NULL;
+    }
+
+    uint64_t hash = fnv1a64_str(playlist_path);
+    char file_name[40];
+    snprintf(file_name, sizeof(file_name), "pl_%016" PRIx64 ".cache", hash);
+    path_push(cache_dir, file_name);
+
+    char *out = strdup(path_get(cache_dir));
+    path_free(cache_dir);
+    return out;
+}
+
+static bool playlist_cache_try_load(
+    menu_t *menu,
+    const char *playlist_path,
+    int *playlist_capacity,
+    char **playlist_theme,
+    char **playlist_bgm,
+    char **playlist_bg,
+    int *playlist_viz_style,
+    int *playlist_viz_intensity,
+    int *playlist_text_panel_enabled,
+    int *playlist_text_panel_alpha,
+    char **playlist_screensaver_logo,
+    int *playlist_grid_view,
+    char **playlist_description
+) {
+    if (!menu || !playlist_path) {
+        return false;
+    }
+
+    struct stat source_stat;
+    if (stat(playlist_path, &source_stat) != 0) {
+        return false;
+    }
+
+    char *cache_path = playlist_cache_build_path(menu, playlist_path);
+    if (!cache_path) {
+        return false;
+    }
+
+    FILE *f = fopen(cache_path, "rb");
+    free(cache_path);
+    if (!f) {
+        return false;
+    }
+
+    playlist_cache_header_t header = {0};
+    bool ok = (fread(&header, sizeof(header), 1, f) == 1);
+    ok = ok && (header.magic == PLAYLIST_CACHE_MAGIC);
+    ok = ok && (header.version == PLAYLIST_CACHE_VERSION);
+    ok = ok && (header.source_size == (uint64_t)source_stat.st_size);
+    ok = ok && (header.source_mtime == (int64_t)source_stat.st_mtime);
+    ok = ok && (header.entry_count < 65536u);
+    if (!ok) {
+        fclose(f);
+        return false;
+    }
+
+    *playlist_viz_style = header.viz_style;
+    *playlist_viz_intensity = header.viz_intensity;
+    *playlist_text_panel_enabled = header.text_panel_enabled;
+    *playlist_text_panel_alpha = header.text_panel_alpha;
+    *playlist_grid_view = header.grid_view_enabled;
+
+    if (!playlist_cache_read_string(f, playlist_theme) ||
+        !playlist_cache_read_string(f, playlist_bgm) ||
+        !playlist_cache_read_string(f, playlist_bg) ||
+        !playlist_cache_read_string(f, playlist_screensaver_logo) ||
+        !playlist_cache_read_string(f, playlist_description)) {
+        goto fail;
+    }
+
+    for (uint32_t i = 0; i < header.entry_count; i++) {
+        char *entry_path = NULL;
+        if (!playlist_cache_read_string(f, &entry_path) || !entry_path) {
+            free(entry_path);
+            goto fail;
+        }
+        if (!playlist_append_rom_entry(menu, entry_path, playlist_capacity)) {
+            free(entry_path);
+            goto fail;
+        }
+        free(entry_path);
+    }
+
+    fclose(f);
+    return true;
+
+fail:
+    fclose(f);
+    free(*playlist_theme);
+    *playlist_theme = NULL;
+    free(*playlist_bgm);
+    *playlist_bgm = NULL;
+    free(*playlist_bg);
+    *playlist_bg = NULL;
+    free(*playlist_screensaver_logo);
+    *playlist_screensaver_logo = NULL;
+    free(*playlist_description);
+    *playlist_description = NULL;
+    browser_list_free(menu);
+    menu->browser.playlist = true;
+    return false;
+}
+
+static void playlist_cache_save(
+    menu_t *menu,
+    const char *playlist_path,
+    const char *playlist_theme,
+    const char *playlist_bgm,
+    const char *playlist_bg,
+    int playlist_viz_style,
+    int playlist_viz_intensity,
+    int playlist_text_panel_enabled,
+    int playlist_text_panel_alpha,
+    const char *playlist_screensaver_logo,
+    int playlist_grid_view,
+    const char *playlist_description
+) {
+    if (!menu || !playlist_path || menu->browser.entries < 0) {
+        return;
+    }
+
+    struct stat source_stat;
+    if (stat(playlist_path, &source_stat) != 0) {
+        return;
+    }
+
+    char *cache_path = playlist_cache_build_path(menu, playlist_path);
+    if (!cache_path) {
+        return;
+    }
+
+    FILE *f = fopen(cache_path, "wb");
+    free(cache_path);
+    if (!f) {
+        return;
+    }
+
+    playlist_cache_header_t header = {
+        .magic = PLAYLIST_CACHE_MAGIC,
+        .version = PLAYLIST_CACHE_VERSION,
+        .source_size = (uint64_t)source_stat.st_size,
+        .source_mtime = (int64_t)source_stat.st_mtime,
+        .entry_count = (uint32_t)menu->browser.entries,
+        .viz_style = playlist_viz_style,
+        .viz_intensity = playlist_viz_intensity,
+        .text_panel_enabled = playlist_text_panel_enabled,
+        .text_panel_alpha = playlist_text_panel_alpha,
+        .grid_view_enabled = playlist_grid_view,
+    };
+
+    bool ok = (fwrite(&header, sizeof(header), 1, f) == 1);
+    ok = ok && playlist_cache_write_string(f, playlist_theme);
+    ok = ok && playlist_cache_write_string(f, playlist_bgm);
+    ok = ok && playlist_cache_write_string(f, playlist_bg);
+    ok = ok && playlist_cache_write_string(f, playlist_screensaver_logo);
+    ok = ok && playlist_cache_write_string(f, playlist_description);
+
+    for (int i = 0; ok && i < menu->browser.entries; i++) {
+        const char *entry_path = menu->browser.list[i].path ? menu->browser.list[i].path : "";
+        ok = playlist_cache_write_string(f, entry_path);
+    }
+
+    if (fclose(f) != 0) {
+        ok = false;
+    }
+
+    if (!ok) {
+        char *cache_path_retry = playlist_cache_build_path(menu, playlist_path);
+        if (cache_path_retry) {
+            remove(cache_path_retry);
+            free(cache_path_retry);
+        }
+    }
 }
 
 static int playlist_description_build_lines(const char *description, char lines[][96], int max_lines) {
@@ -278,6 +539,19 @@ static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work);
 static void browser_playlist_grid_draw(menu_t *menu);
 static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path, int *capacity);
 static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalized_path, int *capacity);
+static char *playlist_cache_build_path(menu_t *menu, const char *playlist_path);
+static bool playlist_cache_try_load(menu_t *menu, const char *playlist_path, int *playlist_capacity,
+    char **playlist_theme, char **playlist_bgm, char **playlist_bg,
+    int *playlist_viz_style, int *playlist_viz_intensity,
+    int *playlist_text_panel_enabled, int *playlist_text_panel_alpha,
+    char **playlist_screensaver_logo, int *playlist_grid_view,
+    char **playlist_description);
+static void playlist_cache_save(menu_t *menu, const char *playlist_path,
+    const char *playlist_theme, const char *playlist_bgm, const char *playlist_bg,
+    int playlist_viz_style, int playlist_viz_intensity,
+    int playlist_text_panel_enabled, int playlist_text_panel_alpha,
+    const char *playlist_screensaver_logo, int playlist_grid_view,
+    const char *playlist_description);
 
 typedef struct {
     bool active;
@@ -2585,15 +2859,8 @@ static bool load_playlist (menu_t *menu) {
     browser_list_free(menu);
     int playlist_capacity = 0;
 
-    FILE *f = fopen(path_get(menu->browser.directory), "r");
-    if (f == NULL) {
-        return true;
-    }
-
     menu->browser.playlist = true;
 
-    path_t *playlist_dir = path_clone(menu->browser.directory);
-    path_pop(playlist_dir);
     char *playlist_theme = NULL;
     char *playlist_bgm = NULL;
     char *playlist_bg = NULL;
@@ -2604,6 +2871,48 @@ static bool load_playlist (menu_t *menu) {
     char *playlist_screensaver_logo = NULL;
     int playlist_grid_view = -1;
     char *playlist_description = NULL;
+
+    if (playlist_cache_try_load(
+            menu,
+            path_get(menu->browser.directory),
+            &playlist_capacity,
+            &playlist_theme,
+            &playlist_bgm,
+            &playlist_bg,
+            &playlist_viz_style,
+            &playlist_viz_intensity,
+            &playlist_text_panel_enabled,
+            &playlist_text_panel_alpha,
+            &playlist_screensaver_logo,
+            &playlist_grid_view,
+            &playlist_description)) {
+        if (menu->browser.entries > 0) {
+            menu->browser.selected = 0;
+            menu->browser.entry = &menu->browser.list[menu->browser.selected];
+        }
+
+        menu->browser.sort_mode = BROWSER_SORT_CUSTOM;
+        browser_apply_sort(menu);
+
+        browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
+        free(menu->browser.playlist_description);
+        menu->browser.playlist_description = playlist_description;
+        playlist_description = NULL;
+        free(playlist_theme);
+        free(playlist_bgm);
+        free(playlist_bg);
+        free(playlist_screensaver_logo);
+        free(playlist_description);
+        return false;
+    }
+
+    FILE *f = fopen(path_get(menu->browser.directory), "r");
+    if (f == NULL) {
+        return true;
+    }
+
+    path_t *playlist_dir = path_clone(menu->browser.directory);
+    path_pop(playlist_dir);
     smart_playlist_query_t smart_query;
     smart_playlist_query_init(&smart_query);
 
@@ -2747,6 +3056,23 @@ static bool load_playlist (menu_t *menu) {
     // Preserve m3u order by default for playlist views.
     menu->browser.sort_mode = BROWSER_SORT_CUSTOM;
     browser_apply_sort(menu);
+
+    if (!smart_query.enabled) {
+        playlist_cache_save(
+            menu,
+            path_get(menu->browser.directory),
+            playlist_theme,
+            playlist_bgm,
+            playlist_bg,
+            playlist_viz_style,
+            playlist_viz_intensity,
+            playlist_text_panel_enabled,
+            playlist_text_panel_alpha,
+            playlist_screensaver_logo,
+            playlist_grid_view,
+            playlist_description
+        );
+    }
 
     browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
     free(menu->browser.playlist_description);
