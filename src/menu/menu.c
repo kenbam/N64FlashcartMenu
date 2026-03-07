@@ -984,7 +984,7 @@ static void menu_init (boot_params_t *boot_params) {
     if (menu->settings.browser_sort_mode < BROWSER_SORT_CUSTOM || menu->settings.browser_sort_mode > BROWSER_SORT_ZA) {
         menu->settings.browser_sort_mode = BROWSER_SORT_AZ;
     }
-    if (menu->settings.browser_random_mode < 0 || menu->settings.browser_random_mode > 3) {
+    if (menu->settings.browser_random_mode < 0 || menu->settings.browser_random_mode > 4) {
         menu->settings.browser_random_mode = 0;
     }
     menu->browser.sort_mode = (browser_sort_t)menu->settings.browser_sort_mode;

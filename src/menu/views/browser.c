@@ -198,18 +198,24 @@ typedef enum {
     RANDOM_MODE_UNPLAYED = 1,
     RANDOM_MODE_UNDERPLAYED = 2,
     RANDOM_MODE_FAVORITES = 3,
+    RANDOM_MODE_SMART = 4,
 } browser_random_mode_t;
 
 typedef struct {
     int index;
     uint64_t total_seconds;
+    int64_t last_played;
+    uint32_t play_count;
+    bool favorite;
+    uint64_t smart_score;
 } random_candidate_t;
 
 static char *normalize_path (const char *path);
 static char *trim_line (char *line);
 static const char *format_clock_12h(time_t now, char *buffer, size_t buffer_len);
 static char *playlist_read_description_file(const char *path);
-static int random_candidate_compare(const void *a, const void *b);
+static int random_candidate_compare_underplayed(const void *a, const void *b);
+static int random_candidate_compare_smart(const void *a, const void *b);
 static bool browser_entry_is_game(const entry_t *entry);
 static char *browser_entry_path(menu_t *menu, int index);
 static bool path_is_favorite(menu_t *menu, const char *path);
@@ -811,9 +817,19 @@ static const char *browser_sort_mode_string (menu_t *menu) {
     }
 }
 
-static int random_candidate_compare(const void *a, const void *b) {
+static int random_candidate_compare_underplayed(const void *a, const void *b) {
     const random_candidate_t *lhs = (const random_candidate_t *)a;
     const random_candidate_t *rhs = (const random_candidate_t *)b;
+    if (lhs->total_seconds < rhs->total_seconds) return -1;
+    if (lhs->total_seconds > rhs->total_seconds) return 1;
+    return lhs->index - rhs->index;
+}
+
+static int random_candidate_compare_smart(const void *a, const void *b) {
+    const random_candidate_t *lhs = (const random_candidate_t *)a;
+    const random_candidate_t *rhs = (const random_candidate_t *)b;
+    if (lhs->smart_score < rhs->smart_score) return 1;
+    if (lhs->smart_score > rhs->smart_score) return -1;
     if (lhs->total_seconds < rhs->total_seconds) return -1;
     if (lhs->total_seconds > rhs->total_seconds) return 1;
     return lhs->index - rhs->index;
@@ -880,7 +896,7 @@ static int browser_pick_random_index(menu_t *menu) {
     }
 
     int mode = menu->settings.browser_random_mode;
-    if (mode < RANDOM_MODE_ANY_GAME || mode > RANDOM_MODE_FAVORITES) {
+    if (mode < RANDOM_MODE_ANY_GAME || mode > RANDOM_MODE_SMART) {
         mode = RANDOM_MODE_ANY_GAME;
     }
 
@@ -903,6 +919,10 @@ static int browser_pick_random_index(menu_t *menu) {
 
         bool keep = false;
         uint64_t total_seconds = 0;
+        int64_t last_played = 0;
+        uint32_t play_count = 0;
+        bool favorite = false;
+        uint64_t smart_score = 0;
 
         if (mode == RANDOM_MODE_ANY_GAME) {
             keep = true;
@@ -915,11 +935,45 @@ static int browser_pick_random_index(menu_t *menu) {
             keep = true;
         } else if (mode == RANDOM_MODE_FAVORITES) {
             keep = path_is_favorite(menu, entry_path);
+        } else if (mode == RANDOM_MODE_SMART) {
+            playtime_entry_t *stat = playtime_get(&menu->playtime, entry_path);
+            total_seconds = stat ? stat->total_seconds : 0;
+            last_played = stat ? stat->last_played : 0;
+            play_count = stat ? stat->play_count : 0;
+            favorite = path_is_favorite(menu, entry_path);
+
+            uint64_t age_days = 3650;
+            if (last_played > 0 && menu->current_time > last_played) {
+                age_days = (uint64_t)(menu->current_time - last_played) / 86400u;
+                if (age_days > 3650) {
+                    age_days = 3650;
+                }
+            }
+
+            uint64_t total_hours = total_seconds / 3600u;
+            if (total_hours > 500) {
+                total_hours = 500;
+            }
+            uint64_t capped_play_count = play_count;
+            if (capped_play_count > 200) {
+                capped_play_count = 200;
+            }
+
+            smart_score += (play_count == 0) ? 1000000u : 0u;
+            smart_score += age_days * 1000u;
+            smart_score += favorite ? 250000u : 0u;
+            smart_score += (500u - total_hours) * 100u;
+            smart_score += (200u - capped_play_count) * 50u;
+            keep = true;
         }
 
         if (keep) {
             candidates[count].index = i;
             candidates[count].total_seconds = total_seconds;
+            candidates[count].last_played = last_played;
+            candidates[count].play_count = play_count;
+            candidates[count].favorite = favorite;
+            candidates[count].smart_score = smart_score;
             count++;
         }
 
@@ -937,9 +991,14 @@ static int browser_pick_random_index(menu_t *menu) {
     if (count > 0) {
         random_entry_state = (random_entry_state * 1664525u) + 1013904223u + (uint32_t)menu->browser.selected + (uint32_t)menu->browser.entries + (uint32_t)mode;
 
-        if (mode == RANDOM_MODE_UNDERPLAYED) {
-            qsort(candidates, (size_t)count, sizeof(random_candidate_t), random_candidate_compare);
-            int pool = count / 4;
+        if (mode == RANDOM_MODE_UNDERPLAYED || mode == RANDOM_MODE_SMART) {
+            qsort(
+                candidates,
+                (size_t)count,
+                sizeof(random_candidate_t),
+                (mode == RANDOM_MODE_SMART) ? random_candidate_compare_smart : random_candidate_compare_underplayed
+            );
+            int pool = (mode == RANDOM_MODE_SMART) ? (count / 3) : (count / 4);
             if (pool < 1) {
                 pool = 1;
             }
@@ -2280,7 +2339,7 @@ static void cycle_sort_mode (menu_t *menu, void *arg) {
 
 static void set_random_mode(menu_t *menu, void *arg) {
     int mode = (int)(intptr_t)arg;
-    if (mode < RANDOM_MODE_ANY_GAME || mode > RANDOM_MODE_FAVORITES) {
+    if (mode < RANDOM_MODE_ANY_GAME || mode > RANDOM_MODE_SMART) {
         mode = RANDOM_MODE_ANY_GAME;
     }
     menu->settings.browser_random_mode = mode;
@@ -2291,7 +2350,7 @@ static int get_random_mode_selection(menu_t *menu) {
     if (!menu) {
         return 0;
     }
-    if (menu->settings.browser_random_mode < RANDOM_MODE_ANY_GAME || menu->settings.browser_random_mode > RANDOM_MODE_FAVORITES) {
+    if (menu->settings.browser_random_mode < RANDOM_MODE_ANY_GAME || menu->settings.browser_random_mode > RANDOM_MODE_SMART) {
         return 0;
     }
     return menu->settings.browser_random_mode;
@@ -2304,6 +2363,7 @@ static component_context_menu_t random_mode_context_menu = {
         { .text = "Unplayed", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_UNPLAYED },
         { .text = "Underplayed", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_UNDERPLAYED },
         { .text = "Favorites", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_FAVORITES },
+        { .text = "Smart", .action = set_random_mode, .arg = (void *)(intptr_t)RANDOM_MODE_SMART },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
