@@ -53,6 +53,40 @@ Experimental (beta):
 * Controller Pak backup and restore (including individual notes).
 * Game art image switching.
 
+## Enhanced features in this branch (personal/custom)
+This branch includes substantial quality-of-life work on top of upstream.  
+For full details, see `CHANGELOG.md` and commit history.
+
+Core additions:
+* M3U playlist support with relative and absolute paths, preserving playlist order (`ben/m3u-support`).
+* Playlist profile directives for per-playlist theme/background/music/visualizer/text panel/screen saver/logo/view mode (`7f7d1d91`, `70936409`, `473a3412`).
+* Smart random picker modes and quick random jump navigation (`05f136e0` and later follow-ups).
+* Playtime tracking, leaderboard, and recent sessions (`5c5a2c20`, plus supporting UI commits).
+* SC64 firmware setting integration hooks for persistent playtime handoff (`5c5a2c20`).
+
+UI/UX improvements:
+* Playlist boxart grid view with runtime toggle, caching, and async prefetch (`b075dae5`, `cef0a124`, `59178952`, `005b86f9`, `05f136e0`).
+* Browser improvements: last-played secondary column, hidden sidecar clutter, safer empty-folder escape, and fast scroll in Playtime (`3ec19fb7`, `3b28ea5f`).
+* Playlist description panel under tabs with reserved layout space and marquee-style scrolling for long text (`3b28ea5f`).
+* Additional theme presets and selected-row shimmer toggle (`4444ebb0`, `e4172657`).
+* Screen saver improvements and selectable logos (`df2279d0`, `15aa6241`, `a16342b1`).
+
+Audio/media pipeline:
+* Menu BGM improvements with WAV64 support and reduced playback stutter (`4472ea81`, `99374aca`).
+* Music-reactive background visualizer modes: bars, pulse wash, sunburst, oscilloscope (`41f650ae`, `274bce3a`, `b7146275`).
+* Visualizer/background performance tuning and cache behavior updates (`4472ea81`, `99374aca`).
+
+Metadata and content tooling:
+* Expanded metadata loading (publisher/rating/year handling), richer ROM details page fields, and metadata lookup hardening (`5c5a2c20`).
+* Boxart restoration/improvements plus grid thumbnail workflow (`cef0a124`, `99374aca`).
+* Asset conversion and optimization tooling for menu media (`602e29f7`, `99374aca`).
+* Personal bug tracker + implementation notes (`docs/66_bug_tracker_personal.md`).
+
+Beta/personal experiments:
+* Playlist immersion profile toast and onboarding prompts (`019a2364`).
+* Playlist-specific visualization overrides and mixed presentation modes (`b7146275`).
+* Ongoing performance profiling/tuning for SD-heavy views (grid, metadata, boxart decode path).
+
 
 ## Aims
 * Support as many N64 Flashcarts as possible.
