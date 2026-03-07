@@ -83,6 +83,59 @@ static bool resolve_metadata_directory_for_rom (path_t *path, const char game_co
     return false;
 }
 
+static bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len) {
+    if (!current_path || current_path[0] == '\0' || !out || out_len == 0) {
+        return false;
+    }
+    if (file_exists((char *)current_path)) {
+        snprintf(out, out_len, "%s", current_path);
+        return true;
+    }
+    if (storage_prefix && current_path[0] == '/') {
+        path_t *prefixed = path_init(storage_prefix, (char *)current_path);
+        if (prefixed && file_exists(path_get(prefixed))) {
+            snprintf(out, out_len, "%s", path_get(prefixed));
+            path_free(prefixed);
+            return true;
+        }
+        path_free(prefixed);
+    }
+    return false;
+}
+
+static bool resolve_bookkeeping_rom_path(menu_t *menu, bookkeeping_item_t *item) {
+    if (!menu || !item) {
+        return false;
+    }
+
+    const char *current_path = item->primary_path ? path_get(item->primary_path) : NULL;
+    char resolved_path[512];
+    if (resolve_existing_rom_path(menu->storage_prefix, current_path, resolved_path, sizeof(resolved_path))) {
+        if (!item->primary_path || strcmp(path_get(item->primary_path), resolved_path) != 0) {
+            if (item->primary_path) {
+                path_free(item->primary_path);
+            }
+            item->primary_path = path_create(resolved_path);
+            bookkeeping_save(&menu->bookkeeping);
+        }
+        return true;
+    }
+    if (item->game_id[0] == '\0') {
+        return false;
+    }
+
+    if (!rom_info_resolve_stable_id_path(menu->storage_prefix, item->game_id, current_path, resolved_path, sizeof(resolved_path))) {
+        return false;
+    }
+
+    if (item->primary_path) {
+        path_free(item->primary_path);
+    }
+    item->primary_path = path_create(resolved_path);
+    bookkeeping_save(&menu->bookkeeping);
+    return true;
+}
+
 static void scan_metadata_images(menu_t *menu) {
     if (metadata_images_scanned) {
         return;
@@ -408,59 +461,6 @@ static void scan_patch_profiles_in_dir(path_t *dir_path, char names[][128], int 
         }
         result = dir_findnext(path_get(dir_path), &info);
     }
-}
-
-static bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len) {
-    if (!current_path || current_path[0] == '\0' || !out || out_len == 0) {
-        return false;
-    }
-    if (file_exists((char *)current_path)) {
-        snprintf(out, out_len, "%s", current_path);
-        return true;
-    }
-    if (storage_prefix && current_path[0] == '/') {
-        path_t *prefixed = path_init(storage_prefix, (char *)current_path);
-        if (prefixed && file_exists(path_get(prefixed))) {
-            snprintf(out, out_len, "%s", path_get(prefixed));
-            path_free(prefixed);
-            return true;
-        }
-        path_free(prefixed);
-    }
-    return false;
-}
-
-static bool resolve_bookkeeping_rom_path(menu_t *menu, bookkeeping_item_t *item) {
-    if (!menu || !item) {
-        return false;
-    }
-
-    const char *current_path = item->primary_path ? path_get(item->primary_path) : NULL;
-    char resolved_path[512];
-    if (resolve_existing_rom_path(menu->storage_prefix, current_path, resolved_path, sizeof(resolved_path))) {
-        if (!item->primary_path || strcmp(path_get(item->primary_path), resolved_path) != 0) {
-            if (item->primary_path) {
-                path_free(item->primary_path);
-            }
-            item->primary_path = path_create(resolved_path);
-            bookkeeping_save(&menu->bookkeeping);
-        }
-        return true;
-    }
-    if (item->game_id[0] == '\0') {
-        return false;
-    }
-
-    if (!rom_info_resolve_stable_id_path(menu->storage_prefix, item->game_id, current_path, resolved_path, sizeof(resolved_path))) {
-        return false;
-    }
-
-    if (item->primary_path) {
-        path_free(item->primary_path);
-    }
-    item->primary_path = path_create(resolved_path);
-    bookkeeping_save(&menu->bookkeeping);
-    return true;
 }
 
 static bool find_next_patch_profile(menu_t *menu, char *out, size_t out_len) {
