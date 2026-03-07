@@ -103,6 +103,8 @@ SC64 firmware handoff:
 * Finalizes session duration from firmware-side counters on return.
 * Clears firmware tracker state after ingest.
 * Uses fallback logic to reduce menu-side double counting when SC64 tracker is available.
+* Current status: required firmware-side changes are local/unpublished right now.
+* TODO: publish firmware changes to a dedicated fork branch.
 
 Operational note:
 * Behavior still depends on firmware-side counting policy while powered.
