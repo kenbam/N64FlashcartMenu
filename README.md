@@ -62,6 +62,7 @@ Playlist support (M3U):
 * Relative and absolute paths.
 * Playlist order preserved as authored.
 * Better path handling when jumping from Favorites/Recent/Playtime.
+* Browser sort modes (Custom/M3U order, A-Z, Z-A).
 
 Playlist personalization:
 * Per-playlist theme/background/music.
@@ -71,14 +72,36 @@ Playlist personalization:
 
 Playtime and browsing:
 * Last played, total time, recent sessions, and leaderboard.
-* “Last played” visible in the browser secondary column.
+* “Last played” visible in browser/playlist secondary column.
 * Fast scroll behavior in Playtime list.
+* Quick random game jump and smart-random mode options.
 * Cleaner browser view (sidecar clutter hidden, safer empty-folder behavior).
 
 ROM details + metadata:
+* Expanded ROM details view with richer metadata display.
+* Title, publisher, year, rating fields, save/feature info, and long description rendering.
 * Year field shown on ROM details page.
 * Metadata parser accepts both `[meta]` and `[metadata]`.
 * Expanded year key parsing (`year`, `release-year`, `release-date`, etc).
+
+### Playtime + SC64 firmware integration
+This is a major custom feature set in this branch.
+
+Playtime tracking:
+* Tracks `last played`, `total playtime`, and recent sessions.
+* Includes a Playtime leaderboard view.
+* Uses `last played` in browser secondary column.
+
+SC64 firmware handoff:
+* Adds SC64 setting read/write plumbing in the flashcart layer.
+* Starts session markers before ROM handoff.
+* Finalizes session duration from firmware-side counters on return.
+* Clears firmware tracker state after ingest.
+* Uses fallback logic to reduce menu-side double counting when SC64 tracker is available.
+
+Operational note:
+* Behavior still depends on firmware-side counting policy while powered.
+* Edge cases (e.g. USB-powered idle/off states) are firmware-sensitive and can affect totals.
 
 ### Visual and media enhancements
 Themes and UI polish:
@@ -108,6 +131,7 @@ Grid view for playlists (experimental):
 ### Notes and references
 * See `CHANGELOG.md` for an ongoing log.
 * See `docs/66_bug_tracker_personal.md` for known issues and personal tracking notes.
+* See `docs/68_personal_next_steps_firmware_update.md` for SC64 firmware update workflow notes.
 * Key commits for this customization wave include:
   `ben/m3u-support`, `5c5a2c20`, `3b28ea5f`, `99374aca`, `4472ea81`, `cef0a124`, `05f136e0`.
 
