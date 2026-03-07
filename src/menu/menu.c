@@ -76,6 +76,7 @@ static wav64_t menu_bgm_wav64;
 static bool menu_bgm_wav64_open = false;
 typedef struct {
     waveform_t wave;
+    waveform_t *inner_wave;
     WaveformRead inner_read;
     WaveformStart inner_start;
     void *inner_ctx;
@@ -573,7 +574,14 @@ static void menu_bgm_wav64_meter_start(void *ctx, samplebuffer_t *sbuf) {
     menu_bgm_wav64_meter_wrap_t *w = (menu_bgm_wav64_meter_wrap_t *)ctx;
     sound_bgm_meter_reset();
     if (w && w->inner_start) {
+        waveform_t *saved_wave = sbuf ? sbuf->wave : NULL;
+        if (sbuf && w->inner_wave) {
+            sbuf->wave = w->inner_wave;
+        }
         w->inner_start(w->inner_ctx, sbuf);
+        if (sbuf) {
+            sbuf->wave = saved_wave;
+        }
     }
 }
 
@@ -584,7 +592,12 @@ static void menu_bgm_wav64_meter_read(void *ctx, samplebuffer_t *sbuf, int wpos,
     }
 
     int before_widx = sbuf->widx;
+    waveform_t *saved_wave = sbuf->wave;
+    if (w->inner_wave) {
+        sbuf->wave = w->inner_wave;
+    }
     w->inner_read(w->inner_ctx, sbuf, wpos, wlen, seeking);
+    sbuf->wave = saved_wave;
     int after_widx = sbuf->widx;
     int appended = after_widx - before_widx;
     if (appended <= 0) {
@@ -685,14 +698,21 @@ static bool menu_bgm_load_wav64_file (menu_t *menu, const char *file_name) {
 
     wav64_open(&menu_bgm_wav64, resolved);
     wav64_set_loop(&menu_bgm_wav64, true);
+    if (menu_bgm_wav64.wave.read == NULL) {
+        free(resolved);
+        wav64_close(&menu_bgm_wav64);
+        return false;
+    }
     memset(&menu_bgm_wav64_wrap, 0, sizeof(menu_bgm_wav64_wrap));
     menu_bgm_wav64_wrap.wave = menu_bgm_wav64.wave;
+    menu_bgm_wav64_wrap.inner_wave = &menu_bgm_wav64.wave;
     menu_bgm_wav64_wrap.inner_read = menu_bgm_wav64.wave.read;
     menu_bgm_wav64_wrap.inner_start = menu_bgm_wav64.wave.start;
     menu_bgm_wav64_wrap.inner_ctx = menu_bgm_wav64.wave.ctx;
-    menu_bgm_wav64_wrap.wave.read = menu_bgm_wav64_meter_read;
     menu_bgm_wav64_wrap.wave.start = menu_bgm_wav64_meter_start;
+    menu_bgm_wav64_wrap.wave.read = menu_bgm_wav64_meter_read;
     menu_bgm_wav64_wrap.wave.ctx = &menu_bgm_wav64_wrap;
+    menu_bgm_wav64_wrap.wave.__uuid = 0;
     menu_bgm_wav64_open = true;
     menu_bgm_backend = MENU_BGM_BACKEND_WAV64;
     sound_bgm_meter_reset();

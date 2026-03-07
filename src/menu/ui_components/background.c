@@ -31,6 +31,7 @@ typedef struct {
     float vis_trail_1[14];     /**< First trail buffer (recent). */
     float vis_caps[14];        /**< Peak hold caps. */
     uint32_t vis_tick;         /**< Animation tick counter. */
+    uint32_t vis_frame_tick;   /**< Frame counter for visualizer throttling. */
 } component_background_t;
 
 /**
@@ -50,6 +51,8 @@ static void visualizer_reset_state(component_background_t *c) {
     memset(c->vis_bars, 0, sizeof(c->vis_bars));
     memset(c->vis_trail_1, 0, sizeof(c->vis_trail_1));
     memset(c->vis_caps, 0, sizeof(c->vis_caps));
+    c->vis_tick = 0;
+    c->vis_frame_tick = 0;
 }
 
 static uint64_t fnv1a64_str(const char *s) {
@@ -231,7 +234,7 @@ static void draw_visualizer_bars_overlay(component_background_t *c) {
     float peak = 0.0f;
     bool have_meter = visualizer_get_meter(c, &base, &peak);
 
-    c->vis_tick++;
+    c->vis_tick = (c->vis_tick + 1) & 0x7FFFu;
 
     const int bars = (int)(sizeof(c->vis_bars) / sizeof(c->vis_bars[0]));
     const int bar_w = 14;
@@ -346,7 +349,7 @@ static void draw_visualizer_pulse_wash(component_background_t *c) {
 
     float base = 0.0f, peak = 0.0f;
     bool have_meter = visualizer_get_meter(c, &base, &peak);
-    c->vis_tick++;
+    c->vis_tick = (c->vis_tick + 1) & 0x7FFFu;
 
     float energy = (peak * 0.75f) + (base * 0.25f);
     if (!have_meter) {
@@ -390,7 +393,7 @@ static void draw_visualizer_sunburst(component_background_t *c) {
 
     float base = 0.0f, peak = 0.0f;
     bool have_meter = visualizer_get_meter(c, &base, &peak);
-    c->vis_tick++;
+    c->vis_tick = (c->vis_tick + 1) & 0x7FFFu;
 
     float energy = (peak * 0.8f) + (base * 0.2f);
     if (!have_meter) {
@@ -455,7 +458,7 @@ static void draw_visualizer_oscilloscope(component_background_t *c) {
 
     float base = 0.0f, peak = 0.0f;
     bool have_meter = visualizer_get_meter(c, &base, &peak);
-    c->vis_tick++;
+    c->vis_tick = (c->vis_tick + 1) & 0x7FFFu;
 
     const int left = 26;
     const int right = DISPLAY_WIDTH - 26;
@@ -778,9 +781,30 @@ void ui_components_background_set_visualizer_intensity(int intensity) {
  * @brief Draw the background image or clear the screen if not available.
  */
 void ui_components_background_draw(void) {
+    if (background && background->visualizer_enabled) {
+        background->vis_frame_tick = (background->vis_frame_tick + 1) & 0x7FFFFFFFu;
+    }
+
+    bool draw_visualizer = false;
+    if (background && background->visualizer_enabled) {
+        draw_visualizer = true;
+        int style = background->visualizer_style;
+        if (style == UI_BACKGROUND_VISUALIZER_PULSE_WASH ||
+            style == UI_BACKGROUND_VISUALIZER_SUNBURST ||
+            style == UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE) {
+            int div = (style == UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE) ? 3 : 2;
+            if (background->visualizer_intensity <= 0) {
+                div += 1;
+            }
+            if ((background->vis_frame_tick % (uint32_t)div) != 0) {
+                draw_visualizer = false;
+            }
+        }
+    }
+
     if (background && background->image_display_list) {
         rspq_block_run(background->image_display_list);
-        if (background->visualizer_enabled) {
+        if (draw_visualizer) {
             switch (background->visualizer_style) {
                 case UI_BACKGROUND_VISUALIZER_PULSE_WASH:
                     draw_visualizer_pulse_wash(background);
@@ -797,7 +821,7 @@ void ui_components_background_draw(void) {
                     break;
             }
         }
-    } else if (background && background->visualizer_enabled) {
+    } else if (background && draw_visualizer) {
         switch (background->visualizer_style) {
             case UI_BACKGROUND_VISUALIZER_PULSE_WASH:
                 draw_visualizer_pulse_wash(background);

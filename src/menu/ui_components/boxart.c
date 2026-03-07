@@ -481,7 +481,8 @@ static bool resolve_metadata_boxart_directory (path_t *path, const char *game_co
 }
 
 static bool resolve_boxart_image_path(const char *storage_prefix, const char *game_code, const char *rom_title,
-                                      file_image_type_t current_image_view, char **resolved_image_path_out) {
+                                      file_image_type_t current_image_view, bool prefer_grid_thumb,
+                                      char **resolved_image_path_out) {
     char boxart_path[32] = {0};
     bool found = false;
     path_t *path = path_init(storage_prefix, METADATA_BASE_DIRECTORY);
@@ -519,7 +520,17 @@ static bool resolve_boxart_image_path(const char *storage_prefix, const char *ga
             case IMAGE_BOXART_RIGHT:   path_push(path, "boxart_right.png"); break;
             case IMAGE_BOXART_BOTTOM:  path_push(path, "boxart_bottom.png"); break;
             case IMAGE_BOXART_TOP:     path_push(path, "boxart_top.png"); break;
-            default:                   path_push(path, "boxart_front.png"); break;
+            default:
+                if (prefer_grid_thumb) {
+                    path_push(path, "boxart_front.grid.png");
+                    if (!file_exists(path_get(path))) {
+                        path_pop(path);
+                        path_push(path, "boxart_front.png");
+                    }
+                } else {
+                    path_push(path, "boxart_front.png");
+                }
+                break;
         }
 
         if (file_exists(path_get(path))) {
@@ -593,7 +604,8 @@ static void png_decoder_callback(png_err_t err, surface_t *decoded_image, void *
  * @param current_image_view The current image view type (front, back, etc.).
  * @return Pointer to the initialized boxart component, or NULL on failure.
  */
-component_boxart_t *ui_components_boxart_init(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
+static component_boxart_t *ui_components_boxart_init_with_options(const char *storage_prefix, const char *game_code, const char *rom_title,
+                                                                  file_image_type_t current_image_view, bool prefer_grid_thumb, bool memory_cache_only) {
     boxart_queue_pump();
 
     component_boxart_t *b = calloc(1, sizeof(component_boxart_t));
@@ -602,17 +614,22 @@ component_boxart_t *ui_components_boxart_init(const char *storage_prefix, const 
     }
 
     char *resolved_image_path = NULL;
-    if (!resolve_boxart_image_path(storage_prefix, game_code, rom_title, current_image_view, &resolved_image_path)) {
+    if (!resolve_boxart_image_path(storage_prefix, game_code, rom_title, current_image_view, prefer_grid_thumb, &resolved_image_path)) {
         free(b);
         return NULL;
     }
 
-    // Global thumbnail cache (memory, then disk) to avoid repeated SD PNG decodes.
     b->image = boxart_thumb_cache_get_clone(resolved_image_path);
     if (b->image) {
         b->loading = false;
         free(resolved_image_path);
         return b;
+    }
+
+    if (memory_cache_only) {
+        free(resolved_image_path);
+        free(b);
+        return NULL;
     }
 
     b->image = boxart_thumb_cache_load_disk_clone(storage_prefix, resolved_image_path);
@@ -629,7 +646,7 @@ component_boxart_t *ui_components_boxart_init(const char *storage_prefix, const 
         return NULL;
     }
     ctx->component = b;
-    ctx->cache_key = resolved_image_path; // take ownership
+    ctx->cache_key = resolved_image_path;
     ctx->cache_path = boxart_thumb_cache_file_path(storage_prefix, resolved_image_path);
 
     b->loading = true;
@@ -650,6 +667,22 @@ component_boxart_t *ui_components_boxart_init(const char *storage_prefix, const 
     boxart_load_context_free(ctx);
     free(b);
     return NULL;
+}
+
+component_boxart_t *ui_components_boxart_init(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, false);
+}
+
+component_boxart_t *ui_components_boxart_init_memory_cached(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, true);
+}
+
+component_boxart_t *ui_components_boxart_init_grid(const char *storage_prefix, const char *game_code, const char *rom_title) {
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, false);
+}
+
+component_boxart_t *ui_components_boxart_init_grid_memory_cached(const char *storage_prefix, const char *game_code, const char *rom_title) {
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, true);
 }
 
 /**
