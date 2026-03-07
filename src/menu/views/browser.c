@@ -275,6 +275,7 @@ static bool browser_use_playlist_grid(menu_t *menu);
 static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work);
 static void browser_playlist_grid_draw(menu_t *menu);
 static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path);
+static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalized_path);
 
 typedef struct {
     bool active;
@@ -1910,9 +1911,6 @@ static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path)
     if (!menu || !normalized_path || !normalized_path[0]) {
         return false;
     }
-    if (playlist_has_path(menu, normalized_path)) {
-        return true;
-    }
 
     entry_t *next = realloc(menu->browser.list, (size_t)(menu->browser.entries + 1) * sizeof(entry_t));
     if (!next) {
@@ -1935,6 +1933,13 @@ static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path)
     entry->size = -1;
     entry->index = menu->browser.entries - 1;
     return true;
+}
+
+static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalized_path) {
+    if (playlist_has_path(menu, normalized_path)) {
+        return true;
+    }
+    return playlist_append_rom_entry(menu, normalized_path);
 }
 
 static bool smart_playlist_collect_dir(
@@ -2599,7 +2604,7 @@ static bool load_playlist (menu_t *menu) {
 
         smart_playlist_sort_entries(generated, generated_count, &smart_query);
         for (int i = 0; i < generated_count; i++) {
-            if (!playlist_append_rom_entry(menu, generated[i].path)) {
+            if (!playlist_append_rom_entry_unique(menu, generated[i].path)) {
                 for (int j = i; j < generated_count; j++) {
                     smart_playlist_entry_free(&generated[j]);
                 }
