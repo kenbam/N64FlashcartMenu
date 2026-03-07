@@ -1,0 +1,130 @@
+[Action]
+- asteroids hyper 64
+- baku bomberman
+- baku bomberman 2
+- bakuretsu muteki bangaioh
+- fighting cup
+- lylatwars
+- space dynamites
+- star twins
+
+[Adventure]
+- biohazard 2
+- iggy kun no bura bura poyon
+- yakouchuu ii satsujin kouro
+- yuke yuke trouble makers
+
+[Asiatic board game]
+- 64 hanafuda tenshi no yakusoku
+- goemon mononoke sugoroku
+- jangou simulation mahjong dou 64
+- morita shougi 64
+- pro mahjong kiwame 64
+
+[Board game]
+- razmoket les la chasse aux tresors
+- rugrats die grosse schatzsuche
+
+[Casual Game]
+- kiratto kaiketsu 64 tanteidan
+
+[Educational]
+- sesame street elmo s number journey
+
+[Fighting]
+- dragon sword 64
+- fighter destiny 2
+- hiryuu no ken twin
+- rakugakids
+- transformers beast wars metals 64
+- xena warrior princess the talisman of fate
+
+[Hunting and Fishing]
+- itoi shigesato no bass tsuri no 1 kettei ban
+- nushi zuri 64
+- nushi zuri 64 shiokaze ni notte
+
+[Lightgun Shooter]
+- tommy thunder
+
+[Platform]
+- banjo to kazooie no daibouken
+- banjo to kazooie no daibouken 2
+- doraemon 3 nobita no machi sos
+- doraemon nobita to 3tsu no seireiseki
+- whack n roll
+- yoshi story
+
+[Puzzle]
+- blastdozer
+- defi au tetris magique
+- nintama rantarou 64 game gallery
+- susume taisen puzzle dama toukon marutama chou
+- utchan nanchan no hono no challenger denryuu ira ira bou
+
+[Racing]
+- gt 64 championship edition
+- hsv adventure racing
+- human grand prix the new generation
+- rally 99
+- star wars episode i racer
+- tamiya racing 64
+- tg rally 2
+- wildwaters
+
+[Role-playing (RPG)]
+- doubutsu no mori
+- eltale monsters
+- pd ultraman battle collection 64
+- robot poncots 64 7tsu no umi no caramel
+
+[Shooter]
+- die hard 64
+- jikuu senshi turok
+- star wars episode i battle for naboo
+- star wars shutsugeki rogue chuutai
+- star wars teikoku no kage
+- turok legenden des verlorenen landes
+- violence killer turok new generation
+
+[Simulation]
+- 64 de hakken tamagotchi minna de tamagotchi world
+- pikachuu genki de chuu
+
+[Sports]
+- airboarder 64
+- chou kuukan nighter pro yakyuu king
+- chou kuukan nighter pro yakyuu king 2
+- chou snobo kids
+- eikou no saint andrews
+- famista 64
+- fifa 64
+- ganbare nippon olympics 2000
+- harukanaru augusta masters 98
+- hyper olympics in nagano 64
+- international track field 2000
+- jikkyou powerful pro yakyuu 2000
+- jikkyou powerful pro yakyuu 5
+- jikkyou powerful pro yakyuu 6
+- jikkyou powerful pro yakyuu basic ban 2001
+- jikkyou world soccer world cup france 98
+- let s smash
+- michael owen s wls 2000
+- mike piazza s strike zone
+- ronaldinho s soccer 64
+- rtl world league soccer 2000
+- shin nihon pro wrestling toukon road brave spirits
+- snobo kids
+- snow speeder
+- sydney 2000
+- telefoot soccer 2000
+- tony hawk s skateboarding
+- toon panic
+- twisted edge snowboarding
+- wwf attitude
+- wwf war zone
+- wwf wrestlemania 2000
+
+[Strategy]
+- worms armageddon
+

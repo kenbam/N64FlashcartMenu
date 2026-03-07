@@ -63,8 +63,13 @@ These are safe templates and can be copied/renamed directly.
 The full current SD playlist set is tracked at:
 - `playlists/personal/`
 
+This includes:
+- `playlists/personal/Genres/` (genre playlists from SD `/Genres`)
+- `playlists/personal/By Year/`, `Custom/`, `Fun/`, `History/`, `Ranked/`, `Studios/`
+
 To refresh that snapshot from SD:
 
 ```bash
 rsync -a /mnt/d/Playlists/ /mnt/b/dev/N64FlashcartMenu/playlists/personal/
+rsync -a /mnt/d/Genres/ /mnt/b/dev/N64FlashcartMenu/playlists/personal/Genres/
 ```
