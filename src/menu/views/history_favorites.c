@@ -27,6 +27,55 @@ static uint16_t item_max = 0;
 static playtime_entry_t **playtime_ranked = NULL;
 static uint16_t playtime_ranked_count = 0;
 
+static int bookkeeping_count_visible_items(void) {
+    if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME) {
+        return (int)playtime_ranked_count;
+    }
+
+    int count = 0;
+    for (uint16_t i = 0; i < item_max; i++) {
+        if (item_list[i].bookkeeping_type != BOOKKEEPING_TYPE_EMPTY) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static int bookkeeping_logical_index_for_item(int selected) {
+    if (selected < 0 || tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME) {
+        return selected;
+    }
+
+    int logical_index = 0;
+    for (uint16_t i = 0; i < item_max; i++) {
+        if (item_list[i].bookkeeping_type == BOOKKEEPING_TYPE_EMPTY) {
+            continue;
+        }
+        if ((int)i == selected) {
+            return logical_index;
+        }
+        logical_index++;
+    }
+
+    return -1;
+}
+
+static int bookkeeping_compute_start_index(int selected_logical, int visible_entries) {
+    int total_entries = bookkeeping_count_visible_items();
+    if (visible_entries <= 0 || total_entries <= visible_entries || selected_logical < 0) {
+        return 0;
+    }
+
+    int start = selected_logical - (visible_entries / 2);
+    int max_start = total_entries - visible_entries;
+    if (start < 0) {
+        start = 0;
+    } else if (start > max_start) {
+        start = max_start;
+    }
+    return start;
+}
+
 static bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len) {
     if (!current_path || current_path[0] == '\0' || !out || out_len == 0) {
         return false;
@@ -219,7 +268,7 @@ static bool item_move_previous() {
 static void process(menu_t *menu) {
     if (menu->actions.go_down) {
         int steps = 1;
-        if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME && menu->actions.go_fast) {
+        if (menu->actions.go_fast) {
             steps = 10;
         }
         bool moved = false;
@@ -234,7 +283,7 @@ static void process(menu_t *menu) {
         }
     } else if (menu->actions.go_up) {
         int steps = 1;
-        if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME && menu->actions.go_fast) {
+        if (menu->actions.go_fast) {
             steps = 10;
         }
         bool moved = false;
@@ -304,13 +353,34 @@ static void process(menu_t *menu) {
 }
 
 static void draw_bookkeeping_list(void) {
-    if (selected_item != -1) {
-        float highlight_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL + (selected_item * 38);
+    const int row_height = 38;
+    const int list_y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL;
+    const int list_bottom = LAYOUT_ACTIONS_SEPARATOR_Y - TEXT_MARGIN_VERTICAL;
+    int list_height = list_bottom - list_y;
+    if (list_height < row_height) {
+        list_height = row_height;
+    }
+
+    int max_visible_entries = list_height / row_height;
+    if (max_visible_entries < 1) {
+        max_visible_entries = 1;
+    }
+
+    int total_entries = bookkeeping_count_visible_items();
+    int selected_logical = bookkeeping_logical_index_for_item(selected_item);
+    int starting_position = bookkeeping_compute_start_index(selected_logical, max_visible_entries);
+
+    if (total_entries > max_visible_entries) {
+        ui_components_list_scrollbar_draw(selected_logical, total_entries, max_visible_entries);
+    }
+
+    if (selected_logical != -1 && selected_logical >= starting_position && selected_logical < (starting_position + max_visible_entries)) {
+        float highlight_y = (float)(list_y + ((selected_logical - starting_position) * row_height));
         ui_components_box_draw(
             VISIBLE_AREA_X0,
             highlight_y,
             VISIBLE_AREA_X0 + FILE_LIST_HIGHLIGHT_WIDTH + LIST_SCROLLBAR_WIDTH,
-            highlight_y + 38,
+            highlight_y + row_height,
             FILE_LIST_HIGHLIGHT_COLOR
         );
     }
@@ -319,11 +389,24 @@ static void draw_bookkeeping_list(void) {
     int cursor = 0;
     buffer[0] = '\0';
 
+    int logical_index = 0;
+    int ending_position = starting_position + max_visible_entries;
     for (uint16_t i = 0; i < item_max; i++) {
+        if (item_list[i].bookkeeping_type == BOOKKEEPING_TYPE_EMPTY) {
+            continue;
+        }
+        if (logical_index < starting_position) {
+            logical_index++;
+            continue;
+        }
+        if (logical_index >= ending_position) {
+            break;
+        }
+
         if (path_has_value(item_list[i].primary_path)) {
-            buffer_appendf(buffer, BOOKKEEPING_BUFFER_LEN, &cursor, "%d  : %s\n", (i + 1), path_last_get(item_list[i].primary_path));
+            buffer_appendf(buffer, BOOKKEEPING_BUFFER_LEN, &cursor, "%d  : %s\n", (logical_index + 1), path_last_get(item_list[i].primary_path));
         } else {
-            buffer_appendf(buffer, BOOKKEEPING_BUFFER_LEN, &cursor, "%d  : \n", (i + 1));
+            buffer_appendf(buffer, BOOKKEEPING_BUFFER_LEN, &cursor, "%d  : \n", (logical_index + 1));
         }
 
         if (path_has_value(item_list[i].secondary_path)) {
@@ -332,6 +415,7 @@ static void draw_bookkeeping_list(void) {
             buffer_appendf(buffer, BOOKKEEPING_BUFFER_LEN, &cursor, "\n");
         }
 
+        logical_index++;
         if (cursor >= (BOOKKEEPING_BUFFER_LEN - 64)) {
             break;
         }
@@ -341,7 +425,7 @@ static void draw_bookkeeping_list(void) {
     rdpq_text_printn(
         &(rdpq_textparms_t) {
             .width = VISIBLE_AREA_WIDTH - (TEXT_MARGIN_HORIZONTAL * 2),
-            .height = LAYOUT_ACTIONS_SEPARATOR_Y - OVERSCAN_HEIGHT - (TEXT_MARGIN_VERTICAL * 2),
+            .height = list_height,
             .align = ALIGN_LEFT,
             .valign = VALIGN_TOP,
             .wrap = WRAP_ELLIPSES,
@@ -349,7 +433,7 @@ static void draw_bookkeeping_list(void) {
         },
         FNT_DEFAULT,
         VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL,
-        VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TAB_HEIGHT + TEXT_OFFSET_VERTICAL,
+        list_y,
         buffer,
         nbytes
     );

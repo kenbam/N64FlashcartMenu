@@ -10,7 +10,7 @@
 #include "rom_info.h"
 #include "path.h"
 
-#define FAVORITES_COUNT 8 /**< Maximum number of favorite items */
+#define FAVORITES_COUNT 64 /**< Maximum number of favorite items */
 #define HISTORY_COUNT 8 /**< Maximum number of history items */
 
 /** @brief Bookkeeping item types enumeration */
