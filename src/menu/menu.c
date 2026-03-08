@@ -169,8 +169,10 @@ static void screensaver_logo_try_load_path(menu_t *menu, const char *logo_file) 
     path_free(logo_path);
 }
 
+static bool screensaver_logo_search_done = false;
+
 static void screensaver_logo_try_load(menu_t *menu) {
-    if (!menu || screensaver_logo_loading || screensaver_logo_image) {
+    if (!menu || screensaver_logo_loading || screensaver_logo_image || screensaver_logo_search_done) {
         return;
     }
 
@@ -186,11 +188,17 @@ static void screensaver_logo_try_load(menu_t *menu) {
     if (!screensaver_logo_loading && !screensaver_logo_image) {
         screensaver_logo_try_load_path(menu, SCREENSAVER_LOGO_FILE);
     }
+
+    // If nothing started loading, no logo files exist — stop retrying.
+    if (!screensaver_logo_loading) {
+        screensaver_logo_search_done = true;
+    }
 }
 
 static void screensaver_logo_reload(menu_t *menu) {
     uint64_t start_us = get_ticks_us();
     screensaver_logo_free();
+    screensaver_logo_search_done = false;
     screensaver_logo_try_load(menu);
     browser_playlist_perf_note_screensaver_logo_reload((uint32_t)((get_ticks_us() - start_us) / 1000ULL));
 }

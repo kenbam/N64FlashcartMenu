@@ -4550,6 +4550,8 @@ static void process (menu_t *menu) {
                 menu->next_mode = MENU_MODE_MUSIC_PLAYER;
                 break;
             case ENTRY_TYPE_ROM:
+                path_free(menu->load.rom_path);
+                menu->load.rom_path = NULL;
                 menu->next_mode = MENU_MODE_LOAD_ROM;
                 break;
             case ENTRY_TYPE_ROM_CHEAT:

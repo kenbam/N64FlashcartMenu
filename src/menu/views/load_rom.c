@@ -38,6 +38,15 @@ static const uint16_t metadata_image_filename_cache_length = sizeof(metadata_ima
 static bool metadata_image_available[sizeof(metadata_image_filename_cache) / sizeof(metadata_image_filename_cache[0])] = {false};
 static bool metadata_images_scanned = false;
 
+// Pre-computed per-ROM display data (avoid per-frame I/O).
+static bool rom_display_data_valid = false;
+static char cached_total_buf[64];
+static char cached_last_session_buf[64];
+static char cached_last_played_buf[64];
+static char cached_recent_sessions_buf[512];
+static char cached_save_health_buf[128];
+static char cached_save_modified_buf[64];
+
 static bool resolve_metadata_directory_for_rom (path_t *path, const char game_code[4], char *resolved, size_t resolved_size) {
     if ((path == NULL) || (game_code == NULL)) {
         return false;
@@ -931,22 +940,11 @@ static void draw (menu_t *menu, surface_t *d) {
             rom_filename
         );
 
-        playtime_entry_t *pt = playtime_get(&menu->playtime, path_get(menu->load.rom_path));
-        char total_buf[64];
-        char last_session_buf[64];
-        char last_played_buf[64];
-        char recent_sessions_buf[512];
-        if (pt) {
-            format_duration(total_buf, sizeof(total_buf), pt->total_seconds);
-            format_duration(last_session_buf, sizeof(last_session_buf), pt->last_session_seconds);
-            format_last_played(last_played_buf, sizeof(last_played_buf), pt->last_played);
-            format_recent_sessions(recent_sessions_buf, sizeof(recent_sessions_buf), pt);
-        } else {
-            snprintf(total_buf, sizeof(total_buf), "0s");
-            snprintf(last_session_buf, sizeof(last_session_buf), "0s");
-            snprintf(last_played_buf, sizeof(last_played_buf), "Never");
-            snprintf(recent_sessions_buf, sizeof(recent_sessions_buf), "\tNone");
-        }
+        // Use pre-computed playtime strings from init (no per-frame I/O).
+        const char *total_buf = cached_total_buf;
+        const char *last_session_buf = cached_last_session_buf;
+        const char *last_played_buf = cached_last_played_buf;
+        const char *recent_sessions_buf = cached_recent_sessions_buf;
 
         char details[4608];
         const char *display_name = (menu->load.rom_info.metadata.name[0] != '\0') ? menu->load.rom_info.metadata.name : rom_filename;
@@ -990,17 +988,14 @@ static void draw (menu_t *menu, surface_t *d) {
         bool save_expected = (effective_save_type != SAVE_TYPE_NONE);
         bool supports_cpak = menu->load.rom_info.features.controller_pak;
         char save_path[512];
-        char save_health[96];
-        char save_last_modified[64];
-        size_t expected_save_size = get_expected_save_size(effective_save_type);
         if (save_expected && get_save_file_path(menu, save_path, sizeof(save_path))) {
-            format_save_health(save_health, sizeof(save_health), save_path, expected_save_size);
-            format_save_last_modified(save_last_modified, sizeof(save_last_modified), save_path);
+            // path computed for display only; health/modified use cached values from init.
         } else {
             snprintf(save_path, sizeof(save_path), "N/A");
-            snprintf(save_health, sizeof(save_health), "N/A");
-            snprintf(save_last_modified, sizeof(save_last_modified), "N/A");
         }
+        // Use pre-computed save strings from init (no per-frame stat()/file_exists()).
+        const char *save_health = cached_save_health_buf;
+        const char *save_last_modified = cached_save_modified_buf;
 
         snprintf(details, sizeof(details),
             "Title:\t\t\t%s\n"
@@ -1258,6 +1253,8 @@ static void deinit (void) {
     for (uint16_t i = 0; i < metadata_image_filename_cache_length; i++) {
         metadata_image_available[i] = false;
     }
+
+    rom_display_data_valid = false;
 }
 
 
@@ -1275,7 +1272,10 @@ void view_load_rom_init (menu_t *menu) {
             bookkeeping_item_t *item = &menu->bookkeeping.favorite_items[menu->load.load_favorite_id];
             resolve_bookkeeping_rom_path(menu, item);
             menu->load.rom_path = item->primary_path ? path_clone(item->primary_path) : NULL;
-        } else if(!menu->load.rom_path) {
+        } else if(menu->load.rom_path && path_has_value(menu->load.rom_path)) {
+            // rom_path pre-set by caller (e.g. playtime view) — use it as-is.
+        } else {
+            path_free(menu->load.rom_path);
             if (menu->browser.entry && menu->browser.entry->path) {
                 menu->load.rom_path = path_create(menu->browser.entry->path);
             } else {
@@ -1312,6 +1312,35 @@ void view_load_rom_init (menu_t *menu) {
         boxart = ui_components_boxart_init(menu->storage_prefix, menu->load.rom_info.game_code, menu->load.rom_info.title, IMAGE_BOXART_FRONT);
         boxart_retry_pending = (boxart == NULL);
         ui_components_context_menu_init(&options_context_menu);
+
+        // Pre-compute playtime display strings (avoid per-frame SD I/O).
+        playtime_entry_t *pt = playtime_get(&menu->playtime, path_get(menu->load.rom_path));
+        if (pt) {
+            format_duration(cached_total_buf, sizeof(cached_total_buf), pt->total_seconds);
+            format_duration(cached_last_session_buf, sizeof(cached_last_session_buf), pt->last_session_seconds);
+            format_last_played(cached_last_played_buf, sizeof(cached_last_played_buf), pt->last_played);
+            format_recent_sessions(cached_recent_sessions_buf, sizeof(cached_recent_sessions_buf), pt);
+        } else {
+            snprintf(cached_total_buf, sizeof(cached_total_buf), "0s");
+            snprintf(cached_last_session_buf, sizeof(cached_last_session_buf), "0s");
+            snprintf(cached_last_played_buf, sizeof(cached_last_played_buf), "Never");
+            snprintf(cached_recent_sessions_buf, sizeof(cached_recent_sessions_buf), "\tNone");
+        }
+
+        // Pre-compute save health and modified time (avoid per-frame stat()/file_exists()).
+        rom_save_type_t init_save_type = rom_info_get_save_type(&menu->load.rom_info);
+        bool init_save_expected = (init_save_type != SAVE_TYPE_NONE);
+        char init_save_path[512];
+        if (init_save_expected && get_save_file_path(menu, init_save_path, sizeof(init_save_path))) {
+            size_t init_expected_size = get_expected_save_size(init_save_type);
+            format_save_health(cached_save_health_buf, sizeof(cached_save_health_buf), init_save_path, init_expected_size);
+            format_save_last_modified(cached_save_modified_buf, sizeof(cached_save_modified_buf), init_save_path);
+        } else {
+            snprintf(cached_save_health_buf, sizeof(cached_save_health_buf), "N/A");
+            snprintf(cached_save_modified_buf, sizeof(cached_save_modified_buf), "N/A");
+        }
+
+        rom_display_data_valid = true;
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     }
 #endif
