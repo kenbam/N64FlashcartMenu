@@ -77,6 +77,7 @@ typedef struct {
     entry_type_t type;
     int64_t size;
     int32_t index;
+    time_t last_played;
 } entry_t;
 
 /** @brief Browser sort mode */

@@ -1409,6 +1409,20 @@ bool rom_info_get_stable_id_for_path(const char *path, char *out, size_t out_len
     return true;
 }
 
+bool rom_info_get_stable_id_for_path_cached(const char *path, char *out, size_t out_len) {
+    if (!path || !out || out_len < ROM_STABLE_ID_LENGTH) {
+        return false;
+    }
+
+    rom_stable_id_cache_entry_t *cached = rom_stable_id_cache_find(path);
+    if (cached) {
+        snprintf(out, out_len, "%s", cached->stable_id);
+        return true;
+    }
+
+    return false;
+}
+
 bool rom_info_resolve_stable_id_path(
     const char *storage_prefix,
     const char *game_id,

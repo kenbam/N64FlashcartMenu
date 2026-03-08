@@ -265,6 +265,7 @@ bool rom_info_get_stable_id(const rom_info_t *rom_info, char *out, size_t out_le
  * @return true if the stable ID was written, false otherwise
  */
 bool rom_info_get_stable_id_for_path(const char *path, char *out, size_t out_len);
+bool rom_info_get_stable_id_for_path_cached(const char *path, char *out, size_t out_len);
 
 /**
  * @brief Resolve a ROM path by stable identity, scanning storage on demand.

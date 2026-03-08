@@ -54,7 +54,7 @@ static const char *hidden_root_paths[] = {
 };
 
 #define PLAYLIST_CACHE_MAGIC   (0x504C4331u)
-#define PLAYLIST_CACHE_VERSION (1u)
+#define PLAYLIST_CACHE_VERSION (2u)
 #define PLAYLIST_CACHE_DIR     "menu/cache/playlists"
 #define PLAYLIST_RECENT_FILE   "menu/cache/playlists/recent.txt"
 #define PLAYLIST_MEM_CACHE_ENTRIES 6u
@@ -67,6 +67,7 @@ typedef struct {
     uint32_t version;
     uint64_t source_size;
     int64_t source_mtime;
+    uint64_t content_hash;
     uint32_t entry_count;
     int32_t viz_style;
     int32_t viz_intensity;
@@ -79,8 +80,7 @@ typedef struct {
     bool valid;
     uint32_t last_used_tick;
     char *playlist_path;
-    uint64_t source_size;
-    int64_t source_mtime;
+    uint64_t content_hash;
     char *playlist_theme;
     char *playlist_bgm;
     char *playlist_bg;
@@ -99,9 +99,17 @@ static playlist_mem_cache_entry_t playlist_mem_cache[PLAYLIST_MEM_CACHE_ENTRIES]
 static uint32_t playlist_mem_cache_tick = 1;
 static bool playlist_active_loaded = false;
 static char playlist_active_path[512];
-static uint64_t playlist_active_source_size = 0;
-static int64_t playlist_active_source_mtime = 0;
+static uint64_t playlist_active_content_hash = 0;
 static bool playlist_active_static = false;
+static char *playlist_active_theme = NULL;
+static char *playlist_active_bgm = NULL;
+static char *playlist_active_bg = NULL;
+static char *playlist_active_screensaver_logo = NULL;
+static int playlist_active_viz_style = -1;
+static int playlist_active_viz_intensity = -1;
+static int playlist_active_text_panel_enabled = -1;
+static int playlist_active_text_panel_alpha = -1;
+static int playlist_active_grid_view = -1;
 
 static char playlist_recent_file_path[512];
 static char playlist_recent_paths[PLAYLIST_RECENT_LIMIT][512];
@@ -117,6 +125,16 @@ static uint64_t fnv1a64_str(const char *s) {
     }
     while (*s) {
         h ^= (uint8_t)(*s++);
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static uint64_t fnv1a64_buf(const void *data, size_t len) {
+    uint64_t h = 1469598103934665603ULL;
+    const uint8_t *p = (const uint8_t *)data;
+    for (size_t i = 0; i < len; i++) {
+        h ^= p[i];
         h *= 1099511628211ULL;
     }
     return h;
@@ -158,7 +176,7 @@ static bool playlist_description_has_visible_text(const char *description);
 static char *playlist_description_normalize_dup(const char *description);
 static void playlist_description_replace(char **slot, const char *description);
 static void playlist_description_sanitize(char **slot);
-static bool playlist_should_use_disk_cache(const struct stat *source_stat, int entry_count);
+static bool playlist_should_use_disk_cache(size_t file_size, int entry_count);
 
 static void playlist_mem_cache_entry_clear(playlist_mem_cache_entry_t *entry) {
     if (!entry) {
@@ -182,35 +200,52 @@ static void playlist_mem_cache_entry_clear(playlist_mem_cache_entry_t *entry) {
 static void playlist_active_clear(void) {
     playlist_active_loaded = false;
     playlist_active_path[0] = '\0';
-    playlist_active_source_size = 0;
-    playlist_active_source_mtime = 0;
+    playlist_active_content_hash = 0;
     playlist_active_static = false;
+    free(playlist_active_theme); playlist_active_theme = NULL;
+    free(playlist_active_bgm); playlist_active_bgm = NULL;
+    free(playlist_active_bg); playlist_active_bg = NULL;
+    free(playlist_active_screensaver_logo); playlist_active_screensaver_logo = NULL;
+    playlist_active_viz_style = -1;
+    playlist_active_viz_intensity = -1;
+    playlist_active_text_panel_enabled = -1;
+    playlist_active_text_panel_alpha = -1;
+    playlist_active_grid_view = -1;
 }
 
-static bool playlist_active_matches(const char *playlist_path, const struct stat *source_stat) {
-    if (!playlist_active_loaded || !playlist_path || !source_stat) {
-        return false;
-    }
-    return playlist_active_static &&
-           strcmp(playlist_active_path, playlist_path) == 0 &&
-           playlist_active_source_size == (uint64_t)source_stat->st_size &&
-           playlist_active_source_mtime == (int64_t)source_stat->st_mtime;
-}
 
-static void playlist_active_store(const char *playlist_path, const struct stat *source_stat, bool is_static) {
-    if (!playlist_path || !source_stat) {
+static void playlist_active_store(
+    const char *playlist_path, uint64_t content_hash, bool is_static,
+    const char *theme, const char *bgm, const char *bg,
+    int viz_style, int viz_intensity,
+    int text_panel_enabled, int text_panel_alpha,
+    const char *screensaver_logo, int grid_view
+) {
+    if (!playlist_path) {
         playlist_active_clear();
         return;
     }
     snprintf(playlist_active_path, sizeof(playlist_active_path), "%s", playlist_path);
-    playlist_active_source_size = (uint64_t)source_stat->st_size;
-    playlist_active_source_mtime = (int64_t)source_stat->st_mtime;
+    playlist_active_content_hash = content_hash;
     playlist_active_static = is_static;
+    free(playlist_active_theme);
+    playlist_active_theme = theme ? strdup(theme) : NULL;
+    free(playlist_active_bgm);
+    playlist_active_bgm = bgm ? strdup(bgm) : NULL;
+    free(playlist_active_bg);
+    playlist_active_bg = bg ? strdup(bg) : NULL;
+    free(playlist_active_screensaver_logo);
+    playlist_active_screensaver_logo = screensaver_logo ? strdup(screensaver_logo) : NULL;
+    playlist_active_viz_style = viz_style;
+    playlist_active_viz_intensity = viz_intensity;
+    playlist_active_text_panel_enabled = text_panel_enabled;
+    playlist_active_text_panel_alpha = text_panel_alpha;
+    playlist_active_grid_view = grid_view;
     playlist_active_loaded = true;
 }
 
-static playlist_mem_cache_entry_t *playlist_mem_cache_find(const char *playlist_path, uint64_t source_size, int64_t source_mtime) {
-    if (!playlist_path) {
+static playlist_mem_cache_entry_t *playlist_mem_cache_find(const char *playlist_path, uint64_t content_hash) {
+    if (!playlist_path || !content_hash) {
         return NULL;
     }
     for (size_t i = 0; i < PLAYLIST_MEM_CACHE_ENTRIES; i++) {
@@ -221,7 +256,7 @@ static playlist_mem_cache_entry_t *playlist_mem_cache_find(const char *playlist_
         if (strcmp(entry->playlist_path, playlist_path) != 0) {
             continue;
         }
-        if (entry->source_size != source_size || entry->source_mtime != source_mtime) {
+        if (entry->content_hash != content_hash) {
             continue;
         }
         entry->last_used_tick = ++playlist_mem_cache_tick;
@@ -253,8 +288,7 @@ static playlist_mem_cache_entry_t *playlist_mem_cache_alloc(void) {
 
 static bool playlist_mem_cache_store(
     const char *playlist_path,
-    uint64_t source_size,
-    int64_t source_mtime,
+    uint64_t content_hash,
     const char *playlist_theme,
     const char *playlist_bgm,
     const char *playlist_bg,
@@ -288,8 +322,7 @@ static bool playlist_mem_cache_store(
     entry->playlist_text_panel_enabled = playlist_text_panel_enabled;
     entry->playlist_text_panel_alpha = playlist_text_panel_alpha;
     entry->playlist_grid_view = playlist_grid_view;
-    entry->source_size = source_size;
-    entry->source_mtime = source_mtime;
+    entry->content_hash = content_hash;
     entry->entry_count = entry_count;
 
     if (!entry->playlist_path) {
@@ -318,8 +351,7 @@ static bool playlist_mem_cache_store(
 static bool playlist_mem_cache_try_load(
     menu_t *menu,
     const char *playlist_path,
-    uint64_t source_size,
-    int64_t source_mtime,
+    uint64_t content_hash,
     int *playlist_capacity,
     char **playlist_theme,
     char **playlist_bgm,
@@ -338,8 +370,7 @@ static bool playlist_mem_cache_try_load(
 
     playlist_mem_cache_entry_t *entry = playlist_mem_cache_find(
         playlist_path,
-        source_size,
-        source_mtime
+        content_hash
     );
     if (!entry) {
         return false;
@@ -387,8 +418,7 @@ static bool playlist_mem_cache_try_load(
 static void playlist_mem_cache_save(
     menu_t *menu,
     const char *playlist_path,
-    uint64_t source_size,
-    int64_t source_mtime,
+    uint64_t content_hash,
     const char *playlist_theme,
     const char *playlist_bgm,
     const char *playlist_bg,
@@ -400,7 +430,7 @@ static void playlist_mem_cache_save(
     int playlist_grid_view,
     const char *playlist_description
 ) {
-    if (!menu || !playlist_path || (source_size == 0 && source_mtime == 0)) {
+    if (!menu || !playlist_path || !content_hash) {
         return;
     }
 
@@ -414,8 +444,7 @@ static void playlist_mem_cache_save(
 
     playlist_mem_cache_store(
         playlist_path,
-        source_size,
-        source_mtime,
+        content_hash,
         playlist_theme,
         playlist_bgm,
         playlist_bg,
@@ -522,14 +551,6 @@ static bool playlist_mem_cache_prewarm_from_disk(menu_t *menu, const char *playl
         return false;
     }
 
-    struct stat source_stat;
-    if (stat(playlist_path, &source_stat) != 0) {
-        return false;
-    }
-    if (playlist_mem_cache_find(playlist_path, (uint64_t)source_stat.st_size, (int64_t)source_stat.st_mtime)) {
-        return true;
-    }
-
     char *cache_path = playlist_cache_build_path(menu, playlist_path);
     if (!cache_path) {
         return false;
@@ -545,12 +566,16 @@ static bool playlist_mem_cache_prewarm_from_disk(menu_t *menu, const char *playl
     bool ok = (fread(&header, sizeof(header), 1, f) == 1);
     ok = ok && (header.magic == PLAYLIST_CACHE_MAGIC);
     ok = ok && (header.version == PLAYLIST_CACHE_VERSION);
-    ok = ok && (header.source_size == (uint64_t)source_stat.st_size);
-    ok = ok && (header.source_mtime == (int64_t)source_stat.st_mtime);
+    ok = ok && (header.content_hash != 0);
     ok = ok && (header.entry_count < 65536u);
     if (!ok) {
         fclose(f);
         return false;
+    }
+
+    if (playlist_mem_cache_find(playlist_path, header.content_hash)) {
+        fclose(f);
+        return true;
     }
 
     char *playlist_theme = NULL;
@@ -578,8 +603,7 @@ static bool playlist_mem_cache_prewarm_from_disk(menu_t *menu, const char *playl
         const char * const *paths_const = (const char * const *)entry_paths;
         ok = playlist_mem_cache_store(
             playlist_path,
-            (uint64_t)source_stat.st_size,
-            (int64_t)source_stat.st_mtime,
+            header.content_hash,
             playlist_theme,
             playlist_bgm,
             playlist_bg,
@@ -737,7 +761,8 @@ static char *playlist_cache_build_path(menu_t *menu, const char *playlist_path) 
 static bool playlist_cache_try_load(
     menu_t *menu,
     const char *playlist_path,
-    const struct stat *source_stat,
+    uint64_t content_hash,
+    size_t file_size,
     int *playlist_capacity,
     char **playlist_theme,
     char **playlist_bgm,
@@ -751,15 +776,14 @@ static bool playlist_cache_try_load(
     char **playlist_description,
     const char **cache_source
 ) {
-    if (!menu || !playlist_path || !source_stat) {
+    if (!menu || !playlist_path || !content_hash) {
         return false;
     }
 
     if (playlist_mem_cache_try_load(
             menu,
             playlist_path,
-            (uint64_t)source_stat->st_size,
-            (int64_t)source_stat->st_mtime,
+            content_hash,
             playlist_capacity,
             playlist_theme,
             playlist_bgm,
@@ -777,7 +801,7 @@ static bool playlist_cache_try_load(
         return true;
     }
 
-    if (!playlist_should_use_disk_cache(source_stat, 0)) {
+    if (!playlist_should_use_disk_cache(file_size, 0)) {
         return false;
     }
 
@@ -796,8 +820,7 @@ static bool playlist_cache_try_load(
     bool ok = (fread(&header, sizeof(header), 1, f) == 1);
     ok = ok && (header.magic == PLAYLIST_CACHE_MAGIC);
     ok = ok && (header.version == PLAYLIST_CACHE_VERSION);
-    ok = ok && (header.source_size == (uint64_t)source_stat->st_size);
-    ok = ok && (header.source_mtime == (int64_t)source_stat->st_mtime);
+    ok = ok && (header.content_hash == content_hash);
     ok = ok && (header.entry_count < 65536u);
     if (!ok) {
         fclose(f);
@@ -840,8 +863,7 @@ static bool playlist_cache_try_load(
     playlist_mem_cache_save(
         menu,
         playlist_path,
-        (uint64_t)source_stat->st_size,
-        (int64_t)source_stat->st_mtime,
+        content_hash,
         *playlist_theme,
         *playlist_bgm,
         *playlist_bg,
@@ -878,7 +900,8 @@ fail:
 static void playlist_cache_save(
     menu_t *menu,
     const char *playlist_path,
-    const struct stat *source_stat,
+    uint64_t content_hash,
+    size_t file_size,
     const char *playlist_theme,
     const char *playlist_bgm,
     const char *playlist_bg,
@@ -890,11 +913,11 @@ static void playlist_cache_save(
     int playlist_grid_view,
     const char *playlist_description
 ) {
-    if (!menu || !playlist_path || !source_stat || menu->browser.entries < 0) {
+    if (!menu || !playlist_path || !content_hash || menu->browser.entries < 0) {
         return;
     }
 
-    if (!playlist_should_use_disk_cache(source_stat, menu->browser.entries)) {
+    if (!playlist_should_use_disk_cache(file_size, menu->browser.entries)) {
         return;
     }
 
@@ -912,8 +935,9 @@ static void playlist_cache_save(
     playlist_cache_header_t header = {
         .magic = PLAYLIST_CACHE_MAGIC,
         .version = PLAYLIST_CACHE_VERSION,
-        .source_size = (uint64_t)source_stat->st_size,
-        .source_mtime = (int64_t)source_stat->st_mtime,
+        .source_size = (uint64_t)file_size,
+        .source_mtime = 0,
+        .content_hash = content_hash,
         .entry_count = (uint32_t)menu->browser.entries,
         .viz_style = playlist_viz_style,
         .viz_intensity = playlist_viz_intensity,
@@ -1110,15 +1134,15 @@ static void browser_playlist_grid_draw(menu_t *menu);
 static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path, int *capacity);
 static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalized_path, int *capacity);
 static char *playlist_cache_build_path(menu_t *menu, const char *playlist_path);
-static bool playlist_cache_try_load(menu_t *menu, const char *playlist_path, const struct stat *source_stat,
-    int *playlist_capacity,
+static bool playlist_cache_try_load(menu_t *menu, const char *playlist_path,
+    uint64_t content_hash, size_t file_size, int *playlist_capacity,
     char **playlist_theme, char **playlist_bgm, char **playlist_bg,
     int *playlist_viz_style, int *playlist_viz_intensity,
     int *playlist_text_panel_enabled, int *playlist_text_panel_alpha,
     char **playlist_screensaver_logo, int *playlist_grid_view,
     char **playlist_description, const char **cache_source);
 static void playlist_cache_save(menu_t *menu, const char *playlist_path,
-    const struct stat *source_stat,
+    uint64_t content_hash, size_t file_size,
     const char *playlist_theme, const char *playlist_bgm, const char *playlist_bg,
     int playlist_viz_style, int playlist_viz_intensity,
     int playlist_text_panel_enabled, int playlist_text_panel_alpha,
@@ -1303,11 +1327,8 @@ static void playlist_description_sanitize(char **slot) {
     *slot = normalized;
 }
 
-static bool playlist_should_use_disk_cache(const struct stat *source_stat, int entry_count) {
-    if (!source_stat) {
-        return false;
-    }
-    if ((uint64_t)source_stat->st_size < PLAYLIST_DISK_CACHE_MIN_SOURCE_BYTES) {
+static bool playlist_should_use_disk_cache(size_t file_size, int entry_count) {
+    if (file_size < PLAYLIST_DISK_CACHE_MIN_SOURCE_BYTES) {
         return false;
     }
     if (entry_count > 0 && entry_count < PLAYLIST_DISK_CACHE_MIN_ENTRIES) {
@@ -2923,6 +2944,8 @@ static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path,
     entry->type = ENTRY_TYPE_ROM;
     entry->size = -1;
     entry->index = menu->browser.entries - 1;
+    playtime_entry_t *pt = playtime_get_if_cached(&menu->playtime, normalized_path);
+    entry->last_played = pt ? pt->last_played : 0;
     return true;
 }
 
@@ -3564,20 +3587,53 @@ static bool load_playlist (menu_t *menu) {
     uint32_t smart_ms = 0;
     uint32_t cache_save_ms = 0;
     const char *cache_source = NULL;
-    struct stat source_stat = {0};
-    bool have_source_stat = (stat(path_get(menu->browser.directory), &source_stat) == 0);
-
-    if (have_source_stat &&
+    // Fast reuse: if we already have this playlist loaded, skip stat entirely.
+    if (playlist_active_loaded &&
+        playlist_active_static &&
         menu->browser.playlist &&
         menu->browser.entries > 0 &&
-        playlist_active_matches(path_get(menu->browser.directory), &source_stat)) {
+        strcmp(playlist_active_path, path_get(menu->browser.directory)) == 0) {
         playlist_perf_reset();
         playlist_perf_commit(menu, "reuse", 0, 0, 0, 0, menu->browser.entries);
         playlist_recent_remember(path_get(menu->browser.directory));
+        browser_apply_playlist_overrides(menu,
+            playlist_active_theme, playlist_active_bgm, playlist_active_bg,
+            playlist_active_viz_style, playlist_active_viz_intensity,
+            playlist_active_text_panel_enabled, playlist_active_text_panel_alpha,
+            playlist_active_screensaver_logo, playlist_active_grid_view);
         return false;
     }
 
     playlist_perf_reset();
+
+    // Read entire m3u file in one SD card operation.
+    char *file_buf = NULL;
+    size_t file_size = 0;
+    {
+        FILE *f = fopen(path_get(menu->browser.directory), "rb");
+        if (f == NULL) {
+            return true;
+        }
+        fseek(f, 0, SEEK_END);
+        long flen = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (flen <= 0 || flen >= 65536) {
+            fclose(f);
+            return true;
+        }
+        file_buf = malloc((size_t)flen + 1);
+        if (!file_buf) {
+            fclose(f);
+            return true;
+        }
+        size_t nread = fread(file_buf, 1, (size_t)flen, f);
+        fclose(f);
+        file_buf[nread] = '\0';
+        file_size = nread;
+    }
+
+    uint64_t content_hash = fnv1a64_buf(file_buf, file_size);
+
     browser_list_free(menu);
     int playlist_capacity = 0;
 
@@ -3597,7 +3653,8 @@ static bool load_playlist (menu_t *menu) {
     if (playlist_cache_try_load(
             menu,
             path_get(menu->browser.directory),
-            have_source_stat ? &source_stat : NULL,
+            content_hash,
+            file_size,
             &playlist_capacity,
             &playlist_theme,
             &playlist_bgm,
@@ -3610,6 +3667,7 @@ static bool load_playlist (menu_t *menu) {
             &playlist_grid_view,
             &playlist_description,
             &cache_source)) {
+        free(file_buf);
         if (menu->browser.entries > 0) {
             menu->browser.selected = 0;
             menu->browser.entry = &menu->browser.list[menu->browser.selected];
@@ -3619,9 +3677,11 @@ static bool load_playlist (menu_t *menu) {
         browser_apply_sort(menu);
 
         playlist_recent_remember(path_get(menu->browser.directory));
-        if (have_source_stat) {
-            playlist_active_store(path_get(menu->browser.directory), &source_stat, true);
-        }
+        playlist_active_store(path_get(menu->browser.directory), content_hash, true,
+            playlist_theme, playlist_bgm, playlist_bg,
+            playlist_viz_style, playlist_viz_intensity,
+            playlist_text_panel_enabled, playlist_text_panel_alpha,
+            playlist_screensaver_logo, playlist_grid_view);
         playlist_perf_commit(menu, cache_source ? cache_source : "cache", elapsed_ms(open_start_us), 0, 0, 0, menu->browser.entries);
         browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
         free(menu->browser.playlist_description);
@@ -3636,20 +3696,30 @@ static bool load_playlist (menu_t *menu) {
         return false;
     }
 
-    FILE *f = fopen(path_get(menu->browser.directory), "r");
-    if (f == NULL) {
-        return true;
-    }
-
     path_t *playlist_dir = path_clone(menu->browser.directory);
     path_pop(playlist_dir);
     smart_playlist_query_t smart_query;
     smart_playlist_query_init(&smart_query);
     parse_start_us = get_ticks_us();
 
-    char line[1024];
-    while (fgets(line, sizeof(line), f) != NULL) {
-        char *trimmed = trim_line(line);
+    // Parse lines from memory buffer — no further SD card I/O.
+    char *buf_cursor = file_buf;
+    while (buf_cursor && *buf_cursor) {
+        char *line_start = buf_cursor;
+        char *eol = strchr(buf_cursor, '\n');
+        if (eol) {
+            *eol = '\0';
+            buf_cursor = eol + 1;
+        } else {
+            buf_cursor = NULL;
+        }
+        // Strip trailing \r for Windows-style line endings.
+        size_t line_len = strlen(line_start);
+        if (line_len > 0 && line_start[line_len - 1] == '\r') {
+            line_start[line_len - 1] = '\0';
+        }
+
+        char *trimmed = trim_line(line_start);
         if (trimmed == NULL || trimmed[0] == '\0') {
             continue;
         }
@@ -3671,7 +3741,7 @@ static bool load_playlist (menu_t *menu) {
         char *normalized = normalize_path(path_get(entry_path));
         if (!normalized) {
             path_free(entry_path);
-            fclose(f);
+            free(file_buf);
             free(playlist_theme);
             free(playlist_bgm);
             free(playlist_bg);
@@ -3691,7 +3761,7 @@ static bool load_playlist (menu_t *menu) {
         if (!playlist_append_rom_entry(menu, normalized, &playlist_capacity)) {
             free(normalized);
             path_free(entry_path);
-            fclose(f);
+            free(file_buf);
             free(playlist_theme);
             free(playlist_bgm);
             free(playlist_bg);
@@ -3705,6 +3775,7 @@ static bool load_playlist (menu_t *menu) {
 
         path_free(entry_path);
     }
+    free(file_buf);
     parse_ms = elapsed_ms(parse_start_us);
 
     if (smart_query.enabled) {
@@ -3716,7 +3787,6 @@ static bool load_playlist (menu_t *menu) {
         if (smart_query.root_count == 0) {
             path_t *default_root = path_init(menu->storage_prefix, "/");
             if (!default_root) {
-                fclose(f);
                 free(playlist_theme);
                 free(playlist_bgm);
                 free(playlist_bg);
@@ -3742,7 +3812,6 @@ static bool load_playlist (menu_t *menu) {
                     smart_playlist_entry_free(&generated[j]);
                 }
                 free(generated);
-                fclose(f);
                 free(playlist_theme);
                 free(playlist_bgm);
                 free(playlist_bg);
@@ -3762,7 +3831,6 @@ static bool load_playlist (menu_t *menu) {
                     smart_playlist_entry_free(&generated[j]);
                 }
                 free(generated);
-                fclose(f);
                 free(playlist_theme);
                 free(playlist_bgm);
                 free(playlist_bg);
@@ -3797,8 +3865,7 @@ static bool load_playlist (menu_t *menu) {
         playlist_mem_cache_save(
             menu,
             path_get(menu->browser.directory),
-            have_source_stat ? (uint64_t)source_stat.st_size : 0,
-            have_source_stat ? (int64_t)source_stat.st_mtime : 0,
+            content_hash,
             playlist_theme,
             playlist_bgm,
             playlist_bg,
@@ -3813,7 +3880,8 @@ static bool load_playlist (menu_t *menu) {
         playlist_cache_save(
             menu,
             path_get(menu->browser.directory),
-            have_source_stat ? &source_stat : NULL,
+            content_hash,
+            file_size,
             playlist_theme,
             playlist_bgm,
             playlist_bg,
@@ -3827,9 +3895,11 @@ static bool load_playlist (menu_t *menu) {
         );
         playlist_recent_remember(path_get(menu->browser.directory));
         cache_save_ms = elapsed_ms(cache_save_start_us);
-        if (have_source_stat) {
-            playlist_active_store(path_get(menu->browser.directory), &source_stat, true);
-        }
+        playlist_active_store(path_get(menu->browser.directory), content_hash, true,
+            playlist_theme, playlist_bgm, playlist_bg,
+            playlist_viz_style, playlist_viz_intensity,
+            playlist_text_panel_enabled, playlist_text_panel_alpha,
+            playlist_screensaver_logo, playlist_grid_view);
     } else {
         playlist_active_clear();
     }
@@ -3841,7 +3911,6 @@ static bool load_playlist (menu_t *menu) {
     playlist_description_tick = 0;
     playlist_description = NULL;
     path_free(playlist_dir);
-    fclose(f);
     free(playlist_theme);
     free(playlist_bgm);
     free(playlist_bg);
@@ -3856,6 +3925,11 @@ static char *normalize_path (const char *path) {
         return NULL;
     }
 
+    size_t path_len = strlen(path);
+    if (path_len >= 1024) {
+        return NULL;
+    }
+
     const char *prefix_pos = strstr(path, ":/");
     size_t prefix_len = 0;
     if (prefix_pos != NULL) {
@@ -3864,23 +3938,13 @@ static char *normalize_path (const char *path) {
         prefix_len = 1;
     }
 
-    size_t path_len = strlen(path);
-    char *work = malloc(path_len + 1);
-    if (!work) {
-        return NULL;
-    }
+    char work[1024];
     memcpy(work, path, path_len + 1);
 
-    char *segments_start = work + prefix_len;
-    size_t max_segments = (path_len / 2) + 1;
-    char **segments = malloc(max_segments * sizeof(char *));
-    if (!segments) {
-        free(work);
-        return NULL;
-    }
-
+    char *seg_ptrs[128];
     size_t seg_count = 0;
-    char *cursor = segments_start;
+
+    char *cursor = work + prefix_len;
     while (*cursor) {
         while (*cursor == '/') {
             cursor++;
@@ -3905,14 +3969,13 @@ static char *normalize_path (const char *path) {
             }
             continue;
         }
-        segments[seg_count++] = seg;
+        if (seg_count < 128) {
+            seg_ptrs[seg_count++] = seg;
+        }
     }
 
-    size_t out_cap = path_len + 2;
-    char *out = malloc(out_cap);
+    char *out = malloc(path_len + 2);
     if (!out) {
-        free(segments);
-        free(work);
         return NULL;
     }
 
@@ -3926,8 +3989,8 @@ static char *normalize_path (const char *path) {
         if (out_len > 0 && out[out_len - 1] != '/') {
             out[out_len++] = '/';
         }
-        size_t seg_len = strlen(segments[i]);
-        memcpy(out + out_len, segments[i], seg_len);
+        size_t seg_len = strlen(seg_ptrs[i]);
+        memcpy(out + out_len, seg_ptrs[i], seg_len);
         out_len += seg_len;
     }
 
@@ -3936,9 +3999,6 @@ static char *normalize_path (const char *path) {
     }
 
     out[out_len] = '\0';
-
-    free(segments);
-    free(work);
     return out;
 }
 

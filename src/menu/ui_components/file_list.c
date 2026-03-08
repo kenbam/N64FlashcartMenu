@@ -83,7 +83,7 @@ static int format_file_size(char *buffer, int64_t size) {
 }
 
 static int format_last_played(char *buffer, const entry_t *entry) {
-    if (!buffer || !entry || !entry->path || !file_list_playtime_db) {
+    if (!buffer || !entry) {
         return sprintf(buffer, "--");
     }
 
@@ -91,8 +91,7 @@ static int format_last_played(char *buffer, const entry_t *entry) {
         return sprintf(buffer, "--");
     }
 
-    playtime_entry_t *pt = playtime_get(file_list_playtime_db, entry->path);
-    if (!pt || pt->last_played <= 0) {
+    if (entry->last_played <= 0) {
         buffer[0] = '\0';
         return 0;
     }
@@ -100,7 +99,7 @@ static int format_last_played(char *buffer, const entry_t *entry) {
         return sprintf(buffer, "Played");
     }
 
-    int64_t delta = (int64_t)file_list_now - (int64_t)pt->last_played;
+    int64_t delta = (int64_t)file_list_now - (int64_t)entry->last_played;
     if (delta < 0) {
         delta = 0;
     }
