@@ -300,11 +300,13 @@ static void process(menu_t *menu) {
         if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME) {
             playtime_entry_t *entry = playtime_ranked[selected_item];
             if (entry && resolve_playtime_entry_path(menu, entry) && entry->path) {
-                if (menu->browser.select_file) {
-                    path_free(menu->browser.select_file);
+                if (menu->load.rom_path) {
+                    path_free(menu->load.rom_path);
                 }
-                menu->browser.select_file = path_create(entry->path);
-                menu->next_mode = MENU_MODE_BROWSER;
+                menu->load.rom_path = path_create(entry->path);
+                menu->load.load_history_id = -1;
+                menu->load.load_favorite_id = -1;
+                menu->next_mode = MENU_MODE_LOAD_ROM;
                 sound_play_effect(SFX_ENTER);
             } else {
                 menu_show_error(menu, "Couldn't locate ROM");

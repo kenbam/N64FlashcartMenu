@@ -105,19 +105,6 @@ static void playtime_entry_free(playtime_entry_t *entry) {
     entry->path = NULL;
 }
 
-static bool playtime_entry_matches(const playtime_entry_t *entry, const char *path, const char *game_id) {
-    if (!entry) {
-        return false;
-    }
-    if (path && entry->path && strcmp(entry->path, path) == 0) {
-        return true;
-    }
-    if (game_id && game_id[0] != '\0' && entry->game_id[0] != '\0' && strcmp(entry->game_id, game_id) == 0) {
-        return true;
-    }
-    return false;
-}
-
 static void playtime_entry_set_identity(playtime_entry_t *entry, const char *path, const char *game_id) {
     if (!entry) {
         return;
@@ -192,14 +179,47 @@ playtime_entry_t *playtime_get (playtime_db_t *db, const char *path) {
         return NULL;
     }
 
-    char game_id[ROM_STABLE_ID_LENGTH] = {0};
-    rom_info_get_stable_id_for_path(path, game_id, sizeof(game_id));
-
+    // Fast path: direct path match (no SD I/O).
     for (uint32_t i = 0; i < db->count; i++) {
-        if (playtime_entry_matches(&db->entries[i], path, game_id)) {
+        if (db->entries[i].path && strcmp(db->entries[i].path, path) == 0) {
             return &db->entries[i];
         }
     }
+
+    // Slow path: compute stable ID and match by game identity.
+    char game_id[ROM_STABLE_ID_LENGTH] = {0};
+    if (rom_info_get_stable_id_for_path(path, game_id, sizeof(game_id))) {
+        for (uint32_t i = 0; i < db->count; i++) {
+            if (db->entries[i].game_id[0] != '\0' && strcmp(db->entries[i].game_id, game_id) == 0) {
+                return &db->entries[i];
+            }
+        }
+    }
+    return NULL;
+}
+
+playtime_entry_t *playtime_get_if_cached (playtime_db_t *db, const char *path) {
+    if (!db || !path) {
+        return NULL;
+    }
+
+    // Fast path: direct path match (no SD I/O).
+    for (uint32_t i = 0; i < db->count; i++) {
+        if (db->entries[i].path && strcmp(db->entries[i].path, path) == 0) {
+            return &db->entries[i];
+        }
+    }
+
+    // Fallback: stable ID match using only the in-memory cache.
+    char game_id[ROM_STABLE_ID_LENGTH] = {0};
+    if (rom_info_get_stable_id_for_path_cached(path, game_id, sizeof(game_id))) {
+        for (uint32_t i = 0; i < db->count; i++) {
+            if (db->entries[i].game_id[0] != '\0' && strcmp(db->entries[i].game_id, game_id) == 0) {
+                return &db->entries[i];
+            }
+        }
+    }
+
     return NULL;
 }
 

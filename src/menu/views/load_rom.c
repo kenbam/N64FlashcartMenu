@@ -1265,19 +1265,17 @@ void view_load_rom_init (menu_t *menu) {
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (!menu->settings.rom_autoload_enabled) {
 #endif
-        if (menu->load.rom_path) {
-            path_free(menu->load.rom_path);
-        }
-
         if(menu->load.load_history_id != -1) {
+            path_free(menu->load.rom_path);
             bookkeeping_item_t *item = &menu->bookkeeping.history_items[menu->load.load_history_id];
             resolve_bookkeeping_rom_path(menu, item);
             menu->load.rom_path = item->primary_path ? path_clone(item->primary_path) : NULL;
         } else if(menu->load.load_favorite_id != -1) {
+            path_free(menu->load.rom_path);
             bookkeeping_item_t *item = &menu->bookkeeping.favorite_items[menu->load.load_favorite_id];
             resolve_bookkeeping_rom_path(menu, item);
             menu->load.rom_path = item->primary_path ? path_clone(item->primary_path) : NULL;
-        } else {
+        } else if(!menu->load.rom_path) {
             if (menu->browser.entry && menu->browser.entry->path) {
                 menu->load.rom_path = path_create(menu->browser.entry->path);
             } else {
