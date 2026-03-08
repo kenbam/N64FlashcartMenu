@@ -27,7 +27,7 @@
 #define PI_CONFIG_64DD_IPL      (0x80270740)
 
 #define CLOCK_RATE_DEFAULT      (0x0000000F)
-#define ROM_STABLE_ID_CACHE_SIZE (48)
+#define ROM_STABLE_ID_CACHE_SIZE (128)
 
 
 /** @brief ROM File Information Structure. */
