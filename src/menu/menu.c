@@ -75,6 +75,7 @@ typedef enum {
 static menu_bgm_backend_t menu_bgm_backend = MENU_BGM_BACKEND_NONE;
 static wav64_t menu_bgm_wav64;
 static bool menu_bgm_wav64_open = false;
+static bool menu_bgm_perf_pending = false;
 typedef struct {
     waveform_t wave;
     waveform_t *inner_wave;
@@ -188,8 +189,10 @@ static void screensaver_logo_try_load(menu_t *menu) {
 }
 
 static void screensaver_logo_reload(menu_t *menu) {
+    uint64_t start_us = get_ticks_us();
     screensaver_logo_free();
     screensaver_logo_try_load(menu);
+    browser_playlist_perf_note_screensaver_logo_reload((uint32_t)((get_ticks_us() - start_us) / 1000ULL));
 }
 
 static void screensaver_get_logo_size(int *width, int *height) {
@@ -744,6 +747,7 @@ static void menu_bgm_init (menu_t *menu) {
         return;
     }
 
+    uint64_t start_us = get_ticks_us();
     menu_bgm_initialized = true;
     menu_bgm_backend = MENU_BGM_BACKEND_NONE;
     mp3player_err_t err = MP3PLAYER_ERR_NO_FILE;
@@ -775,12 +779,19 @@ static void menu_bgm_init (menu_t *menu) {
         menu_bgm_error = true;
         debugf("Menu BGM disabled: failed to load BGM (%d)\n", err);
     }
+
+    if (menu_bgm_perf_pending) {
+        uint32_t elapsed_ms = (uint32_t)((get_ticks_us() - start_us) / 1000ULL);
+        browser_playlist_perf_note_bgm_reload(elapsed_ms);
+        menu_bgm_perf_pending = false;
+    }
 }
 
 static void menu_bgm_poll (menu_t *menu) {
     if (menu->bgm_reload_requested) {
         menu_bgm_deinit();
         menu->bgm_reload_requested = false;
+        menu_bgm_perf_pending = true;
     }
 
     if (!menu->settings.bgm_enabled) {
@@ -869,6 +880,7 @@ static void menu_bgm_deinit (void) {
     menu_bgm_initialized = false;
     menu_bgm_loaded = false;
     menu_bgm_error = false;
+    menu_bgm_perf_pending = false;
 }
 
 /**

@@ -9,6 +9,8 @@
 #ifndef VIEWS_H__
 #define VIEWS_H__
 
+#include <stdint.h>
+
 #include "../ui_components.h"
 #include "../menu_state.h"
 
@@ -47,6 +49,8 @@ void view_browser_init(menu_t *menu);
  * @param display Pointer to the display surface.
  */
 void view_browser_display(menu_t *menu, surface_t *display);
+void browser_playlist_perf_note_bgm_reload(uint32_t ms);
+void browser_playlist_perf_note_screensaver_logo_reload(uint32_t ms);
 
 /**
  * @brief Initialize the file info view.

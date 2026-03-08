@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#include <libdragon.h>
+
 #include "../cart_load.h"
 #include "../fonts.h"
 #include "../png_decoder.h"
@@ -697,7 +699,8 @@ static bool playlist_cache_try_load(
     int *playlist_text_panel_alpha,
     char **playlist_screensaver_logo,
     int *playlist_grid_view,
-    char **playlist_description
+    char **playlist_description,
+    const char **cache_source
 ) {
     if (!menu || !playlist_path) {
         return false;
@@ -717,6 +720,9 @@ static bool playlist_cache_try_load(
             playlist_screensaver_logo,
             playlist_grid_view,
             playlist_description)) {
+        if (cache_source) {
+            *cache_source = "memory";
+        }
         return true;
     }
 
@@ -790,6 +796,9 @@ static bool playlist_cache_try_load(
         *playlist_grid_view,
         *playlist_description
     );
+    if (cache_source) {
+        *cache_source = "disk";
+    }
     return true;
 
 fail:
@@ -1049,7 +1058,7 @@ static bool playlist_cache_try_load(menu_t *menu, const char *playlist_path, int
     int *playlist_viz_style, int *playlist_viz_intensity,
     int *playlist_text_panel_enabled, int *playlist_text_panel_alpha,
     char **playlist_screensaver_logo, int *playlist_grid_view,
-    char **playlist_description);
+    char **playlist_description, const char **cache_source);
 static void playlist_cache_save(menu_t *menu, const char *playlist_path,
     const char *playlist_theme, const char *playlist_bgm, const char *playlist_bg,
     int playlist_viz_style, int playlist_viz_intensity,
@@ -1090,9 +1099,90 @@ typedef struct {
     char line2[128];
 } playlist_toast_t;
 
+typedef struct {
+    bool valid;
+    char source[12];
+    uint32_t open_ms;
+    uint32_t parse_ms;
+    uint32_t smart_ms;
+    uint32_t cache_save_ms;
+    uint32_t bg_cache_ms;
+    uint32_t bg_decode_queue_ms;
+    uint32_t bgm_reload_ms;
+    uint32_t logo_reload_ms;
+    int entries;
+} playlist_perf_t;
+
 static playlist_toast_t playlist_toast = {0};
+static playlist_perf_t playlist_perf = {0};
 static bool playlist_grid_view_enabled = false;
 static int playlist_grid_runtime_override = -1; // -1=playlist/default, 0=list, 1=grid
+
+static uint32_t elapsed_ms(uint64_t start_us) {
+    uint64_t now_us = get_ticks_us();
+    if (now_us <= start_us) {
+        return 0;
+    }
+    return (uint32_t)((now_us - start_us) / 1000ULL);
+}
+
+static void playlist_perf_reset(void) {
+    memset(&playlist_perf, 0, sizeof(playlist_perf));
+}
+
+static void playlist_toast_show_perf(menu_t *menu) {
+    if (!menu || !playlist_perf.valid) {
+        return;
+    }
+
+    const char *title = menu->browser.directory ? file_basename(path_get(menu->browser.directory)) : "Playlist";
+    snprintf(playlist_toast.line1, sizeof(playlist_toast.line1), "%s", title ? title : "Playlist");
+
+    char extra[48] = "";
+    if (playlist_perf.smart_ms > 0) {
+        snprintf(extra, sizeof(extra), " | smart %lums", (unsigned long)playlist_perf.smart_ms);
+    } else if (playlist_perf.parse_ms > 0) {
+        snprintf(extra, sizeof(extra), " | parse %lums", (unsigned long)playlist_perf.parse_ms);
+    }
+
+    snprintf(
+        playlist_toast.line2,
+        sizeof(playlist_toast.line2),
+        "%s %lums | %d entries%s",
+        playlist_perf.source[0] ? playlist_perf.source : "open",
+        (unsigned long)playlist_perf.open_ms,
+        playlist_perf.entries,
+        extra
+    );
+    playlist_toast.frames_left = 180;
+}
+
+static void playlist_perf_commit(menu_t *menu, const char *source, uint32_t open_ms, uint32_t parse_ms, uint32_t smart_ms, uint32_t cache_save_ms, int entries) {
+    playlist_perf.valid = true;
+    snprintf(playlist_perf.source, sizeof(playlist_perf.source), "%s", source ? source : "open");
+    playlist_perf.open_ms = open_ms;
+    playlist_perf.parse_ms = parse_ms;
+    playlist_perf.smart_ms = smart_ms;
+    playlist_perf.cache_save_ms = cache_save_ms;
+    playlist_perf.entries = entries;
+    playlist_perf.bgm_reload_ms = 0;
+    playlist_perf.logo_reload_ms = 0;
+    playlist_perf.bg_cache_ms = 0;
+    playlist_perf.bg_decode_queue_ms = 0;
+
+    debugf(
+        "Playlist perf: %s open=%lums parse=%lums smart=%lums cache_save=%lums entries=%d path=%s\n",
+        playlist_perf.source,
+        (unsigned long)playlist_perf.open_ms,
+        (unsigned long)playlist_perf.parse_ms,
+        (unsigned long)playlist_perf.smart_ms,
+        (unsigned long)playlist_perf.cache_save_ms,
+        playlist_perf.entries,
+        menu && menu->browser.directory ? path_get(menu->browser.directory) : "(null)"
+    );
+
+    playlist_toast_show_perf(menu);
+}
 
 typedef struct {
     int entry_index;
@@ -2239,57 +2329,14 @@ static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work) {
     }
 }
 
-static const char *viz_style_name_short(int style) {
-    switch (style) {
-        case UI_BACKGROUND_VISUALIZER_PULSE_WASH: return "Pulse";
-        case UI_BACKGROUND_VISUALIZER_SUNBURST: return "Sunburst";
-        case UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE: return "Scope";
-        case UI_BACKGROUND_VISUALIZER_BARS:
-        default: return "Bars";
-    }
+void browser_playlist_perf_note_bgm_reload(uint32_t ms) {
+    playlist_perf.bgm_reload_ms = ms;
+    debugf("Playlist perf: bgm reload=%lums\n", (unsigned long)ms);
 }
 
-static const char *viz_intensity_name_short(int intensity) {
-    switch (intensity) {
-        case 0: return "Subtle";
-        case 2: return "Full";
-        default: return "Normal";
-    }
-}
-
-static void playlist_toast_show(menu_t *menu, bool theme, bool bgm, bool bg, bool viz_style, bool viz_intensity) {
-    if (!menu) return;
-
-    const char *title = menu->browser.directory ? file_basename(path_get(menu->browser.directory)) : "Playlist";
-    snprintf(playlist_toast.line1, sizeof(playlist_toast.line1), "%s", title ? title : "Playlist");
-
-    char *p = playlist_toast.line2;
-    size_t rem = sizeof(playlist_toast.line2);
-    p[0] = '\0';
-
-    if (theme) {
-        int n = snprintf(p, rem, "Theme:%s", ui_components_theme_name(ui_components_get_theme()));
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= (size_t)n; }
-    }
-    if (bgm) {
-        const char *bgm_name = menu->runtime_bgm_override_file ? file_basename(menu->runtime_bgm_override_file) : "BGM";
-        int n = snprintf(p, rem, "%sBGM:%s", p == playlist_toast.line2 ? "" : " | ", bgm_name ? bgm_name : "BGM");
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= (size_t)n; }
-    }
-    if (viz_style || viz_intensity) {
-        int n = snprintf(p, rem, "%sViz:%s/%s", p == playlist_toast.line2 ? "" : " | ",
-            viz_style_name_short(menu->settings.background_visualizer_style),
-            viz_intensity_name_short(menu->settings.background_visualizer_intensity));
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= (size_t)n; }
-    }
-    if (bg) {
-        snprintf(p, rem, "%sBG", p == playlist_toast.line2 ? "" : " | ");
-    }
-    if (playlist_toast.line2[0] == '\0') {
-        snprintf(playlist_toast.line2, sizeof(playlist_toast.line2), "Playlist profile loaded");
-    }
-
-    playlist_toast.frames_left = 150; // ~5s at 30fps
+void browser_playlist_perf_note_screensaver_logo_reload(uint32_t ms) {
+    playlist_perf.logo_reload_ms = ms;
+    debugf("Playlist perf: screensaver logo reload=%lums\n", (unsigned long)ms);
 }
 
 static void playlist_toast_draw(void) {
@@ -3314,12 +3361,16 @@ static void browser_apply_playlist_overrides_deferred(menu_t *menu) {
     }
 
     if (playlist_override.background_deferred && playlist_override.background_path) {
+        uint64_t start_us = get_ticks_us();
         if (ui_components_background_load_temporary_cached(playlist_override.background_path)) {
             playlist_override.background_applied = true;
             playlist_override.background_deferred = false;
+            playlist_perf.bg_cache_ms = elapsed_ms(start_us);
+            debugf("Playlist perf: background cache load=%lums path=%s\n", (unsigned long)playlist_perf.bg_cache_ms, playlist_override.background_path);
             return;
         }
         if (!png_decoder_is_busy()) {
+            start_us = get_ticks_us();
             png_err_t err = png_decoder_start(
                 playlist_override.background_path,
                 640,
@@ -3330,12 +3381,20 @@ static void browser_apply_playlist_overrides_deferred(menu_t *menu) {
             if (err == PNG_OK) {
                 playlist_override.background_loading = true;
                 playlist_override.background_deferred = false;
+                playlist_perf.bg_decode_queue_ms = elapsed_ms(start_us);
+                debugf("Playlist perf: background decode queued=%lums path=%s\n", (unsigned long)playlist_perf.bg_decode_queue_ms, playlist_override.background_path);
             }
         }
         return;
     }
 
     if (playlist_override.pending_screensaver_logo_path) {
+        if (menu->settings.screensaver_logo_file &&
+            strcmp(menu->settings.screensaver_logo_file, playlist_override.pending_screensaver_logo_path) == 0) {
+            free(playlist_override.pending_screensaver_logo_path);
+            playlist_override.pending_screensaver_logo_path = NULL;
+            return;
+        }
         if (menu->settings.screensaver_logo_file) {
             free(menu->settings.screensaver_logo_file);
         }
@@ -3350,6 +3409,12 @@ static void browser_apply_playlist_overrides_deferred(menu_t *menu) {
     }
 
     if (playlist_override.pending_bgm_path) {
+        if (menu->runtime_bgm_override_file &&
+            strcmp(menu->runtime_bgm_override_file, playlist_override.pending_bgm_path) == 0) {
+            free(playlist_override.pending_bgm_path);
+            playlist_override.pending_bgm_path = NULL;
+            return;
+        }
         free(menu->runtime_bgm_override_file);
         menu->runtime_bgm_override_file = strdup(playlist_override.pending_bgm_path);
         menu->bgm_reload_requested = true;
@@ -3360,6 +3425,15 @@ static void browser_apply_playlist_overrides_deferred(menu_t *menu) {
 }
 
 static bool load_playlist (menu_t *menu) {
+    uint64_t open_start_us = get_ticks_us();
+    uint64_t parse_start_us = 0;
+    uint64_t smart_start_us = 0;
+    uint32_t parse_ms = 0;
+    uint32_t smart_ms = 0;
+    uint32_t cache_save_ms = 0;
+    const char *cache_source = NULL;
+
+    playlist_perf_reset();
     browser_list_free(menu);
     int playlist_capacity = 0;
 
@@ -3389,7 +3463,8 @@ static bool load_playlist (menu_t *menu) {
             &playlist_text_panel_alpha,
             &playlist_screensaver_logo,
             &playlist_grid_view,
-            &playlist_description)) {
+            &playlist_description,
+            &cache_source)) {
         if (menu->browser.entries > 0) {
             menu->browser.selected = 0;
             menu->browser.entry = &menu->browser.list[menu->browser.selected];
@@ -3399,6 +3474,7 @@ static bool load_playlist (menu_t *menu) {
         browser_apply_sort(menu);
 
         playlist_recent_remember(path_get(menu->browser.directory));
+        playlist_perf_commit(menu, cache_source ? cache_source : "cache", elapsed_ms(open_start_us), 0, 0, 0, menu->browser.entries);
         browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
         free(menu->browser.playlist_description);
         menu->browser.playlist_description = playlist_description;
@@ -3420,6 +3496,7 @@ static bool load_playlist (menu_t *menu) {
     path_pop(playlist_dir);
     smart_playlist_query_t smart_query;
     smart_playlist_query_init(&smart_query);
+    parse_start_us = get_ticks_us();
 
     char line[1024];
     while (fgets(line, sizeof(line), f) != NULL) {
@@ -3479,8 +3556,10 @@ static bool load_playlist (menu_t *menu) {
 
         path_free(entry_path);
     }
+    parse_ms = elapsed_ms(parse_start_us);
 
     if (smart_query.enabled) {
+        smart_start_us = get_ticks_us();
         smart_playlist_entry_t *generated = NULL;
         int generated_count = 0;
         int generated_capacity = 0;
@@ -3551,6 +3630,7 @@ static bool load_playlist (menu_t *menu) {
         if (!playlist_description) {
             playlist_description = smart_playlist_build_description(&smart_query, generated_count);
         }
+        smart_ms = elapsed_ms(smart_start_us);
     }
 
     if (menu->browser.entries > 0) {
@@ -3563,6 +3643,7 @@ static bool load_playlist (menu_t *menu) {
     browser_apply_sort(menu);
 
     if (!smart_query.enabled) {
+        uint64_t cache_save_start_us = get_ticks_us();
         playlist_mem_cache_save(
             menu,
             path_get(menu->browser.directory),
@@ -3592,8 +3673,10 @@ static bool load_playlist (menu_t *menu) {
             playlist_description
         );
         playlist_recent_remember(path_get(menu->browser.directory));
+        cache_save_ms = elapsed_ms(cache_save_start_us);
     }
 
+    playlist_perf_commit(menu, smart_query.enabled ? "smart" : "parse", elapsed_ms(open_start_us), parse_ms, smart_ms, cache_save_ms, menu->browser.entries);
     browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
     free(menu->browser.playlist_description);
     menu->browser.playlist_description = playlist_description;
