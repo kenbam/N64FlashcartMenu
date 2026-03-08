@@ -213,7 +213,7 @@
  * @def BOXART_X_JP
  * @brief X coordinate for Japanese boxart image.
  */
-#define BOXART_X_JP                     (VISIBLE_AREA_X1 - BOXART_WIDTH_MAX + 21)
+#define BOXART_X_JP                     (VISIBLE_AREA_X1 - BOXART_WIDTH_MAX - 24)
 /**
  * @def BOXART_Y_JP
  * @brief Y coordinate for Japanese boxart image.

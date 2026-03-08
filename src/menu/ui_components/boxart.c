@@ -244,55 +244,6 @@ static surface_t *boxart_thumb_cache_load_disk_clone(const char *storage_prefix,
     return image;
 }
 
-static surface_t *boxart_thumb_cache_load_disk_clone_from_cache_path(const char *cache_path, const char *key_path) {
-    if (!cache_path) {
-        return NULL;
-    }
-
-    FILE *f = fopen(cache_path, "rb");
-    if (!f) {
-        return NULL;
-    }
-
-    boxart_cache_metadata_t meta = {0};
-    if (fread(&meta, sizeof(meta), 1, f) != 1) {
-        fclose(f);
-        return NULL;
-    }
-
-    bool invalid = (meta.magic != BOXART_CACHE_MAGIC)
-        || (meta.width == 0) || (meta.height == 0)
-        || (meta.width > BOXART_WIDTH_MAX) || (meta.height > BOXART_HEIGHT_MAX);
-    if (invalid) {
-        fclose(f);
-        return NULL;
-    }
-
-    surface_t *image = calloc(1, sizeof(surface_t));
-    if (!image) {
-        fclose(f);
-        return NULL;
-    }
-    *image = surface_alloc(FMT_RGBA16, meta.width, meta.height);
-    if (!image->buffer || meta.size != (uint32_t)(image->height * image->stride)) {
-        surface_free_owned(&image);
-        fclose(f);
-        return NULL;
-    }
-
-    if (fread(image->buffer, meta.size, 1, f) != 1) {
-        surface_free_owned(&image);
-        fclose(f);
-        return NULL;
-    }
-    fclose(f);
-
-    if (key_path) {
-        boxart_thumb_cache_put(key_path, image);
-    }
-    return image;
-}
-
 static void boxart_thumb_cache_save_disk(const char *cache_path, surface_t *image) {
     if (!cache_path || !image || !image->buffer) {
         return;
@@ -407,11 +358,8 @@ static void boxart_queue_pump(void) {
             break;
         }
 
-        // Try memory cache first.
+        // Try memory cache only (no SD I/O during draw).
         surface_t *cached = boxart_thumb_cache_get_clone(ctx->cache_key);
-        if (!cached) {
-            cached = boxart_thumb_cache_load_disk_clone_from_cache_path(ctx->cache_path, ctx->cache_key);
-        }
         if (cached) {
             boxart_complete_context_with_image(ctx, cached);
             continue;
@@ -605,7 +553,7 @@ static void png_decoder_callback(png_err_t err, surface_t *decoded_image, void *
  * @return Pointer to the initialized boxart component, or NULL on failure.
  */
 static component_boxart_t *ui_components_boxart_init_with_options(const char *storage_prefix, const char *game_code, const char *rom_title,
-                                                                  file_image_type_t current_image_view, bool prefer_grid_thumb, bool memory_cache_only) {
+                                                                  file_image_type_t current_image_view, bool prefer_grid_thumb, bool memory_cache_only, bool async_only) {
     boxart_queue_pump();
 
     component_boxart_t *b = calloc(1, sizeof(component_boxart_t));
@@ -632,11 +580,13 @@ static component_boxart_t *ui_components_boxart_init_with_options(const char *st
         return NULL;
     }
 
-    b->image = boxart_thumb_cache_load_disk_clone(storage_prefix, resolved_image_path);
-    if (b->image) {
-        b->loading = false;
-        free(resolved_image_path);
-        return b;
+    if (!async_only) {
+        b->image = boxart_thumb_cache_load_disk_clone(storage_prefix, resolved_image_path);
+        if (b->image) {
+            b->loading = false;
+            free(resolved_image_path);
+            return b;
+        }
     }
 
     boxart_load_context_t *ctx = calloc(1, sizeof(*ctx));
@@ -670,19 +620,23 @@ static component_boxart_t *ui_components_boxart_init_with_options(const char *st
 }
 
 component_boxart_t *ui_components_boxart_init(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, false);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, false, false);
+}
+
+component_boxart_t *ui_components_boxart_init_async(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, false, true);
 }
 
 component_boxart_t *ui_components_boxart_init_memory_cached(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, true);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, true, false);
 }
 
 component_boxart_t *ui_components_boxart_init_grid(const char *storage_prefix, const char *game_code, const char *rom_title) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, false);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, false, false);
 }
 
 component_boxart_t *ui_components_boxart_init_grid_memory_cached(const char *storage_prefix, const char *game_code, const char *rom_title) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, true);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, true, false);
 }
 
 /**
