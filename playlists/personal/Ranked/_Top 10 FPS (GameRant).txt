@@ -1,0 +1,11 @@
+Top 10 FPS (GameRant)
+
+A good N64 FPS list is really a history of developers trying to invent console shooting grammar in public. Before dual-analog controls became standard, the genre had to negotiate the N64 pad's single stick, C-buttons, auto-aim, and awkward but strangely expressive control setups. That limitation is exactly what makes the platform's shooters interesting. They were not just ports of a settled PC form; they were experiments in how first-person action could work on a living-room machine.
+
+GoldenEye is the hinge point. GamesRadar's 2018 retrospective flatly says it proved a story-driven FPS could work on consoles, and its developers describe moving from an on-rails concept toward full 3D free movement built around what was then the "amazing new invention" of the analog stick. After that, the field opens up. Turok pushes scale and verticality, Perfect Dark refines GoldenEye's ideas into something denser and faster, Quake II shows how alien a PC-born shooter could feel when adapted to Nintendo hardware, and the later shooters start feeling less like compromises and more like confident local dialects.
+
+That is the best way to read this playlist: not as proof that the N64 had the largest FPS library, but as proof that it had one of the most formative ones. Its shooters are full of imperfect solutions that became the foundation for later standards.
+
+Sources
+- Playlist source: https://gamerant.com/best-n64-fps-games/
+- GoldenEye retrospective: https://www.gamesradar.com/i-didnt-really-know-what-i-was-working-on-how-nine-people-at-rare-created-a-seminal-classic-with-goldeneye/

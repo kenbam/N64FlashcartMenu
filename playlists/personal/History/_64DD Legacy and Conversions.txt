@@ -1,0 +1,12 @@
+64DD Legacy and Conversions
+
+The 64DD is the great N64 what-if. Announced early, delayed for years, and finally released only in Japan in December 1999, it promised writable magnetic disks, network services through Randnet, a real-time clock, and a more expandable future for Nintendo's cartridge machine. Commercially it went nowhere. Historically, it is one of the most interesting dead ends in Nintendo hardware.
+
+That is why this playlist is built around lineage as much as software. SimCity 64 and Doshin the Giant show the add-on at its most curious, but Animal Forest may be the most important title here because it leads directly into Animal Crossing. F-Zero X Expansion Kit is another key artifact: it turns an already fast game into a modular one, with extra cups, vehicle editing, and a glimpse of the more iterative, expandable design Nintendo was flirting with.
+
+The broader story is that 64DD software makes the N64 library look stranger and more experimental than its western reputation suggests. Mario Artist, user-made content, network ideas, and late fan translations all point to a branch of Nintendo history that almost disappeared. This playlist is a reminder that the N64 did not only produce cartridge blockbusters; it also carried a weird, unfinished future on the side.
+
+Sources
+- 64DD overview: https://en.wikipedia.org/wiki/64DD
+- Randnet and 64DD retrospective: https://www.timeextension.com/features/flashback-the-nintendo-64dd-was-doomed-from-the-moment-it-was-revealed
+- 64DD software history: https://sourcegaming.info/2016/09/18/nintendos-missing-link-the-64dd/

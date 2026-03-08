@@ -37,6 +37,7 @@ The File Browser allows you to navigate and manage files on your N64 flashcart. 
 6. **Opening playlists**:
     - Press the `A` Button on an `.m3u` playlist to open it like a virtual folder.
     - Playlist files can mix explicit ROM paths with `#SC64_SMART_*` / `#SC64_FILTER_*` directives to auto-build a curated list from metadata.
+    - A sibling text file named like the playlist with an underscore prefix, for example `_My Playlist.txt` next to `My Playlist.m3u`, appears as the first text entry when the playlist is opened.
     - When a playlist sets appearance overrides, those changes apply only while that playlist is open.
 
 ### Tips

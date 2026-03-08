@@ -21,8 +21,6 @@ Supported directives:
 - `#SC64_BG=<path to png>` (alias)
 - `#SC64_BGM=<path to mp3|wav64>`
 - `#SC64_MUSIC=<path to mp3|wav64>` (alias)
-- `#SC64_DESC=<single line playlist description>`
-- `#SC64_DESC_FILE=<path to text file>` (loads first ~2KB and shows compact line in playlist view)
 - `#SC64_VIZ_STYLE=<Bars|Pulse Wash|Sunburst|Oscilloscope|id>`
 - `#SC64_VIZ_INTENSITY=<Subtle|Normal|Full|0..2>`
 - `#SC64_TEXT_PANEL=<On|Off>`
@@ -44,6 +42,7 @@ Supported directives:
 
 Notes:
 - Relative directive paths are resolved from the playlist folder.
+- A sibling text file named like the playlist with an underscore prefix, for example `_My Playlist.txt` next to `My Playlist.m3u`, appears as the first text entry when the playlist is opened.
 - Absolute flashcart paths such as `sd:/menu/music/...` are supported.
 - Overrides are runtime-only and are restored automatically when you leave the playlist.
 - A short playlist intro toast appears when overrides are applied, summarizing the active profile (theme/BGM/viz/background).
@@ -56,7 +55,6 @@ Example:
 #SC64_THEME=Retrowave
 #SC64_BACKGROUND=/menu/backgrounds/Countach.png
 #SC64_BGM=/menu/music/Need For Speed 4 High Stakes Soundtrack - Quantum Singularity (HD 1080p).wav64
-#SC64_DESC=High-speed classics and arcade chaos.
 #SC64_VIZ_STYLE=Oscilloscope
 #SC64_VIZ_INTENSITY=Subtle
 #SC64_TEXT_PANEL_ALPHA=160
@@ -66,7 +64,6 @@ Example:
 
 Smart playlist example:
 ```m3u
-#SC64_DESC=Ubisoft late-90s picks, auto-built from metadata.
 #SC64_SMART_ROOT=/N64 - USA
 #SC64_FILTER_PUBLISHER=Ubisoft
 #SC64_FILTER_YEAR=1998-2000
@@ -75,7 +72,6 @@ Smart playlist example:
 
 Another smart playlist example:
 ```m3u
-#SC64_DESC=Local multiplayer shelf built from metadata.
 #SC64_SMART_ROOT=/N64 - USA
 #SC64_FILTER_GENRE=Racing
 #SC64_FILTER_PLAYERS=>=2
@@ -116,7 +112,6 @@ short-desc=Arcade kart racer with battle arenas and four-player split-screen.
 ### Metadata and ROM Details Improvements
 - Metadata can be loaded from the menu metadata database.
 - ROM details include improved metadata display (description, publisher/rating coverage when available in metadata).
-- Full descriptions are supported, with `description.txt` fallback support.
 - Boxart fallback logic improves art coverage across regions / metadata entries.
 - ROM details also show save backend and save file health information.
 

@@ -1,0 +1,11 @@
+Graphics Showcase (GameRant Expansion Pak)
+
+This list is most useful if you read it as a tour of late N64 rendering tricks, not a simple ranking of "most powerful" games. The machine's best visuals rarely came from brute force. They came from developers who understood how to juggle memory limits, texture filtering, fog, animation, compression, and art direction well enough to make the hardware look larger than it really was.
+
+That is why the lineup feels so varied. Perfect Dark and Banjo-Tooie are dense with late-generation confidence. Rogue Squadron and World Driver Championship are technical flexes in different directions. Resident Evil 2 is here because its port is borderline absurd on cartridge. Turok 2, Conker, and Majora's Mask show how far atmosphere and style could carry the system when pure resolution was never going to win the battle.
+
+The Expansion Pak matters, but mostly as one tool in a larger bag of tricks. The real story is that N64 visuals were always about selective compromise. The best-looking games are the ones whose developers knew exactly where to spend scarce resources and where to fake the rest.
+
+Sources
+- Playlist source: https://gamerant.com/nintendo-64-best-games-expansion-pak/
+- Expansion Pak background: https://en.wikipedia.org/wiki/Expansion_Pak

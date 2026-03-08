@@ -1,0 +1,11 @@
+Expansion Pak Showcase
+
+The Expansion Pak was the N64's clearest late-generation fork. On paper it doubled system memory from 4MB to 8MB. In practice, it split the library into three groups: games that required it, games that used it for sharper visuals or extra content, and games that barely cared. That made it feel less like a normal accessory and more like a soft hardware revision.
+
+This playlist focuses on the titles where that extra memory changed the conversation. Donkey Kong 64 helped put the Pak in living rooms by shipping with it. Perfect Dark and Majora's Mask turned it into a prestige upgrade. Other games used the headroom in less famous but still revealing ways: bigger missions, cleaner framebuffers, more geometry, more animation data, or simply less compromise when developers were already stretching the machine.
+
+The interesting part is that the Pak was never a magic fix. Late N64 graphics were still about trade-offs: art direction, aggressive culling, clever compression, filtered textures, fog, and careful performance budgets. The best games here are not impressive because they are "high spec" by modern standards; they are impressive because they show how much extra ambition a small amount of memory could unlock on very fixed hardware.
+
+Sources
+- Expansion Pak history: https://en.wikipedia.org/wiki/Expansion_Pak
+- Late-gen showcase framing: https://gamerant.com/nintendo-64-best-games-expansion-pak/
