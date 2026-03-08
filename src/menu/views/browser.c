@@ -54,7 +54,9 @@ static const char *hidden_root_paths[] = {
 #define PLAYLIST_CACHE_MAGIC   (0x504C4331u)
 #define PLAYLIST_CACHE_VERSION (1u)
 #define PLAYLIST_CACHE_DIR     "menu/cache/playlists"
+#define PLAYLIST_RECENT_FILE   "menu/cache/playlists/recent.txt"
 #define PLAYLIST_MEM_CACHE_ENTRIES 6u
+#define PLAYLIST_RECENT_LIMIT  8u
 
 typedef struct {
     uint32_t magic;
@@ -91,6 +93,13 @@ typedef struct {
 
 static playlist_mem_cache_entry_t playlist_mem_cache[PLAYLIST_MEM_CACHE_ENTRIES];
 static uint32_t playlist_mem_cache_tick = 1;
+
+static char playlist_recent_file_path[512];
+static char playlist_recent_paths[PLAYLIST_RECENT_LIMIT][512];
+static int playlist_recent_count = 0;
+static int playlist_recent_prewarm_index = 0;
+static int playlist_recent_prewarm_cooldown = 0;
+static bool playlist_recent_loaded = false;
 
 static uint64_t fnv1a64_str(const char *s) {
     uint64_t h = 1469598103934665603ULL;
@@ -133,6 +142,9 @@ static bool string_ends_with_ignore_case(const char *value, const char *suffix) 
 static void browser_list_free(menu_t *menu);
 static bool playlist_append_rom_entry(menu_t *menu, const char *normalized_path, int *capacity);
 static bool browser_reserve_entry_capacity(menu_t *menu, int *capacity, int extra_entries);
+static char *trim_line(char *line);
+static bool playlist_cache_read_string(FILE *f, char **out);
+static char *playlist_cache_build_path(menu_t *menu, const char *playlist_path);
 
 static void playlist_mem_cache_entry_clear(playlist_mem_cache_entry_t *entry) {
     if (!entry) {
@@ -193,6 +205,70 @@ static playlist_mem_cache_entry_t *playlist_mem_cache_alloc(void) {
     slot->valid = true;
     slot->last_used_tick = ++playlist_mem_cache_tick;
     return slot;
+}
+
+static bool playlist_mem_cache_store(
+    const char *playlist_path,
+    uint64_t source_size,
+    int64_t source_mtime,
+    const char *playlist_theme,
+    const char *playlist_bgm,
+    const char *playlist_bg,
+    int playlist_viz_style,
+    int playlist_viz_intensity,
+    int playlist_text_panel_enabled,
+    int playlist_text_panel_alpha,
+    const char *playlist_screensaver_logo,
+    int playlist_grid_view,
+    const char *playlist_description,
+    const char * const *entry_paths,
+    int entry_count
+) {
+    if (!playlist_path || entry_count < 0) {
+        return false;
+    }
+
+    playlist_mem_cache_entry_t *entry = playlist_mem_cache_alloc();
+    if (!entry) {
+        return false;
+    }
+
+    entry->playlist_path = strdup(playlist_path);
+    entry->playlist_theme = playlist_theme ? strdup(playlist_theme) : NULL;
+    entry->playlist_bgm = playlist_bgm ? strdup(playlist_bgm) : NULL;
+    entry->playlist_bg = playlist_bg ? strdup(playlist_bg) : NULL;
+    entry->playlist_screensaver_logo = playlist_screensaver_logo ? strdup(playlist_screensaver_logo) : NULL;
+    entry->playlist_description = playlist_description ? strdup(playlist_description) : NULL;
+    entry->playlist_viz_style = playlist_viz_style;
+    entry->playlist_viz_intensity = playlist_viz_intensity;
+    entry->playlist_text_panel_enabled = playlist_text_panel_enabled;
+    entry->playlist_text_panel_alpha = playlist_text_panel_alpha;
+    entry->playlist_grid_view = playlist_grid_view;
+    entry->source_size = source_size;
+    entry->source_mtime = source_mtime;
+    entry->entry_count = entry_count;
+
+    if (!entry->playlist_path) {
+        playlist_mem_cache_entry_clear(entry);
+        return false;
+    }
+
+    if (entry_count > 0) {
+        entry->entry_paths = calloc((size_t)entry_count, sizeof(char *));
+        if (!entry->entry_paths) {
+            playlist_mem_cache_entry_clear(entry);
+            return false;
+        }
+        for (int i = 0; i < entry_count; i++) {
+            entry->entry_paths[i] = entry_paths[i] ? strdup(entry_paths[i]) : strdup("");
+            if (!entry->entry_paths[i]) {
+                playlist_mem_cache_entry_clear(entry);
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 static bool playlist_mem_cache_try_load(
@@ -278,40 +354,232 @@ static void playlist_mem_cache_save(
         return;
     }
 
-    playlist_mem_cache_entry_t *entry = playlist_mem_cache_alloc();
-    if (!entry) {
+    const char **entry_paths = calloc((size_t)menu->browser.entries, sizeof(char *));
+    if (!entry_paths && menu->browser.entries > 0) {
+        return;
+    }
+    for (int i = 0; i < menu->browser.entries; i++) {
+        entry_paths[i] = menu->browser.list[i].path ? menu->browser.list[i].path : "";
+    }
+
+    playlist_mem_cache_store(
+        playlist_path,
+        (uint64_t)source_stat.st_size,
+        (int64_t)source_stat.st_mtime,
+        playlist_theme,
+        playlist_bgm,
+        playlist_bg,
+        playlist_viz_style,
+        playlist_viz_intensity,
+        playlist_text_panel_enabled,
+        playlist_text_panel_alpha,
+        playlist_screensaver_logo,
+        playlist_grid_view,
+        playlist_description,
+        entry_paths,
+        menu->browser.entries
+    );
+
+    free(entry_paths);
+}
+
+static void playlist_recent_init(menu_t *menu) {
+    if (!menu || playlist_recent_loaded) {
         return;
     }
 
-    entry->playlist_path = strdup(playlist_path);
-    entry->playlist_theme = playlist_theme ? strdup(playlist_theme) : NULL;
-    entry->playlist_bgm = playlist_bgm ? strdup(playlist_bgm) : NULL;
-    entry->playlist_bg = playlist_bg ? strdup(playlist_bg) : NULL;
-    entry->playlist_screensaver_logo = playlist_screensaver_logo ? strdup(playlist_screensaver_logo) : NULL;
-    entry->playlist_description = playlist_description ? strdup(playlist_description) : NULL;
-    entry->playlist_viz_style = playlist_viz_style;
-    entry->playlist_viz_intensity = playlist_viz_intensity;
-    entry->playlist_text_panel_enabled = playlist_text_panel_enabled;
-    entry->playlist_text_panel_alpha = playlist_text_panel_alpha;
-    entry->playlist_grid_view = playlist_grid_view;
-    entry->source_size = (uint64_t)source_stat.st_size;
-    entry->source_mtime = (int64_t)source_stat.st_mtime;
-    entry->entry_count = menu->browser.entries;
+    playlist_recent_file_path[0] = '\0';
+    path_t *recent_path = path_init(menu->storage_prefix, PLAYLIST_RECENT_FILE);
+    if (!recent_path) {
+        return;
+    }
+    snprintf(playlist_recent_file_path, sizeof(playlist_recent_file_path), "%s", path_get(recent_path));
+    path_free(recent_path);
 
-    if (entry->entry_count > 0) {
-        entry->entry_paths = calloc((size_t)entry->entry_count, sizeof(char *));
-        if (!entry->entry_paths) {
-            playlist_mem_cache_entry_clear(entry);
-            return;
-        }
-        for (int i = 0; i < entry->entry_count; i++) {
-            entry->entry_paths[i] = menu->browser.list[i].path ? strdup(menu->browser.list[i].path) : strdup("");
-            if (!entry->entry_paths[i]) {
-                playlist_mem_cache_entry_clear(entry);
-                return;
+    playlist_recent_count = 0;
+    FILE *f = fopen(playlist_recent_file_path, "rb");
+    if (f) {
+        char line[512];
+        while (playlist_recent_count < (int)PLAYLIST_RECENT_LIMIT && fgets(line, sizeof(line), f) != NULL) {
+            char *trimmed = trim_line(line);
+            if (!trimmed || trimmed[0] == '\0') {
+                continue;
             }
+            snprintf(playlist_recent_paths[playlist_recent_count], sizeof(playlist_recent_paths[playlist_recent_count]), "%s", trimmed);
+            playlist_recent_count++;
+        }
+        fclose(f);
+    }
+
+    playlist_recent_prewarm_index = 0;
+    playlist_recent_prewarm_cooldown = 15;
+    playlist_recent_loaded = true;
+}
+
+static void playlist_recent_save(void) {
+    if (!playlist_recent_loaded || !playlist_recent_file_path[0]) {
+        return;
+    }
+
+    FILE *f = fopen(playlist_recent_file_path, "wb");
+    if (!f) {
+        return;
+    }
+    for (int i = 0; i < playlist_recent_count; i++) {
+        if (playlist_recent_paths[i][0] == '\0') {
+            continue;
+        }
+        fprintf(f, "%s\n", playlist_recent_paths[i]);
+    }
+    fclose(f);
+}
+
+static void playlist_recent_remember(const char *playlist_path) {
+    if (!playlist_recent_loaded || !playlist_path || !playlist_path[0]) {
+        return;
+    }
+
+    int found = -1;
+    for (int i = 0; i < playlist_recent_count; i++) {
+        if (strcmp(playlist_recent_paths[i], playlist_path) == 0) {
+            found = i;
+            break;
         }
     }
+
+    if (found == 0) {
+        return;
+    }
+
+    int limit = playlist_recent_count;
+    if (found < 0 && limit < (int)PLAYLIST_RECENT_LIMIT) {
+        limit++;
+    }
+
+    for (int i = (found > 0) ? found : limit - 1; i > 0; i--) {
+        snprintf(playlist_recent_paths[i], sizeof(playlist_recent_paths[i]), "%s", playlist_recent_paths[i - 1]);
+    }
+    snprintf(playlist_recent_paths[0], sizeof(playlist_recent_paths[0]), "%s", playlist_path);
+    playlist_recent_count = limit;
+
+    playlist_recent_save();
+    playlist_recent_prewarm_index = 0;
+    playlist_recent_prewarm_cooldown = 15;
+}
+
+static bool playlist_mem_cache_prewarm_from_disk(menu_t *menu, const char *playlist_path) {
+    if (!menu || !playlist_path || !playlist_path[0]) {
+        return false;
+    }
+
+    struct stat source_stat;
+    if (stat(playlist_path, &source_stat) != 0) {
+        return false;
+    }
+    if (playlist_mem_cache_find(playlist_path, (uint64_t)source_stat.st_size, (int64_t)source_stat.st_mtime)) {
+        return true;
+    }
+
+    char *cache_path = playlist_cache_build_path(menu, playlist_path);
+    if (!cache_path) {
+        return false;
+    }
+
+    FILE *f = fopen(cache_path, "rb");
+    free(cache_path);
+    if (!f) {
+        return false;
+    }
+
+    playlist_cache_header_t header = {0};
+    bool ok = (fread(&header, sizeof(header), 1, f) == 1);
+    ok = ok && (header.magic == PLAYLIST_CACHE_MAGIC);
+    ok = ok && (header.version == PLAYLIST_CACHE_VERSION);
+    ok = ok && (header.source_size == (uint64_t)source_stat.st_size);
+    ok = ok && (header.source_mtime == (int64_t)source_stat.st_mtime);
+    ok = ok && (header.entry_count < 65536u);
+    if (!ok) {
+        fclose(f);
+        return false;
+    }
+
+    char *playlist_theme = NULL;
+    char *playlist_bgm = NULL;
+    char *playlist_bg = NULL;
+    char *playlist_screensaver_logo = NULL;
+    char *playlist_description = NULL;
+    char **entry_paths = NULL;
+
+    ok = playlist_cache_read_string(f, &playlist_theme) &&
+         playlist_cache_read_string(f, &playlist_bgm) &&
+         playlist_cache_read_string(f, &playlist_bg) &&
+         playlist_cache_read_string(f, &playlist_screensaver_logo) &&
+         playlist_cache_read_string(f, &playlist_description);
+    if (ok && header.entry_count > 0) {
+        entry_paths = calloc((size_t)header.entry_count, sizeof(char *));
+        ok = (entry_paths != NULL);
+    }
+    for (uint32_t i = 0; ok && i < header.entry_count; i++) {
+        ok = playlist_cache_read_string(f, &entry_paths[i]) && entry_paths[i] != NULL;
+    }
+    fclose(f);
+
+    if (ok) {
+        const char * const *paths_const = (const char * const *)entry_paths;
+        ok = playlist_mem_cache_store(
+            playlist_path,
+            (uint64_t)source_stat.st_size,
+            (int64_t)source_stat.st_mtime,
+            playlist_theme,
+            playlist_bgm,
+            playlist_bg,
+            header.viz_style,
+            header.viz_intensity,
+            header.text_panel_enabled,
+            header.text_panel_alpha,
+            playlist_screensaver_logo,
+            header.grid_view_enabled,
+            playlist_description,
+            paths_const,
+            (int)header.entry_count
+        );
+    }
+
+    free(playlist_theme);
+    free(playlist_bgm);
+    free(playlist_bg);
+    free(playlist_screensaver_logo);
+    free(playlist_description);
+    if (entry_paths) {
+        for (uint32_t i = 0; i < header.entry_count; i++) {
+            free(entry_paths[i]);
+        }
+    }
+    free(entry_paths);
+    return ok;
+}
+
+static void playlist_recent_prewarm_tick(menu_t *menu) {
+    if (!menu || !playlist_recent_loaded || playlist_recent_count <= 0) {
+        return;
+    }
+    if (playlist_recent_prewarm_index >= playlist_recent_count) {
+        return;
+    }
+    if (png_decoder_is_busy()) {
+        return;
+    }
+    if (playlist_recent_prewarm_cooldown > 0) {
+        playlist_recent_prewarm_cooldown--;
+        return;
+    }
+
+    const char *path = playlist_recent_paths[playlist_recent_prewarm_index];
+    if (path && path[0] != '\0') {
+        playlist_mem_cache_prewarm_from_disk(menu, path);
+    }
+    playlist_recent_prewarm_index++;
+    playlist_recent_prewarm_cooldown = 15;
 }
 
 static char *playlist_read_description_file(const char *path) {
@@ -3130,6 +3398,7 @@ static bool load_playlist (menu_t *menu) {
         menu->browser.sort_mode = BROWSER_SORT_CUSTOM;
         browser_apply_sort(menu);
 
+        playlist_recent_remember(path_get(menu->browser.directory));
         browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
         free(menu->browser.playlist_description);
         menu->browser.playlist_description = playlist_description;
@@ -3322,6 +3591,7 @@ static bool load_playlist (menu_t *menu) {
             playlist_grid_view,
             playlist_description
         );
+        playlist_recent_remember(path_get(menu->browser.directory));
     }
 
     browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
@@ -4145,6 +4415,8 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_browser_init (menu_t *menu) {
+    playlist_recent_init(menu);
+
     if (!menu->browser.valid) {
         ui_components_context_menu_init(&entry_context_menu);
         ui_components_context_menu_init(&archive_context_menu);
@@ -4182,4 +4454,5 @@ void view_browser_display (menu_t *menu, surface_t *display) {
 
     draw(menu, display);
     browser_apply_playlist_overrides_deferred(menu);
+    playlist_recent_prewarm_tick(menu);
 }
