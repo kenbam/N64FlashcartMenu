@@ -342,6 +342,7 @@ typedef struct {
  * @return Pointer to the initialized box art component.
  */
 component_boxart_t *ui_components_boxart_init(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view);
+component_boxart_t *ui_components_boxart_init_async(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view);
 component_boxart_t *ui_components_boxart_init_memory_cached(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view);
 component_boxart_t *ui_components_boxart_init_grid(const char *storage_prefix, const char *game_code, const char *rom_title);
 component_boxart_t *ui_components_boxart_init_grid_memory_cached(const char *storage_prefix, const char *game_code, const char *rom_title);

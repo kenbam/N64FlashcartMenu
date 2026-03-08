@@ -588,8 +588,8 @@ static void iterate_metadata_image(menu_t *menu, int direction) {
     // Find next available image from our cached list
     while (new_metadata_image_index != start_metadata_image_index) {
         if (metadata_image_available[new_metadata_image_index]) {
-            // ui_components_boxart_init returns NULL if PNG decoder is busy
-            component_boxart_t *new_boxart = ui_components_boxart_init(
+            // Use async variant to avoid blocking SD I/O during carousel switch.
+            component_boxart_t *new_boxart = ui_components_boxart_init_async(
                 menu->storage_prefix,
                 menu->load.rom_info.game_code,
                 menu->load.rom_info.title,
@@ -1309,6 +1309,7 @@ void view_load_rom_init (menu_t *menu) {
     if (!menu->settings.rom_autoload_enabled) {
 #endif
         current_metadata_image_index = 0;
+        scan_metadata_images(menu);
         boxart = ui_components_boxart_init(menu->storage_prefix, menu->load.rom_info.game_code, menu->load.rom_info.title, IMAGE_BOXART_FRONT);
         boxart_retry_pending = (boxart == NULL);
         ui_components_context_menu_init(&options_context_menu);
