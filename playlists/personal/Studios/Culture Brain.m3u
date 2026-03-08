@@ -1,7 +1,7 @@
 #SC64_BG=/menu/backgrounds/consolemulticolor.png
 # Studio: Culture Brain
 # Auto-generated from metadata author/publisher
-../../N64 - USA/Flying Dragon (USA).n64
-../../N64 - JP/Hamster Monogatari 64 (Japan).z64
-../../N64 - JP/Pro Mahjong Tsuwamono 64 - Jansou Battle ni Chousen (Japan).z64
-../../N64 - JP/SD Hiryuu no Ken Densetsu (Japan).z64
+sd:/N64 - USA/Flying Dragon (USA).z64
+sd:/N64 - JP/Hamster Monogatari 64 (Japan).z64
+sd:/N64 - JP/Pro Mahjong Tsuwamono 64 - Jansou Battle ni Chousen (Japan).z64
+sd:/N64 - JP/SD Hiryuu no Ken Densetsu (Japan).z64

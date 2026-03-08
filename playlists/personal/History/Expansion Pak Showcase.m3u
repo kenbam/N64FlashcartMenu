@@ -2,14 +2,14 @@
 #SC64_DESC=Games known for Expansion Pak support/requirements and late-gen visual ambition.
 # Expansion Pak Showcase
 # Games known for Expansion Pak support/requirements and late-gen visual ambition.
-../../N64 - USA/Donkey Kong 64 (USA).z64
-../../N64 - USA/Perfect Dark (USA).n64
-../../N64 - USA/StarCraft 64 (U) [!].v64
-../../N64 - USA/Gauntlet Legends (USA).n64
-../../N64 - USA/Hybrid Heaven (USA).n64
-../../N64 - USA/Turok 2 - Seeds of Evil (U) [!].z64
-../../N64 - USA/Quake II (USA).n64
-../../N64 - USA/Rayman 2 - The Great Escape (USA) (En,Fr,De,Es,It).n64
-../../N64 - USA/Resident Evil 2 (U) [!].z64
-../../N64 - USA/Star Wars - Rogue Squadron (U) [!].z64
-../../N64 - USA/Excitebike 64 (U) [!].z64
+sd:/N64 - EU/Donkey Kong 64 (Europe) (En,Fr,De,Es).n64
+sd:/N64 - USA/Perfect Dark (USA) (Rev 1).z64
+sd:/N64 - USA/StarCraft 64 (USA).z64
+sd:/N64 - USA/Gauntlet Legends (USA).z64
+sd:/N64 - USA/Hybrid Heaven (USA).z64
+sd:/N64 - USA/Turok 2 - Seeds of Evil (USA) (Rev 1).z64
+sd:/N64 - EU/Quake II (Europe).n64
+sd:/N64 - USA/Rayman 2 - The Great Escape (USA) (En,Fr,De,Es,It).z64
+sd:/N64 - EU/Resident Evil 2 (Europe) (En,Fr).n64
+sd:/N64 - USA/Star Wars - Rogue Squadron (USA) (Rev 1).z64
+sd:/N64 - EU/Excitebike 64 (Europe).n64

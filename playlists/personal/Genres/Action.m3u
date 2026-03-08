@@ -2,34 +2,34 @@
 #SC64_BACKGROUND=/menu/backgrounds/explosion.png
 #SC64_BGM=/menu/music/Institute Menu - Perfect Dark [OST].wav64
 sd:/N64 - USA/007 - The World Is Not Enough (USA).z64
-sd:/N64 - USA/BattleTanx (USA).n64
-sd:/N64 - USA/BattleTanx - Global Assault (USA).n64
-sd:/N64 - USA/Body Harvest (USA).n64
-sd:/N64 - USA/Bomberman 64 - The Second Attack! (USA).n64
-sd:/N64 - USA/Bug's Life, A (USA).n64
-sd:/N64 - USA/Bust-A-Move 2 - Arcade Edition (USA).n64
+sd:/N64 - USA/BattleTanx (USA).z64
+sd:/N64 - USA/BattleTanx - Global Assault (USA).z64
+sd:/N64 - USA/Body Harvest (USA).z64
+sd:/N64 - USA/Bomberman 64 - The Second Attack! (USA).z64
+sd:/N64 - USA/Bug's Life, A (USA).z64
+sd:/N64 - USA/Bust-A-Move 2 - Arcade Edition (USA).z64
 sd:/N64 - Translations/Custom Robo (Japan) [T-En by Star Trinket v1.0].z64
-sd:/N64 - USA/Dark Rift (USA).n64
+sd:/N64 - EU/Dark Rift (Europe).n64
 sd:/N64 - Translations/Dezaemon 3D (J) [!]-patched.z64
-sd:/N64 - USA/Dual Heroes (USA).n64
-sd:/N64 - USA/Fighters Destiny (USA).n64
-sd:/N64 - USA/Frogger 2 (USA) (Rev A) (Proto).n64
+sd:/N64 - USA/Dual Heroes (USA).z64
+sd:/N64 - USA/Fighters Destiny (USA).z64
+# MISSING ON SD: sd:/N64 - USA/Frogger 2 (USA) (Rev A) (Proto).n64
 sd:/N64 - JP/Ganbare Goemon - Neo Momoyama Bakufu no Odori (Japan).z64
-sd:/N64 - USA/Hercules - The Legendary Journeys (USA).n64
+sd:/N64 - USA/Hercules - The Legendary Journeys (USA).z64
 sd:/N64 - USA/Indiana Jones and the Infernal Machine (USA).z64
-sd:/N64 - USA/Jet Force Gemini (USA).n64
-sd:/N64 - USA/Legend of Zelda, The - Ocarina of Time (USA).z64
+sd:/N64 - EU/Jet Force Gemini (Europe) (En,Fr,De,Es).n64
+sd:/N64 - USA/Legend of Zelda, The - Ocarina of Time (USA) (Rev 2).z64
 sd:/N64 - EU/Lylat Wars (Europe) (En,Fr,De).n64
-sd:/N64 - USA/Mission Impossible (USA).n64
-sd:/N64 - USA/Mystical Ninja Starring Goemon (USA).n64
+sd:/N64 - USA/Mission - Impossible (USA).z64
+sd:/N64 - EU/Mystical Ninja Starring Goemon (Europe).n64
 sd:/N64 - JP/Neon Genesis Evangelion (Japan).z64
-sd:/N64 - USA/Nightmare Creatures (USA).n64
-sd:/N64 - USA/O.D.T. (USA) (En,Fr,Es) (Proto).z64
-sd:/N64 - USA/Rampage 2 - Universal Tour (USA).n64
-sd:/N64 - USA/Rayman 2 - The Great Escape (USA) (En,Fr,De,Es,It).n64
-sd:/N64 - USA/Shadow Man (USA).n64
-sd:/N64 - USA/Spider-Man (U) [!].z64
-sd:/N64 - USA/Star Fox 64 (U) [!].z64
-sd:/N64 - USA/Superman (U) (M3) [!].z64
-sd:/N64 - USA/Tonic Trouble (U) (V1.1) [!].z64
+# MISSING ON SD: sd:/N64 - USA/Nightmare Creatures (USA).n64
+sd:/N64 - EU/O.D.T. (Europe) (En,Fr,De,Es,It) (Proto).n64
+sd:/N64 - USA/Rampage 2 - Universal Tour (USA).z64
+sd:/N64 - USA/Rayman 2 - The Great Escape (USA) (En,Fr,De,Es,It).z64
+sd:/N64 - USA/Shadow Man (USA).z64
+sd:/N64 - USA/Spider-Man (USA).z64
+sd:/N64 - USA/Star Fox 64 (USA) (Rev 1).z64
+sd:/N64 - USA/Superman - The New Superman Aventures (USA) (En,Fr,Es).z64
+sd:/N64 - USA/Tonic Trouble (USA) (Rev 1).z64
 sd:/N64 - JP/Zelda no Densetsu - Toki no Ocarina (Japan).z64

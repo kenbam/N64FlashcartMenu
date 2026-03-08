@@ -4,23 +4,23 @@
 #SC64_DESC=High-speed racing, intense shooters, and non-stop action.
 # Adrenaline Rush
 # Auto-generated static fun playlist
-../../N64 - USA/F-Zero X (USA).z64
-../../N64 - USA/Extreme-G (USA).n64
-../../N64 - EU/Extreme-G XG2 (Europe) (En,Fr,De,Es,It).n64
-../../N64 - USA/RR64 - Ridge Racer 64 (USA).n64
-../../N64 - USA/San Francisco Rush 2049 (USA).n64
-../../N64 - USA/Top Gear Rally 2 (U) [!].z64
-../../N64 - USA/Top Gear Overdrive (U) [!].z64
-../../N64 - USA/Wipeout 64 (U) [!].z64
-../../N64 - USA/V-Rally Edition 99 (U) [!].z64
-../../N64 - USA/Vigilante 8 (U) [!].z64
-../../N64 - USA/Vigilante 8 - 2nd Offense (U) [!].v64
-../../N64 - USA/Quake II (USA).n64
-../../N64 - USA/Quake 64 (USA).n64
-../../N64 - USA/Turok 2 - Seeds of Evil (U) [!].z64
-../../N64 - USA/Turok - Rage Wars (U) [!].z64
-../../N64 - USA/Hexen (USA).n64
-../../N64 - USA/Doom 64 (USA).z64
-../../N64 - USA/Star Soldier Vanishing Earth (U) [!].z64
-../../N64 - USA/Robotron 64 (USA).n64
-../../N64 - USA/Forsaken 64 (USA).n64
+sd:/N64 - USA/F-Zero X (USA).z64
+sd:/N64 - USA/Extreme-G (USA).z64
+sd:/N64 - EU/Extreme-G XG2 (Europe) (En,Fr,De,Es,It).n64
+sd:/N64 - USA/RR64 - Ridge Racer 64 (USA).z64
+sd:/N64 - USA/San Francisco Rush 2049 (USA).z64
+sd:/N64 - USA/Top Gear Rally (USA).z64
+sd:/N64 - USA/Top Gear Overdrive (USA).z64
+sd:/N64 - USA/Wipeout 64 (USA).z64
+sd:/N64 - USA/V-Rally Edition 99 (USA).z64
+# MISSING ON SD: ../../N64 - USA/Vigilante 8 (U) [!].z64
+# MISSING ON SD: ../../N64 - USA/Vigilante 8 - 2nd Offense (U) [!].v64
+sd:/N64 - EU/Quake II (Europe).n64
+sd:/N64 - EU/Quake 64 (Europe).n64
+sd:/N64 - USA/Turok 2 - Seeds of Evil (USA) (Rev 1).z64
+sd:/N64 - USA/Turok - Rage Wars (USA) (Rev 1).z64
+sd:/N64 - EU/Hexen (Europe).n64
+sd:/N64 - USA/Doom 64 (USA) (Rev 1).z64
+sd:/N64 - USA/Star Soldier - Vanishing Earth (USA).z64
+sd:/N64 - USA/Robotron 64 (USA).z64
+sd:/N64 - USA/Forsaken 64 (USA).z64

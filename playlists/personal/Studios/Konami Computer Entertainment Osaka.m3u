@@ -1,16 +1,16 @@
 #SC64_BG=/menu/backgrounds/consoleretrowave.png
 # Studio: Konami Computer Entertainment Osaka
 # Auto-generated from metadata author/publisher
-../../N64 - USA/Bottom of the 9th (USA).z64
-../../N64 - USA/Deadly Arts (USA).n64
-../../N64 - USA/Goemon's Great Adventure (USA).n64
-../../N64 - USA/Hybrid Heaven (USA).n64
-../../N64 - USA/International Superstar Soccer '98 (USA).n64
-../../N64 - USA/International Superstar Soccer 64 (USA).n64
-../../N64 - USA/International Track and Field 2000 (U) [!].v64
-../../N64 - USA/Mystical Ninja Starring Goemon (USA).n64
-../../N64 - USA/Nagano Winter Olympics '98 (USA).n64
-../../N64 - USA/NBA in the Zone '98 (USA).n64
-../../N64 - USA/NBA in the Zone '99 (USA).n64
-../../N64 - USA/NBA in the Zone 2000 (USA).n64
-../../N64 - USA/NHL Blades of Steel '99 (USA).n64
+# MISSING ON SD: ../../N64 - USA/Bottom of the 9th (USA).z64
+sd:/N64 - USA/Deadly Arts (USA).z64
+sd:/N64 - USA/Goemon's Great Adventure (USA).z64
+sd:/N64 - USA/Hybrid Heaven (USA).z64
+sd:/N64 - USA/International Superstar Soccer '98 (USA).z64
+sd:/N64 - USA/International Superstar Soccer 64 (USA).z64
+sd:/N64 - USA/International Track & Field 2000 (USA).z64
+sd:/N64 - EU/Mystical Ninja Starring Goemon (Europe).n64
+sd:/N64 - USA/Nagano Winter Olympics '98 (USA).z64
+sd:/N64 - USA/NBA in the Zone '98 (USA).z64
+sd:/N64 - USA/NBA in the Zone '99 (USA).z64
+sd:/N64 - USA/NBA in the Zone 2000 (USA).z64
+sd:/N64 - USA/NHL Blades of Steel '99 (USA).z64

@@ -1,11 +1,11 @@
 #SC64_BG=/menu/backgrounds/forest-ruins-menu.png
 # Studio: Eurocom Entertainment Software
 # Auto-generated from metadata author/publisher
-../../N64 - USA/Cruis'n World (USA).n64
-../../N64 - USA/Duke Nukem - Zero Hour (USA).n64
-../../N64 - USA/Duke Nukem 64 (USA).n64
-../../N64 - USA/Hydro Thunder (USA).n64
-../../N64 - USA/Mortal Kombat 4 (USA).z64
-../../N64 - USA/NBA Showtime - NBA on NBC (USA).n64
-../../N64 - USA/War Gods (U) [!].z64
-../../N64 - USA/World is Not Enough, The (U) [!].z64
+sd:/N64 - USA/Cruis'n World (USA).z64
+sd:/N64 - USA/Duke Nukem - Zero Hour (USA).z64
+sd:/N64 - EU/Duke Nukem 64 (Europe).n64
+sd:/N64 - USA/Hydro Thunder (USA).z64
+sd:/N64 - USA/Mortal Kombat 4 (USA).z64
+sd:/N64 - USA/NBA Showtime - NBA on NBC (USA).z64
+sd:/N64 - USA/War Gods (USA).z64
+sd:/N64 - USA/007 - The World Is Not Enough (USA).z64

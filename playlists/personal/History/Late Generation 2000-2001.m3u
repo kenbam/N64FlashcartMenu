@@ -2,12 +2,12 @@
 #SC64_DESC=End-of-life era releases showing the platform at full maturity.
 # Late Generation 2000-2001
 # End-of-life era releases showing the platform at full maturity.
-../../N64 - USA/Paper Mario (USA).n64
-../../N64 - USA/WWF No Mercy (USA) (Rev 1).z64
-../../N64 - USA/Pokemon Stadium 2 (USA).n64
-../../N64 - USA/Sin and Punishment - Successor of the Earth (U) [!].z64
-../../N64 - USA/RR64 - Ridge Racer 64 (USA).n64
-../../N64 - USA/StarCraft 64 (U) [!].v64
-../../N64 - USA/Donald Duck - Goin' Quackers (USA) (En,Fr,De,Es,It).n64
-../../N64 - USA/Dr. Mario 64 (USA).n64
-../../N64 - USA/Gauntlet Legends (USA).n64
+sd:/N64 - USA/Paper Mario (USA).z64
+sd:/N64 - USA/WWF No Mercy (USA) (Rev 1).z64
+sd:/N64 - EU/Pokemon Stadium 2 (Europe).n64
+# MISSING ON SD: ../../N64 - USA/Sin and Punishment - Successor of the Earth (U) [!].z64
+sd:/N64 - USA/RR64 - Ridge Racer 64 (USA).z64
+sd:/N64 - USA/StarCraft 64 (USA).z64
+sd:/N64 - EU/Donald Duck - Quack Attack (Europe) (En,Fr,De,Es,It).n64
+sd:/N64 - USA/Dr. Mario 64 (USA).z64
+sd:/N64 - USA/Gauntlet Legends (USA).z64

@@ -3,8 +3,8 @@
 #SC64_VIEW=LIST
 #SC64_TEXT_PANEL=ON
 #SC64_TEXT_PANEL_ALPHA=150
-sd:/N64 - USA/Mario Kart 64 (USA).n64
-sd:/N64 - USA/THIS FILE SHOULD NOT EXIST.z64
+sd:/N64 - USA/Mario Kart 64 (USA).z64
+# MISSING ON SD: sd:/N64 - USA/THIS FILE SHOULD NOT EXIST.z64
 sd:/N64 - USA/F-Zero X (USA).z64
-sd:/N64 - EU/also_missing_file.n64
-sd:/N64 - USA/Wave Race 64 (U) (V1.1) [!].z64
+# MISSING ON SD: sd:/N64 - EU/also_missing_file.n64
+sd:/N64 - USA/Wave Race 64 - Kawasaki Jet Ski (USA) (Rev 1).z64

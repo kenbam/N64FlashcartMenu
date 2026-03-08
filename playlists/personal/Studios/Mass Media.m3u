@@ -1,8 +1,8 @@
 #SC64_BG=/menu/backgrounds/scifi-dark.png
 # Studio: Mass Media
 # Auto-generated from metadata author/publisher
-../../N64 - USA/Bassmasters 2000 (USA).n64
-../../N64 - USA/Ms. Pac-Man - Maze Madness (USA).z64
-../../N64 - USA/Namco Museum 64 (USA).n64
-../../N64 - USA/Power Rangers - Lightspeed Rescue (USA).n64
-../../N64 - USA/StarCraft 64 (U) [!].v64
+sd:/N64 - USA/Bassmasters 2000 (USA).z64
+sd:/N64 - USA/Ms. Pac-Man - Maze Madness (USA).z64
+sd:/N64 - USA/Namco Museum 64 (USA).z64
+sd:/N64 - EU/Power Rangers - Lightspeed Rescue (Europe).n64
+sd:/N64 - USA/StarCraft 64 (USA).z64

@@ -1,9 +1,9 @@
 #SC64_BG=/menu/backgrounds/Phillips.png
 # Studio: Activision
 # Auto-generated from metadata author/publisher
-../../N64 - EU/Bug's Life, A (Europe).n64
-../../N64 - USA/Disney's Tarzan (U) [!].z64
-../../N64 - EU/Magical Tetris Challenge (Europe).n64
-../../N64 - JP/Magical Tetris Challenge featuring Mickey (Japan).z64
-../../N64 - EU/Quake II (Europe).n64
-../../N64 - USA/Toy Story 2 (U) [!].z64
+sd:/N64 - EU/Bug's Life, A (Europe).n64
+sd:/N64 - USA/Tarzan (USA).z64
+sd:/N64 - EU/Magical Tetris Challenge (Europe).n64
+sd:/N64 - JP/Magical Tetris Challenge featuring Mickey (Japan).z64
+sd:/N64 - EU/Quake II (Europe).n64
+sd:/N64 - USA/Toy Story 2 - Buzz Lightyear to the Rescue! (USA) (Rev 1).z64

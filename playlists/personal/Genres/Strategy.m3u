@@ -1,11 +1,11 @@
 #SC64_THEME=Amber Terminal
 #SC64_BGM=/menu/music/Command & Conquer Intro Menu (Remastered).wav64
-sd:/N64 - USA/Battlezone - Rise of the Black Dogs (USA).n64
-sd:/N64 - USA/Bust-A-Move '99 (USA).n64
+# MISSING ON SD: sd:/N64 - USA/Battlezone - Rise of the Black Dogs (USA).n64
+sd:/N64 - USA/Bust-A-Move '99 (USA).z64
 sd:/N64 - EU/Bust-A-Move 3 DX (Europe).n64
 sd:/N64 - USA/Charlie Blast's Territory (USA).z64
-sd:/N64 - USA/Command & Conquer (USA).n64
-sd:/N64 - USA/Ogre Battle 64 - Person of Lordly Caliber (USA).n64
+sd:/N64 - USA/Command & Conquer (USA).z64
+sd:/N64 - USA/Ogre Battle 64 - Person of Lordly Caliber (USA) (Rev 1).z64
 sd:/N64 - JP/Puzzle Bobble 64 (J) [!].v64
-sd:/N64 - USA/StarCraft 64 (U) [!].v64
+sd:/N64 - USA/StarCraft 64 (USA).z64
 sd:/N64 - JP/Super Robot Taisen 64 (Japan).z64

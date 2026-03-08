@@ -4,22 +4,22 @@
 #SC64_DESC=Tough games that test reflexes, precision, and patience.
 # Skill Check
 # Auto-generated static fun playlist
-../../N64 - USA/F-Zero X (USA).z64
-../../N64 - USA/Sin and Punishment - Successor of the Earth (U) [!].z64
-../../N64 - USA/Star Soldier Vanishing Earth (U) [!].z64
-../../N64 - EU/Extreme-G XG2 (Europe) (En,Fr,De,Es,It).n64
-../../N64 - USA/Wave Race 64 (U) (V1.1) [!].z64
-../../N64 - JP/1080 Snowboarding (JU) [!].z64
-../../N64 - USA/Diddy Kong Racing (USA) (En,Fr).z64
-../../N64 - USA/Turok - Rage Wars (U) [!].z64
-../../N64 - USA/Quake II (USA).n64
-../../N64 - USA/Hexen (USA).n64
-../../N64 - USA/Doom 64 (USA).z64
-../../N64 - USA/Top Gear Rally 2 (U) [!].z64
-../../N64 - USA/Robotron 64 (USA).n64
-../../N64 - USA/WCW vs. nWo - World Tour (U) (V1.1) [!].z64
-../../N64 - USA/WWF No Mercy (USA) (Rev 1).z64
-../../N64 - USA/Tony Hawk's Pro Skater 2 (U) [!].z64
-../../N64 - USA/Pokemon Puzzle League (USA).n64
-../../N64 - USA/Tetrisphere (U) [!].z64
-../../N64 - USA/Fighters Destiny (USA).n64
+sd:/N64 - USA/F-Zero X (USA).z64
+# MISSING ON SD: ../../N64 - USA/Sin and Punishment - Successor of the Earth (U) [!].z64
+sd:/N64 - USA/Star Soldier - Vanishing Earth (USA).z64
+sd:/N64 - EU/Extreme-G XG2 (Europe) (En,Fr,De,Es,It).n64
+sd:/N64 - USA/Wave Race 64 - Kawasaki Jet Ski (USA) (Rev 1).z64
+sd:/N64 - JP/1080 Snowboarding (JU) [!].z64
+sd:/N64 - USA/Diddy Kong Racing (USA) (En,Fr) (Rev 1).z64
+sd:/N64 - USA/Turok - Rage Wars (USA) (Rev 1).z64
+sd:/N64 - EU/Quake II (Europe).n64
+sd:/N64 - EU/Hexen (Europe).n64
+sd:/N64 - USA/Doom 64 (USA) (Rev 1).z64
+sd:/N64 - USA/Top Gear Rally (USA).z64
+sd:/N64 - USA/Robotron 64 (USA).z64
+sd:/N64 - USA/WCW vs. nWo - World Tour (USA) (Rev 1).z64
+sd:/N64 - USA/WWF No Mercy (USA) (Rev 1).z64
+sd:/N64 - USA/Tony Hawk's Pro Skater 2 (USA).z64
+sd:/N64 - USA/Pokemon Puzzle League (USA).z64
+sd:/N64 - USA/Tetrisphere (USA).z64
+sd:/N64 - USA/Fighters Destiny (USA).z64

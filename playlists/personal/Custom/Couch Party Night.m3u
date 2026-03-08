@@ -1,15 +1,15 @@
 #SC64_BG=/menu/backgrounds/beat.png
-sd:/N64 - USA/Mario Party (USA).n64
-sd:/N64 - USA/Mario Party 2 (USA).z64
-sd:/N64 - USA/Mario Party 3 (USA).n64
-sd:/N64 - USA/Mario Tennis (USA).z64
+sd:/N64 - USA/Mario Party (USA).z64
+sd:/N64 - USA/Mario Party 2 (Europe) (En,Fr,De,Es,It).z64
+sd:/N64 - USA/Mario Party 3 (USA).z64
+sd:/N64 - EU/Mario Tennis (Europe).n64
 sd:/N64 - USA/Mario Golf (USA).z64
-sd:/N64 - USA/Diddy Kong Racing (USA) (En,Fr).z64
-sd:/N64 - USA/Pokemon Stadium (USA).n64
-sd:/N64 - USA/Pokemon Stadium 2 (USA).n64
-sd:/N64 - USA/NFL Blitz (USA).n64
-sd:/N64 - USA/NFL Blitz 2000 (USA).n64
-sd:/N64 - USA/NBA Hangtime (USA).n64
-sd:/N64 - USA/Killer Instinct Gold (USA).z64
-sd:/N64 - USA/Dr. Mario 64 (USA).n64
-sd:/N64 - USA/Pokemon Puzzle League (USA).n64
+sd:/N64 - USA/Diddy Kong Racing (USA) (En,Fr) (Rev 1).z64
+sd:/N64 - USA/Pokemon Stadium (USA) (Rev 2).z64
+sd:/N64 - EU/Pokemon Stadium 2 (Europe).n64
+sd:/N64 - USA/NFL Blitz (USA).z64
+sd:/N64 - USA/NFL Blitz 2000 (USA) (Rev 1).z64
+sd:/N64 - EU/NBA Hangtime (Europe).n64
+sd:/N64 - EU/Killer Instinct Gold (Europe).n64
+sd:/N64 - USA/Dr. Mario 64 (USA).z64
+sd:/N64 - USA/Pokemon Puzzle League (USA).z64

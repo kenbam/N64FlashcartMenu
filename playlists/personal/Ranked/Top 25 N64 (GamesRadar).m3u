@@ -1,28 +1,28 @@
 #SC64_BG=/menu/backgrounds/Countach.png
 # SOURCE: https://www.gamesradar.com/best-n64-games-all-time/
 #
-sd:/N64 - USA/Legend of Zelda, The - Ocarina of Time (USA).z64
-sd:/N64 - USA/Super Mario 64 (U) [!].v64
+sd:/N64 - USA/Legend of Zelda, The - Ocarina of Time (USA) (Rev 2).z64
+sd:/N64 - USA/Super Mario 64 (USA).z64
 sd:/N64 - USA/GoldenEye 007 (USA).z64
-sd:/N64 - USA/Banjo-Kazooie (USA).n64
-sd:/N64 - USA/Perfect Dark (USA).n64
-sd:/N64 - USA/Paper Mario (USA).n64
+sd:/N64 - USA/Banjo-Kazooie (USA) (Rev 1).z64
+sd:/N64 - USA/Perfect Dark (USA) (Rev 1).z64
+sd:/N64 - USA/Paper Mario (USA).z64
 sd:/N64 - USA/F-Zero X (USA).z64
-sd:/N64 - USA/Star Fox 64 (U) [!].z64
-sd:/N64 - USA/Super Smash Bros. (U) [!].z64
-sd:/N64 - USA/Banjo-Tooie (USA).n64
-sd:/N64 - USA/Diddy Kong Racing (USA) (En,Fr).z64
-sd:/N64 - USA/Mario Kart 64 (USA).n64
+sd:/N64 - USA/Star Fox 64 (USA) (Rev 1).z64
+sd:/N64 - USA/Super Smash Bros. (USA).z64
+sd:/N64 - USA/Banjo-Tooie (USA).z64
+sd:/N64 - USA/Diddy Kong Racing (USA) (En,Fr) (Rev 1).z64
+sd:/N64 - USA/Mario Kart 64 (USA).z64
 sd:/N64 - USA/Conker's Bad Fur Day (USA).z64
-sd:/N64 - USA/Mario Tennis (USA).z64
-sd:/N64 - USA/Jet Force Gemini (USA).n64
-sd:/N64 - USA/Pilotwings 64 (USA).n64
+sd:/N64 - EU/Mario Tennis (Europe).n64
+sd:/N64 - EU/Jet Force Gemini (Europe) (En,Fr,De,Es).n64
+sd:/N64 - EU/Pilotwings 64 (Europe) (En,Fr,De).n64
 sd:/N64 - USA/Mario Golf (USA).z64
-sd:/N64 - USA/Donkey Kong 64 (USA).z64
+sd:/N64 - EU/Donkey Kong 64 (Europe) (En,Fr,De,Es).n64
 sd:/N64 - EU/Legend of Zelda, The - Majora's Mask (Europe) (En,Fr,De,Es) (Rev A).n64
-sd:/N64 - USA/Blast Corps (USA).n64
+sd:/N64 - USA/Blast Corps (USA) (Rev 1).z64
 sd:/N64 - USA/Bomberman Hero (USA).z64
-sd:/N64 - USA/Kirby 64 - The Crystal Shards (USA).n64
-sd:/N64 - USA/Doom 64 (USA).z64
-sd:/N64 - USA/Ogre Battle 64 - Person of Lordly Caliber (USA).n64
-sd:/N64 - USA/Wave Race 64 (U) (V1.1) [!].z64
+sd:/N64 - USA/Kirby 64 - The Crystal Shards (USA).z64
+sd:/N64 - USA/Doom 64 (USA) (Rev 1).z64
+sd:/N64 - USA/Ogre Battle 64 - Person of Lordly Caliber (USA) (Rev 1).z64
+sd:/N64 - USA/Wave Race 64 - Kawasaki Jet Ski (USA) (Rev 1).z64

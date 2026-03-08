@@ -4,22 +4,22 @@
 #SC64_DESC=The classics everyone remembers. Pure N64 nostalgia.
 # Nostalgia Cannon
 # Auto-generated static fun playlist
-../../N64 - USA/Super Mario 64 (U) [!].v64
-../../N64 - USA/Mario Kart 64 (USA).n64
-../../N64 - USA/GoldenEye 007 (USA).z64
-../../N64 - USA/Legend of Zelda, The - Ocarina of Time (USA).z64
-../../N64 - EU/Legend of Zelda, The - Majora's Mask (Europe) (En,Fr,De,Es) (Rev A).n64
-../../N64 - USA/Star Fox 64 (U) [!].z64
-../../N64 - USA/Pokemon Stadium (USA).n64
-../../N64 - USA/Pokemon Stadium 2 (USA).n64
-../../N64 - USA/Super Smash Bros. (U) [!].z64
-../../N64 - USA/Banjo-Kazooie (USA).n64
-../../N64 - USA/Donkey Kong 64 (USA).z64
-../../N64 - USA/Diddy Kong Racing (USA) (En,Fr).z64
-../../N64 - USA/Paper Mario (USA).n64
-../../N64 - USA/Perfect Dark (USA).n64
-../../N64 - USA/Wave Race 64 (U) (V1.1) [!].z64
-../../N64 - JP/1080 Snowboarding (JU) [!].z64
-../../N64 - USA/Mario Party 2 (USA).z64
-../../N64 - USA/Mario Tennis (USA).z64
-../../N64 - USA/Mario Golf (USA).z64
+sd:/N64 - USA/Super Mario 64 (USA).z64
+sd:/N64 - USA/Mario Kart 64 (USA).z64
+sd:/N64 - USA/GoldenEye 007 (USA).z64
+sd:/N64 - USA/Legend of Zelda, The - Ocarina of Time (USA) (Rev 2).z64
+sd:/N64 - EU/Legend of Zelda, The - Majora's Mask (Europe) (En,Fr,De,Es) (Rev A).n64
+sd:/N64 - USA/Star Fox 64 (USA) (Rev 1).z64
+sd:/N64 - USA/Pokemon Stadium (USA) (Rev 2).z64
+sd:/N64 - EU/Pokemon Stadium 2 (Europe).n64
+sd:/N64 - USA/Super Smash Bros. (USA).z64
+sd:/N64 - USA/Banjo-Kazooie (USA) (Rev 1).z64
+sd:/N64 - EU/Donkey Kong 64 (Europe) (En,Fr,De,Es).n64
+sd:/N64 - USA/Diddy Kong Racing (USA) (En,Fr) (Rev 1).z64
+sd:/N64 - USA/Paper Mario (USA).z64
+sd:/N64 - USA/Perfect Dark (USA) (Rev 1).z64
+sd:/N64 - USA/Wave Race 64 - Kawasaki Jet Ski (USA) (Rev 1).z64
+sd:/N64 - JP/1080 Snowboarding (JU) [!].z64
+sd:/N64 - USA/Mario Party 2 (Europe) (En,Fr,De,Es,It).z64
+sd:/N64 - EU/Mario Tennis (Europe).n64
+sd:/N64 - USA/Mario Golf (USA).z64

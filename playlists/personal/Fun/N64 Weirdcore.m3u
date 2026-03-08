@@ -4,19 +4,19 @@
 #SC64_DESC=The strangest, most bizarre games on the platform.
 # N64 Weirdcore
 # Auto-generated static fun playlist
-../../N64 - USA/Hey You, Pikachu! (USA).n64
-../../N64 - JP/Mario no Photopie (J) [!].v64
-../../N64 - Translations/Dezaemon 3D (J) [!]-patched.z64
-../../N64 - Translations/Doshin the Giant 1 (Japan) (64DD) [Hack by Zoinkity v1.1] [T-En by Ozidual v2018-06] [i] [n].z64
-../../N64 - JP/Tamagotchi 64 (J) (!).v64
-../../N64 - JP/Robot Ponkottsu 64 - Caramel of the 7 Seas (J) [!].v64
-../../N64 - Translations/Wonder Project J2 - Koruro no Mori no Jozet (Japan) [T-En by Ryu v1.0].z64
-../../N64 - JP/Neon Genesis Evangelion (Japan).z64
-../../N64 - EU/Rakuga Kids (Europe).n64
-../../N64 - Translations/Animal Forest (Japan) [T-En by Zoinkity v021210] [i] [n].z64
-../../N64 - USA/Mischief Makers (USA).n64
-../../N64 - Translations/Puyo Puyo Sun 64 (Japan) [T-En by Zoinkity v1.1].z64
-../../N64 - JP/Tetris 64 (J) [!].v64
-../../N64 - USA/Penny Racers (USA).n64
-../../N64 - Translations/Last Legion UX (Japan) [T-En by Zoinkity v1.0].z64
-../../N64 - USA/Bomberman 64 - The Second Attack! (USA).n64
+# MISSING ON SD: ../../N64 - USA/Hey You, Pikachu! (USA).n64
+sd:/N64 - JP/Mario no Photopie (J) [!].v64
+sd:/N64 - Translations/Dezaemon 3D (J) [!]-patched.z64
+sd:/N64 - Translations/Doshin the Giant 1 (Japan) (64DD) [Hack by Zoinkity v1.1] [T-En by Ozidual v2018-06] [i] [n].z64
+sd:/N64 - JP/Tamagotchi 64 (J) (!).v64
+sd:/N64 - JP/Robot Ponkottsu 64 - Caramel of the 7 Seas (J) [!].v64
+sd:/N64 - Translations/Wonder Project J2 - Koruro no Mori no Jozet (Japan) [T-En by Ryu v1.0].z64
+sd:/N64 - JP/Neon Genesis Evangelion (Japan).z64
+sd:/N64 - EU/Rakuga Kids (Europe).n64
+sd:/N64 - Translations/Animal Forest (Japan) [T-En by Zoinkity v021210] [i] [n].z64
+sd:/N64 - USA/Mischief Makers (USA) (Rev 1).z64
+sd:/N64 - Translations/Puyo Puyo Sun 64 (Japan) [T-En by Zoinkity v1.1].z64
+sd:/N64 - JP/Tetris 64 (J) [!].v64
+sd:/N64 - USA/Penny Racers (USA).z64
+sd:/N64 - Translations/Last Legion UX (Japan) [T-En by Zoinkity v1.0].z64
+sd:/N64 - USA/Bomberman 64 - The Second Attack! (USA).z64

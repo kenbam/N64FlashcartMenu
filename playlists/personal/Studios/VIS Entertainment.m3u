@@ -1,6 +1,6 @@
 #SC64_BG=/menu/backgrounds/forest-ruins-menu.png
 # Studio: VIS Entertainment
 # Auto-generated from metadata author/publisher
-../../N64 - USA/Earthworm Jim 3D (USA).z64
-../../N64 - USA/Powerpuff Girls, The - Chemical X-Traction (USA).n64
-../../N64 - USA/Tom and Jerry in Fists of Furry (U) [!].z64
+sd:/N64 - USA/Earthworm Jim 3D (USA).z64
+# MISSING ON SD: ../../N64 - USA/Powerpuff Girls, The - Chemical X-Traction (USA).n64
+sd:/N64 - USA/Tom and Jerry in Fists of Furry (USA).z64

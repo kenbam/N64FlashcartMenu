@@ -2,32 +2,32 @@
 #SC64_BACKGROUND=/menu/backgrounds/scifi-dark.png
 #SC64_BGM=/menu/music/Goldeneye 64 - Watch [Pause Music] - UNCOMPRESSED (Remake 777PROJEKT).wav64
 sd:/N64 - USA/Armorines - Project S.W.A.R.M. (USA).z64
-sd:/N64 - USA/Army Men - Air Combat (USA).n64
-sd:/N64 - USA/Army Men - Sarge's Heroes (USA).n64
+sd:/N64 - USA/Army Men - Air Combat (USA).z64
+sd:/N64 - USA/Army Men - Sarge's Heroes (USA).z64
 sd:/N64 - USA/Army Men - Sarge's Heroes 2 (USA).z64
-sd:/N64 - USA/Buck Bumble (USA).n64
-sd:/N64 - USA/Chopper Attack (USA).n64
-sd:/N64 - USA/Doom 64 (USA).z64
-sd:/N64 - USA/Duke Nukem - Zero Hour (USA).n64
-sd:/N64 - USA/Duke Nukem 64 (USA).n64
-sd:/N64 - USA/Forsaken 64 (USA).n64
+sd:/N64 - USA/Buck Bumble (USA).z64
+sd:/N64 - USA/Chopper Attack (USA).z64
+sd:/N64 - USA/Doom 64 (USA) (Rev 1).z64
+sd:/N64 - USA/Duke Nukem - Zero Hour (USA).z64
+sd:/N64 - EU/Duke Nukem 64 (Europe).n64
+sd:/N64 - USA/Forsaken 64 (USA).z64
 sd:/N64 - USA/GoldenEye 007 (USA).z64
-sd:/N64 - USA/Hexen (USA).n64
-sd:/N64 - USA/John Romero's Daikatana (USA).n64
-sd:/N64 - USA/Nuclear Strike 64 (USA).n64
-sd:/N64 - USA/Perfect Dark (USA).n64
-sd:/N64 - USA/Quake 64 (USA).n64
-sd:/N64 - USA/Quake II (USA).n64
+sd:/N64 - EU/Hexen (Europe).n64
+sd:/N64 - USA/John Romero's Daikatana (USA).z64
+sd:/N64 - USA/Nuclear Strike 64 (USA).z64
+sd:/N64 - USA/Perfect Dark (USA) (Rev 1).z64
+sd:/N64 - EU/Quake 64 (Europe).n64
+sd:/N64 - EU/Quake II (Europe).n64
 sd:/N64 - JP/Sonic Wings Assault (J) [!].v64
-sd:/N64 - USA/South Park (U) [!].z64
-sd:/N64 - USA/Star Wars - Rogue Squadron (U) [!].z64
-sd:/N64 - USA/Star Wars - Shadows of the Empire (U) (V1.2) [!].z64
-sd:/N64 - USA/Tom Clancy's Rainbow Six (U) [!].z64
+sd:/N64 - USA/South Park (USA).z64
+sd:/N64 - USA/Star Wars - Rogue Squadron (USA) (Rev 1).z64
+# MISSING ON SD: sd:/N64 - USA/Star Wars - Shadows of the Empire (U) (V1.2) [!].z64
+sd:/N64 - USA/Tom Clancy's Rainbow Six (USA).z64
 sd:/N64 - Translations/Tsumi to Batsu - Hoshi no Keishousha (Japan) [T-En by Zoinkity v1.0].z64
-sd:/N64 - USA/Turok - Dinosaur Hunter (U) (V1.2) [!].v64
-sd:/N64 - USA/Turok - Rage Wars (U) [!].z64
-sd:/N64 - USA/Turok 2 - Seeds of Evil (U) [!].z64
-sd:/N64 - USA/Turok 3 - Shadow of Oblivion (U) [!].z64
+sd:/N64 - USA/Turok - Dinosaur Hunter (USA) (Rev 2).z64
+sd:/N64 - USA/Turok - Rage Wars (USA) (Rev 1).z64
+sd:/N64 - USA/Turok 2 - Seeds of Evil (USA) (Rev 1).z64
+sd:/N64 - USA/Turok 3 - Shadow of Oblivion (USA).z64
 sd:/N64 - JP/Wild Choppers (Japan).z64
 sd:/N64 - JP/WinBack (Japan).z64
-sd:/N64 - USA/WinBack - Covert Operations (U) [!].z64
+sd:/N64 - USA/WinBack - Covert Operations (USA).z64
