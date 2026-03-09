@@ -199,7 +199,12 @@ static void scan_metadata_images(menu_t *menu) {
         char safe_title[21];  // 20 chars + null terminator
         memcpy(safe_title, menu->load.rom_info.title, 20);
         safe_title[20] = '\0';
-        
+        for (char *p = safe_title; *p; p++) {
+            if (*p == '/' || *p == '\\' || *p < 0x20) {
+                *p = '_';
+            }
+        }
+
         sprintf(game_code_path, "homebrew/%s", safe_title); // should be HOMEBREW_ID_SUBDIRECTORY
         path_push(path, game_code_path);
     }

@@ -468,6 +468,11 @@ static bool resolve_boxart_image_path(const char *storage_prefix, const char *ga
         char safe_title[21];
         memcpy(safe_title, rom_title, 20);
         safe_title[20] = '\0';
+        for (char *p = safe_title; *p; p++) {
+            if (*p == '/' || *p == '\\' || *p < 0x20) {
+                *p = '_';
+            }
+        }
         snprintf(boxart_path, sizeof(boxart_path), HOMEBREW_ID_SUBDIRECTORY"/%s", safe_title);
         path_push(path, boxart_path);
     } else {
