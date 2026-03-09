@@ -16,6 +16,8 @@
 #include <sys/stat.h>
 #include <libdragon.h>
 
+#include "../native_image.h"
+
 static bool show_extra_info_message = false;
 static component_boxart_t *boxart;
 static char *rom_filename = NULL;
@@ -226,7 +228,8 @@ static void scan_metadata_images(menu_t *menu) {
 
         for (uint16_t i = 0; i < metadata_image_filename_cache_length; i++) {
             path_push(path, filenames[i]);
-            metadata_image_available[i] = file_exists(path_get(path));
+            metadata_image_available[i] = file_exists(path_get(path))
+                || native_image_sidecar_exists(path_get(path), ".nimg");
             path_pop(path);
         }
     } else {

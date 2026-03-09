@@ -30,6 +30,17 @@
   - voltage/temp trends and stability indicators.
 - USB telemetry/debug stream while game is running for profiling.
 - Crash breadcrumbs persisted by firmware and shown by menu on next boot.
+- Metadata source stitching pipeline:
+  - keep stable external IDs (e.g. TheGamesDB) in `metadata.ini` for safer future refreshes.
+  - use those IDs to enrich release dates, publishers, player counts, and later manual/archive links.
+  - prefer conservative matching + audit reports over aggressive one-shot mass rewrites.
+
+## Rank 4.5: Manual Library / Scans
+- Manual scan viewer tied to ROM metadata directories:
+  - ingest `EPUB` / `PDF` / `CBZ` offline, but ship a menu-native `manual/` package.
+  - prefer full image scans over OCR/reflow for artifact fidelity.
+  - phase 1: page-turning only; phase 2: thumbnails; phase 3: optional zoom tiles.
+  - design notes: `docs/71_manual_scan_viewer_plan.md`.
 
 ## Rank 5: Stretch / Experimental
 - Controller hotkey bridge for return-to-menu (only if technically safe per game context).

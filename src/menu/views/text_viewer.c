@@ -14,51 +14,78 @@
 #include "views.h"
 
 #define MAX_FILE_SIZE KiB(128)
+#define TEXT_VIEWER_CONTENT_WIDTH   (VISIBLE_AREA_WIDTH - (TEXT_MARGIN_HORIZONTAL * 2))
+#define TEXT_VIEWER_CONTENT_HEIGHT  (LAYOUT_ACTIONS_SEPARATOR_Y - OVERSCAN_HEIGHT - (TEXT_MARGIN_VERTICAL * 2))
+#define TEXT_VIEWER_LAYOUT_HEIGHT   (4096)
+#define TEXT_VIEWER_SCROLL_STEP     (TEXT_VIEWER_CONTENT_HEIGHT / LIST_ENTRIES)
 
 /** @brief Text file structure */
 typedef struct {
     FILE *f; /**< File pointer */
     char *contents; /**< File contents */
     size_t length; /**< File length */
-    int lines; /**< Number of lines */
-    int current_line; /**< Current line */
-    int offset; /**< Offset in the file */
+    int lines; /**< Approximate number of wrapped display lines */
+    int current_line; /**< Current wrapped display line */
+    int offset; /**< Pixel offset in the rendered paragraph */
+    int max_offset; /**< Maximum pixel offset */
     bool vertical_scroll_possible; /**< Flag indicating if vertical scroll is possible */
+    rdpq_paragraph_t *paragraph; /**< Prebuilt wrapped paragraph layout */
 } text_file_t;
 
 static text_file_t *text;
 
-/**
- * @brief Perform vertical scroll in the text file.
- * 
- * @param lines Number of lines to scroll.
- */
-static void perform_vertical_scroll (int lines) {
-    if (!text->vertical_scroll_possible) {
+static void recalculate_scroll_state (void) {
+    if (!text || !text->paragraph) {
         return;
     }
 
-    int direction = (lines < 0) ? -1 : 1;
-    int next_offset = text->offset;
-
-    for (int i = 0; i < abs(lines); i++) {
-        while (true) {
-            next_offset += direction;
-            if (next_offset <= 0) {
-                text->current_line = 0;
-                text->offset = 0;
-                return;
-            }
-            if (next_offset > text->length) {
-                return;
-            }
-            if (text->contents[next_offset - 1] == '\n') {
-                break;
-            }
-        }
-        text->current_line += direction;
-        text->offset = next_offset;
+    int total_height = text->paragraph->bbox.y1 - text->paragraph->bbox.y0;
+    if (total_height < TEXT_VIEWER_CONTENT_HEIGHT) {
+        total_height = TEXT_VIEWER_CONTENT_HEIGHT;
     }
+
+    text->max_offset = total_height - TEXT_VIEWER_CONTENT_HEIGHT;
+    if (text->max_offset < 0) {
+        text->max_offset = 0;
+    }
+
+    int step = TEXT_VIEWER_SCROLL_STEP > 0 ? TEXT_VIEWER_SCROLL_STEP : 1;
+    text->lines = (total_height + step - 1) / step;
+    if (text->lines < 1) {
+        text->lines = 1;
+    }
+    text->vertical_scroll_possible = (text->max_offset > 0);
+
+    if (text->offset < 0) {
+        text->offset = 0;
+    }
+    if (text->offset > text->max_offset) {
+        text->offset = text->max_offset;
+    }
+    text->current_line = text->offset / step;
+}
+
+/**
+ * @brief Perform vertical scroll in the text file.
+ * 
+ * @param lines Number of wrapped display lines to scroll.
+ */
+static void perform_vertical_scroll (int lines) {
+    if (!text || !text->vertical_scroll_possible) {
+        return;
+    }
+
+    int step = TEXT_VIEWER_SCROLL_STEP > 0 ? TEXT_VIEWER_SCROLL_STEP : 1;
+    int next_offset = text->offset + (lines * step);
+    if (next_offset < 0) {
+        next_offset = 0;
+    }
+    if (next_offset > text->max_offset) {
+        next_offset = text->max_offset;
+    }
+
+    text->offset = next_offset;
+    text->current_line = text->offset / step;
 }
 
 /**
@@ -92,12 +119,16 @@ static void draw (menu_t *menu, surface_t *d) {
 
     ui_components_layout_draw();
 
-    ui_components_main_text_draw(
-        STL_DEFAULT,
-        ALIGN_LEFT, VALIGN_TOP,
-        "%s\n",
-        text->contents + text->offset
-    );
+    if (text && text->paragraph) {
+        int x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
+        int y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TEXT_OFFSET_VERTICAL;
+        int clip_x1 = x + TEXT_VIEWER_CONTENT_WIDTH;
+        int clip_y1 = y + TEXT_VIEWER_CONTENT_HEIGHT;
+
+        rdpq_set_scissor(x, y, clip_x1, clip_y1);
+        rdpq_paragraph_render(text->paragraph, x, y - text->paragraph->bbox.y0 - text->offset);
+        rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+    }
 
     ui_components_list_scrollbar_draw(text->current_line, text->lines, LIST_ENTRIES);
 
@@ -119,6 +150,9 @@ static void deinit (void) {
     if (text) {
         if (text->f) {
             fclose(text->f);
+        }
+        if (text->paragraph) {
+            rdpq_paragraph_free(text->paragraph);
         }
         if (text->contents) {
             free(text->contents);
@@ -186,14 +220,23 @@ void view_text_viewer_init (menu_t *menu) {
     }
     text->f = NULL;
 
-    text->lines = 1;
-    for (size_t i = 0; i < text->length; i++) {
-        if (text->contents[i] == '\n') {
-            text->lines += 1;
-        }
+    int paragraph_nbytes = (int)text->length;
+    text->paragraph = rdpq_paragraph_build(&(rdpq_textparms_t) {
+        .style_id = STL_DEFAULT,
+        .width = TEXT_VIEWER_CONTENT_WIDTH,
+        .height = TEXT_VIEWER_LAYOUT_HEIGHT,
+        .align = ALIGN_LEFT,
+        .valign = VALIGN_TOP,
+        .wrap = WRAP_WORD,
+        .line_spacing = TEXT_LINE_SPACING_ADJUST,
+    }, FNT_DEFAULT, text->contents, &paragraph_nbytes);
+
+    if (!text->paragraph) {
+        deinit();
+        return menu_show_error(menu, "Couldn't build text layout");
     }
 
-    text->vertical_scroll_possible = (text->lines > LIST_ENTRIES);
+    recalculate_scroll_state();
 }
 
 /**

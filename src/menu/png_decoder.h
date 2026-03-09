@@ -7,6 +7,7 @@
 #ifndef PNG_DECODER_H__
 #define PNG_DECODER_H__
 
+#include <stddef.h>
 #include <stdbool.h>
 #include <surface.h>
 
@@ -50,6 +51,21 @@ typedef void png_callback_t (png_err_t err, surface_t *decoded_image, void *call
 png_err_t png_decoder_start (char *path, int max_width, int max_height, png_callback_t *callback, void *callback_data);
 
 /**
+ * @brief Start decoding a PNG already loaded into memory.
+ *
+ * The decoder takes ownership of `png_data` and will free it when done.
+ *
+ * @param png_data Owned PNG byte buffer.
+ * @param png_size Size of PNG byte buffer.
+ * @param max_width Maximum width of the decoded image.
+ * @param max_height Maximum height of the decoded image.
+ * @param callback Callback function to be called when decoding is complete.
+ * @param callback_data User-defined data to be passed to the callback function.
+ * @return png_err_t Error code indicating the result of the start operation.
+ */
+png_err_t png_decoder_start_buffer_owned (uint8_t *png_data, size_t png_size, int max_width, int max_height, png_callback_t *callback, void *callback_data);
+
+/**
  * @brief Abort the PNG decoding process.
  * 
  * This function aborts the ongoing PNG decoding process.
@@ -78,5 +94,16 @@ void png_decoder_poll (void);
  * @return true if decoder is busy, false otherwise.
  */
 bool png_decoder_is_busy (void);
+
+/**
+ * @brief Decode a PNG file synchronously.
+ *
+ * @param path Path to the PNG file.
+ * @param max_width Maximum width of the decoded image.
+ * @param max_height Maximum height of the decoded image.
+ * @param out_image Output pointer for the decoded surface. Caller owns it.
+ * @return png_err_t Error code indicating the result of the decode.
+ */
+png_err_t png_decoder_load (char *path, int max_width, int max_height, surface_t **out_image);
 
 #endif /* PNG_DECODER_H__ */

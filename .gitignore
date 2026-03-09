@@ -12,7 +12,12 @@
 /filesystem/*.sprite
 
 # Ignore external development tools
+/toolchain/
 /tools/*
+!/tools/sc64/
+/tools/sc64/*
+!/tools/sc64/metadata_fill_from_thegamesdb.py
+!/tools/sc64/metadata_fill_from_region_siblings.py
 
 # Ignore any N64 ROM
 **/*.n64
@@ -24,3 +29,9 @@
 
 # Ignore macOS filesystem cruft
 .DS_Store
+
+# Ignore local API credentials
+.env
+.env.local
+
+reports

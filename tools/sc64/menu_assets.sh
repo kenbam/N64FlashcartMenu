@@ -26,8 +26,20 @@ Usage:
   tools/sc64/menu_assets.sh bg <input> <output.png>
     Convert/crop image to 640x480 PNG for menu backgrounds.
 
+  tools/sc64/menu_assets.sh bg-native <input> <output.nimg>
+    Convert/crop image to 640x480 native RGBA16 background sidecar.
+
+  tools/sc64/menu_assets.sh bg-native-batch <dir>
+    Create `.nimg` sidecars beside background images in a directory.
+
   tools/sc64/menu_assets.sh screensaver <input> <output.png>
     Convert logo image to <=180x96 PNG (aspect preserved, transparent pad).
+
+  tools/sc64/menu_assets.sh screensaver-native <input> <output.nimg>
+    Convert logo image to <=180x96 native RGBA16 sidecar.
+
+  tools/sc64/menu_assets.sh screensaver-native-batch <dir>
+    Create `.nimg` sidecars beside screensaver logo images in a directory.
 
   tools/sc64/menu_assets.sh boxart-grid-thumb <input> <output.png>
     Convert box art image to <=116x76 PNG (aspect preserved, transparent pad) for playlist grid.
@@ -50,6 +62,9 @@ Usage:
   tools/sc64/menu_assets.sh rewrite-m3u-wav64 <m3u-or-dir> [more...]
     Rewrite #SC64_BGM=...mp3 directives to .wav64 when the matching file exists.
 
+  tools/sc64/menu_assets.sh rewrite-m3u-bg-nimg <m3u-or-dir> [more...]
+    Rewrite #SC64_BACKGROUND=...png/.jpg directives to direct .nimg paths.
+
 Notes:
   - Set AUDIOCONV64_BIN to override audioconv64 location.
   - Set FFMPEG_BIN to override ffmpeg path.
@@ -71,6 +86,83 @@ convert_bg() {
     -frames:v 1 -pix_fmt rgba "$output"
 }
 
+convert_bg_native() {
+  local input="$1"
+  local output="$2"
+  need_cmd "$FFMPEG_BIN"
+  need_file "$input"
+  mkdir -p "$(dirname "$output")"
+  python3 - "$input" "$output" "$FFMPEG_BIN" <<'PY'
+from pathlib import Path
+import struct
+import subprocess
+import sys
+
+MAGIC = 0x4E494D47  # NIMG
+WIDTH = 640
+HEIGHT = 480
+
+def rgba8_to_rgba16_be(rgba: bytes) -> bytes:
+    out = bytearray((len(rgba) // 4) * 2)
+    j = 0
+    for i in range(0, len(rgba), 4):
+        r, g, b, a = rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]
+        pixel = ((r >> 3) << 11) | ((g >> 3) << 6) | ((b >> 3) << 1) | (1 if a >= 0x80 else 0)
+        out[j] = (pixel >> 8) & 0xFF
+        out[j + 1] = pixel & 0xFF
+        j += 2
+    return bytes(out)
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+ffmpeg = sys.argv[3]
+
+raw = subprocess.check_output([
+    ffmpeg, "-v", "error", "-y", "-i", str(src),
+    "-vf", f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT}",
+    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "-"
+])
+
+expected = WIDTH * HEIGHT * 4
+if len(raw) != expected:
+    raise SystemExit(f"unexpected raw size {len(raw)} != {expected}")
+
+payload = rgba8_to_rgba16_be(raw)
+header = struct.pack(">IIII", MAGIC, WIDTH, HEIGHT, len(payload))
+dst.write_bytes(header + payload)
+PY
+}
+
+convert_bg_native_batch() {
+  local dir="$1"
+  [[ -d "$dir" ]] || die "directory not found: $dir"
+  need_cmd "$FFMPEG_BIN"
+  python3 - "$dir" "$0" <<'PY'
+from pathlib import Path
+import subprocess
+import sys
+
+root = Path(sys.argv[1])
+script = sys.argv[2]
+count = 0
+skipped = 0
+for src in sorted(root.iterdir()):
+    if not src.is_file():
+        continue
+    if src.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
+        continue
+    out = Path(str(src) + ".nimg")
+    try:
+        subprocess.run([script, "bg-native", str(src), str(out)], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        count += 1
+    except subprocess.CalledProcessError:
+        skipped += 1
+        print(f"skip: {src}", file=sys.stderr)
+print(f"processed {count} background sidecars ({skipped} skipped)")
+PY
+}
+
 convert_screensaver() {
   local input="$1"
   local output="$2"
@@ -80,6 +172,83 @@ convert_screensaver() {
   "$FFMPEG_BIN" -y -i "$input" \
     -vf "scale=180:96:force_original_aspect_ratio=decrease,pad=180:96:(ow-iw)/2:(oh-ih)/2:color=0x00000000" \
     -frames:v 1 -pix_fmt rgba "$output"
+}
+
+convert_screensaver_native() {
+  local input="$1"
+  local output="$2"
+  need_cmd "$FFMPEG_BIN"
+  need_file "$input"
+  mkdir -p "$(dirname "$output")"
+  python3 - "$input" "$output" "$FFMPEG_BIN" <<'PY'
+from pathlib import Path
+import struct
+import subprocess
+import sys
+
+MAGIC = 0x4E494D47  # NIMG
+WIDTH = 180
+HEIGHT = 96
+
+def rgba8_to_rgba16_be(rgba: bytes) -> bytes:
+    out = bytearray((len(rgba) // 4) * 2)
+    j = 0
+    for i in range(0, len(rgba), 4):
+        r, g, b, a = rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]
+        pixel = ((r >> 3) << 11) | ((g >> 3) << 6) | ((b >> 3) << 1) | (1 if a >= 0x80 else 0)
+        out[j] = (pixel >> 8) & 0xFF
+        out[j + 1] = pixel & 0xFF
+        j += 2
+    return bytes(out)
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+ffmpeg = sys.argv[3]
+
+raw = subprocess.check_output([
+    ffmpeg, "-v", "error", "-y", "-i", str(src),
+    "-vf", f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=decrease,pad={WIDTH}:{HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x00000000",
+    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "-"
+])
+
+expected = WIDTH * HEIGHT * 4
+if len(raw) != expected:
+    raise SystemExit(f"unexpected raw size {len(raw)} != {expected}")
+
+payload = rgba8_to_rgba16_be(raw)
+header = struct.pack(">IIII", MAGIC, WIDTH, HEIGHT, len(payload))
+dst.write_bytes(header + payload)
+PY
+}
+
+convert_screensaver_native_batch() {
+  local dir="$1"
+  [[ -d "$dir" ]] || die "directory not found: $dir"
+  need_cmd "$FFMPEG_BIN"
+  python3 - "$dir" "$0" <<'PY'
+from pathlib import Path
+import subprocess
+import sys
+
+root = Path(sys.argv[1])
+script = sys.argv[2]
+count = 0
+skipped = 0
+for src in sorted(root.iterdir()):
+    if not src.is_file():
+        continue
+    if src.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
+        continue
+    out = Path(str(src) + ".nimg")
+    try:
+        subprocess.run([script, "screensaver-native", str(src), str(out)], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        count += 1
+    except subprocess.CalledProcessError:
+        skipped += 1
+        print(f"skip: {src}", file=sys.stderr)
+print(f"processed {count} screensaver sidecars ({skipped} skipped)")
+PY
 }
 
 convert_boxart_grid_thumb() {
@@ -294,12 +463,55 @@ print(f"Updated {updated} playlist(s)", file=sys.stderr)
 PY
 }
 
+rewrite_m3u_bg_nimg() {
+  python3 - "$@" <<'PY'
+from pathlib import Path
+import sys
+
+def iter_m3us(paths):
+    for raw in paths:
+        p = Path(raw)
+        if p.is_dir():
+            yield from p.rglob("*.m3u")
+            yield from p.rglob("*.m3u8")
+        elif p.is_file():
+            yield p
+
+updated = 0
+for m3u in iter_m3us(sys.argv[1:]):
+    try:
+        text = m3u.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        continue
+    changed = False
+    out = []
+    for line in text.splitlines():
+        if line.startswith("#SC64_BACKGROUND="):
+            key, val = line.split("=", 1)
+            value = val.strip()
+            lower = value.lower()
+            if not lower.endswith(".nimg") and (lower.endswith(".png") or lower.endswith(".jpg") or lower.endswith(".jpeg")):
+                line = f"{key}={value}.nimg"
+                changed = True
+        out.append(line)
+    if changed:
+        m3u.write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
+        print(m3u)
+        updated += 1
+print(f"Updated {updated} playlist(s)", file=sys.stderr)
+PY
+}
+
 main() {
   [[ $# -ge 1 ]] || { usage; exit 1; }
   local cmd="$1"; shift
   case "$cmd" in
     bg) [[ $# -eq 2 ]] || die "usage: $0 bg <input> <output.png>"; convert_bg "$1" "$2" ;;
+    bg-native) [[ $# -eq 2 ]] || die "usage: $0 bg-native <input> <output.nimg>"; convert_bg_native "$1" "$2" ;;
+    bg-native-batch) [[ $# -eq 1 ]] || die "usage: $0 bg-native-batch <dir>"; convert_bg_native_batch "$1" ;;
     screensaver) [[ $# -eq 2 ]] || die "usage: $0 screensaver <input> <output.png>"; convert_screensaver "$1" "$2" ;;
+    screensaver-native) [[ $# -eq 2 ]] || die "usage: $0 screensaver-native <input> <output.nimg>"; convert_screensaver_native "$1" "$2" ;;
+    screensaver-native-batch) [[ $# -eq 1 ]] || die "usage: $0 screensaver-native-batch <dir>"; convert_screensaver_native_batch "$1" ;;
     boxart-grid-thumb) [[ $# -eq 2 ]] || die "usage: $0 boxart-grid-thumb <input> <output.png>"; convert_boxart_grid_thumb "$1" "$2" ;;
     boxart-grid-thumb-batch) [[ $# -eq 1 ]] || die "usage: $0 boxart-grid-thumb-batch <metadata-dir>"; convert_boxart_grid_thumb_batch "$1" ;;
     boxart-grid-bxat-batch) [[ $# -ge 2 && $# -le 3 ]] || die "usage: $0 boxart-grid-bxat-batch <metadata-dir> <thumb-cache-dir> [storage-prefix]"; convert_boxart_grid_bxat_batch "$1" "$2" "${3:-sd:}" ;;
@@ -307,6 +519,7 @@ main() {
     music-wav64) [[ $# -eq 1 ]] || die "usage: $0 music-wav64 <input-audio>"; convert_music_wav64_one "$1" ;;
     music-wav64-batch) [[ $# -eq 1 ]] || die "usage: $0 music-wav64-batch <dir>"; convert_music_wav64_batch "$1" ;;
     rewrite-m3u-wav64) [[ $# -ge 1 ]] || die "usage: $0 rewrite-m3u-wav64 <m3u-or-dir> [more...]"; rewrite_m3u_wav64 "$@" ;;
+    rewrite-m3u-bg-nimg) [[ $# -ge 1 ]] || die "usage: $0 rewrite-m3u-bg-nimg <m3u-or-dir> [more...]"; rewrite_m3u_bg_nimg "$@" ;;
     -h|--help|help) usage ;;
     *) die "unknown command: $cmd" ;;
   esac

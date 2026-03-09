@@ -19,6 +19,7 @@
 #include "menu_state.h"
 #include "menu.h"
 #include "mp3_player.h"
+#include "native_image.h"
 #include "playtime.h"
 #include "png_decoder.h"
 #include "settings.h"
@@ -37,6 +38,7 @@
 #define MENU_BGM_MP3_FILE_FALLBACK  "/menu/music/bgm.mp3"
 #define MENU_BGM_WAV64_FILE         "/menu/music/menu.wav64"
 #define MENU_BGM_WAV64_FILE_FALLBACK "/menu/music/bgm.wav64"
+#define SCREENSAVER_NATIVE_SIDECAR  ".nimg"
 
 #define MENU_CACHE_DIRECTORY        "cache"
 #define BACKGROUND_CACHE_FILE       "background.data"
@@ -159,6 +161,11 @@ static void screensaver_logo_try_load_path(menu_t *menu, const char *logo_file) 
 
     path_t *logo_path = path_init(menu->storage_prefix, (char *)logo_file);
     if (file_exists(path_get(logo_path))) {
+        screensaver_logo_image = native_image_load_sidecar_rgba16(path_get(logo_path), SCREENSAVER_NATIVE_SIDECAR, 1024, 1024);
+        if (screensaver_logo_image) {
+            path_free(logo_path);
+            return;
+        }
         // Use a larger decode target for compatibility with logo PNGs that fail
         // when decoded directly to a very small target size.
         png_err_t png_err = png_decoder_start(path_get(logo_path), 1024, 1024, screensaver_logo_callback, NULL);

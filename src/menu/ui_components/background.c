@@ -11,11 +11,13 @@
 #include <math.h>
 
 #include "../ui_components.h"
+#include "../native_image.h"
 #include "../sound.h"
 #include "constants.h"
 #include "utils/fs.h"
 
 #define CACHE_METADATA_MAGIC    (0x424B4731)
+#define BACKGROUND_NATIVE_SIDECAR ".nimg"
 
 /**
  * @brief Structure representing the background component.
@@ -45,6 +47,18 @@ typedef struct {
 } cache_metadata_t;
 
 static component_background_t *background = NULL;
+
+static bool string_ends_with(const char *s, const char *suffix) {
+    if (!s || !suffix) {
+        return false;
+    }
+    size_t s_len = strlen(s);
+    size_t suffix_len = strlen(suffix);
+    if (suffix_len > s_len) {
+        return false;
+    }
+    return strcmp(s + (s_len - suffix_len), suffix) == 0;
+}
 
 static void visualizer_reset_state(component_background_t *c) {
     if (!c) return;
@@ -703,12 +717,24 @@ bool ui_components_background_load_temporary_cached(const char *source_path) {
     }
 
     surface_t *image = load_surface_from_cache_file(cache_path);
-    free(cache_path);
+    bool loaded_from_cache = (image != NULL);
     if (!image) {
-        return false;
+        if (string_ends_with(source_path, BACKGROUND_NATIVE_SIDECAR)) {
+            image = native_image_load_rgba16_file(source_path, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+        } else {
+            image = native_image_load_sidecar_rgba16(source_path, BACKGROUND_NATIVE_SIDECAR, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+        }
+        if (!image) {
+            free(cache_path);
+            return false;
+        }
     }
 
     ui_components_background_replace_image_temporary(image);
+    if (!loaded_from_cache) {
+        save_surface_to_cache_file(cache_path, background->image);
+    }
+    free(cache_path);
     return true;
 }
 

@@ -10,6 +10,7 @@
 #include <inttypes.h>
 
 #include "../ui_components.h"
+#include "../native_image.h"
 #include "../path.h"
 #include "../png_decoder.h"
 #include "constants.h"
@@ -22,6 +23,7 @@
 #define BOXART_CACHE_MAGIC         (0x42584154) /* BXAT */
 #define BOXART_THUMB_CACHE_ENTRIES (16)
 #define BOXART_LOAD_QUEUE_MAX      (24)
+#define BOXART_NATIVE_SIDECAR      ".nimg"
 
 typedef struct {
     uint32_t magic;
@@ -52,6 +54,18 @@ static int g_boxart_load_queue_count = 0;
 
 static void boxart_queue_pump(void);
 static void png_decoder_callback(png_err_t err, surface_t *decoded_image, void *callback_data);
+
+static bool string_ends_with(const char *s, const char *suffix) {
+    if (!s || !suffix) {
+        return false;
+    }
+    size_t s_len = strlen(s);
+    size_t suffix_len = strlen(suffix);
+    if (suffix_len > s_len) {
+        return false;
+    }
+    return strcmp(s + (s_len - suffix_len), suffix) == 0;
+}
 
 static uint64_t fnv1a64_str(const char *s) {
     uint64_t h = 1469598103934665603ULL;
@@ -365,6 +379,18 @@ static void boxart_queue_pump(void) {
             continue;
         }
 
+        surface_t *native = NULL;
+        if (string_ends_with(ctx->cache_key, BOXART_NATIVE_SIDECAR)) {
+            native = native_image_load_rgba16_file(ctx->cache_key, BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX);
+        } else {
+            native = native_image_load_sidecar_rgba16(ctx->cache_key, BOXART_NATIVE_SIDECAR, BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX);
+        }
+        if (native) {
+            boxart_thumb_cache_put(ctx->cache_key, native);
+            boxart_complete_context_with_image(ctx, native);
+            continue;
+        }
+
         if (png_decoder_start(ctx->cache_key, BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX, png_decoder_callback, ctx) == PNG_OK) {
             g_boxart_active_load_ctx = ctx;
             break;
@@ -481,7 +507,7 @@ static bool resolve_boxart_image_path(const char *storage_prefix, const char *ga
                 break;
         }
 
-        if (file_exists(path_get(path))) {
+        if (file_exists(path_get(path)) || native_image_sidecar_exists(path_get(path), BOXART_NATIVE_SIDECAR)) {
             *resolved_image_path_out = strdup(path_get(path));
             found = (*resolved_image_path_out != NULL);
         }
@@ -581,6 +607,20 @@ static component_boxart_t *ui_components_boxart_init_with_options(const char *st
     }
 
     if (!async_only) {
+        surface_t *native = NULL;
+        if (string_ends_with(resolved_image_path, BOXART_NATIVE_SIDECAR)) {
+            native = native_image_load_rgba16_file(resolved_image_path, BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX);
+        } else {
+            native = native_image_load_sidecar_rgba16(resolved_image_path, BOXART_NATIVE_SIDECAR, BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX);
+        }
+        if (native) {
+            boxart_thumb_cache_put(resolved_image_path, native);
+            b->image = native;
+            b->loading = false;
+            free(resolved_image_path);
+            return b;
+        }
+
         b->image = boxart_thumb_cache_load_disk_clone(storage_prefix, resolved_image_path);
         if (b->image) {
             b->loading = false;

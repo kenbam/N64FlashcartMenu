@@ -53,6 +53,7 @@ SRCS = \
 	menu/hdmi.c \
 	menu/menu.c \
 	menu/mp3_player.c \
+	menu/native_image.c \
 	menu/path.c \
 	menu/playtime.c \
 	menu/png_decoder.c \
@@ -79,6 +80,7 @@ SRCS = \
 	menu/views/history_favorites.c \
 	menu/views/image_viewer.c \
 	menu/views/text_viewer.c \
+	menu/views/manual_viewer.c \
 	menu/views/load_disk.c \
 	menu/views/load_emulator.c \
 	menu/views/load_rom.c \

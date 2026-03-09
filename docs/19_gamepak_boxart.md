@@ -37,6 +37,18 @@ i.e. for GoldenEye, this would be `sd:/menu/metadata/N/G/E/boxart_front.png`.
 ROMs that use the ["Advanced Homebrew ROM Header"](https://n64brew.dev/wiki/ROM_Header) Game ID (`xEDx`) are matched using the "Game Title" (not the Game Code):
 e.g. `sd:/menu/metadata/homebrew/{game title}/boxart_front.png`
 
+Optional native sidecars can live beside any of these art files:
+- `boxart_front.png.nimg`
+- `boxart_back.png.nimg`
+- `boxart_top.png.nimg`
+- `boxart_bottom.png.nimg`
+- `boxart_left.png.nimg`
+- `boxart_right.png.nimg`
+- `gamepak_front.png.nimg`
+- `gamepak_back.png.nimg`
+
+When present, the menu uses the `.nimg` sidecar first and falls back to the PNG.
+
 **Warning**: Excluding the region ID may show a box art of the wrong region.
 
 #### Itterating through game art images

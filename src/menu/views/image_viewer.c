@@ -1,8 +1,11 @@
 #include <stdlib.h>
 #include "../sound.h"
 
+#include "../native_image.h"
 #include "../png_decoder.h"
 #include "views.h"
+
+#define IMAGE_NATIVE_SIDECAR ".nimg"
 
 
 static bool show_message;
@@ -110,9 +113,14 @@ void view_image_viewer_init (menu_t *menu) {
 
     path_t *path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
 
-    png_err_t err = png_decoder_start(path_get(path), 640, 480, image_callback, menu);
-    if (err != PNG_OK) {
-        menu_show_error(menu, convert_error_message(err));
+    image = native_image_load_sidecar_rgba16(path_get(path), IMAGE_NATIVE_SIDECAR, 640, 480);
+    if (image) {
+        image_loading = false;
+    } else {
+        png_err_t err = png_decoder_start(path_get(path), 640, 480, image_callback, menu);
+        if (err != PNG_OK) {
+            menu_show_error(menu, convert_error_message(err));
+        }
     }
 
     path_free(path);

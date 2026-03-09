@@ -147,8 +147,12 @@ The branch includes a helper script to speed up background/music prep:
 
 - `tools/sc64/menu_assets.sh bg <input> <output.png>`
   - converts and crops to `640x480` PNG for menu backgrounds
+- `tools/sc64/menu_assets.sh bg-native <input> <output.nimg>`
+  - converts and crops to a `640x480` native `RGBA16` sidecar for opt-in faster background loads
 - `tools/sc64/menu_assets.sh screensaver <input> <output.png>`
   - resizes/pads logos to `<=180x96`
+- `tools/sc64/menu_assets.sh screensaver-native <input> <output.nimg>`
+  - converts screensaver logos to an opt-in native `RGBA16` sidecar
 - `tools/sc64/menu_assets.sh music-mp3 <input> <output.mp3> [bitrate_kbps]`
   - re-encodes menu-safe MP3 (`32 kHz`, stereo)
 - `tools/sc64/menu_assets.sh music-wav64 <input-audio>`

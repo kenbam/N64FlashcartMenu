@@ -9,6 +9,7 @@
 #include "views.h"
 #include "utils/fs.h"
 #include "../fonts.h"
+#include "../native_image.h"
 #include "../png_decoder.h"
 #include "../sound.h"
 #include "../ui_components/constants.h"
@@ -20,10 +21,19 @@
 #define MANUAL_PAN_STEP_PIXELS          24.0f
 #define MANUAL_PAN_STEP_FAST_PIXELS     64.0f
 #define MANUAL_MAX_BLIT_COORD           1023
+#define MANUAL_NATIVE_SIDECAR           ".nimg"
 #define MANUAL_TILED_CACHE_SIZE         12
 #define MANUAL_TILED_QUEUE_SIZE         16
 #define MANUAL_TILED_PREFETCH_MARGIN    1
 #define MANUAL_TILED_LEVEL_MAX          3
+#define MANUAL_TMEM_BYTES               4096
+
+static int manual_align_up (int value, int alignment) {
+    if (alignment <= 1) {
+        return value;
+    }
+    return ((value + alignment - 1) / alignment) * alignment;
+}
 
 typedef struct {
     bool valid;
@@ -55,6 +65,8 @@ static int32_t manual_tile_loading_level;
 static int32_t manual_tile_loading_page;
 static int32_t manual_tile_loading_row;
 static int32_t manual_tile_loading_col;
+static FILE *manual_tile_bundle_streams[MANUAL_TILED_LEVEL_MAX];
+static uint8_t manual_tile_bundle_stream_buffers[MANUAL_TILED_LEVEL_MAX][32768];
 static bool manual_tile_window_valid;
 static int32_t manual_tile_window_level;
 static int32_t manual_tile_window_page;
@@ -65,6 +77,41 @@ static int32_t manual_tile_window_col_end;
 
 static void manual_free_tile_cache (void);
 static void manual_free_tile_bundle_data (menu_t *menu);
+
+static FILE *manual_get_tile_bundle_stream (menu_t *menu, int level) {
+    if (!menu || level < 0 || level >= MANUAL_TILED_LEVEL_MAX) {
+        return NULL;
+    }
+
+    if (manual_tile_bundle_streams[level]) {
+        return manual_tile_bundle_streams[level];
+    }
+
+    path_t *bundle_path = menu->manual.tiled_level_bundle_files[level];
+    if (!bundle_path) {
+        return NULL;
+    }
+
+    FILE *file = fopen(path_get(bundle_path), "rb");
+    if (!file) {
+        return NULL;
+    }
+
+    setvbuf(file, (char *)manual_tile_bundle_stream_buffers[level], _IOFBF, sizeof(manual_tile_bundle_stream_buffers[level]));
+    manual_tile_bundle_streams[level] = file;
+    return file;
+}
+
+static void manual_close_tile_bundle_stream (int level) {
+    if (level < 0 || level >= MANUAL_TILED_LEVEL_MAX) {
+        return;
+    }
+
+    if (manual_tile_bundle_streams[level]) {
+        fclose(manual_tile_bundle_streams[level]);
+        manual_tile_bundle_streams[level] = NULL;
+    }
+}
 
 static int manual_get_effective_tile_cache_size (void) {
     return is_memory_expanded() ? MANUAL_TILED_CACHE_SIZE : 8;
@@ -275,6 +322,7 @@ static void manual_free_tile_bundle_data (menu_t *menu) {
         return;
     }
     for (int i = 0; i < MANUAL_TILED_LEVEL_MAX; i++) {
+        manual_close_tile_bundle_stream(i);
         if (menu->manual.tiled_level_bundle_files[i]) {
             path_free(menu->manual.tiled_level_bundle_files[i]);
             menu->manual.tiled_level_bundle_files[i] = NULL;
@@ -303,7 +351,7 @@ static bool manual_build_page_path (path_t *directory, int page_index, char *out
     snprintf(page_name, sizeof(page_name), "%0*d.png", MANUAL_PAGE_FILENAME_DIGITS, page_index + 1);
     path_push(page_path, page_name);
 
-    bool exists = file_exists(path_get(page_path));
+    bool exists = native_image_sidecar_exists(path_get(page_path), MANUAL_NATIVE_SIDECAR);
     if (exists) {
         snprintf(out, out_len, "%s", path_get(page_path));
     }
@@ -343,42 +391,60 @@ static manual_tile_bundle_entry_t *manual_find_bundle_entry (menu_t *menu, int l
         return NULL;
     }
 
-    int count = menu->manual.tiled_level_bundle_entry_counts[level];
-    for (int i = 0; i < count; i++) {
-        manual_tile_bundle_entry_t *entry = &menu->manual.tiled_level_bundle_entries[level][i];
+    manual_tile_bundle_entry_t *entries = menu->manual.tiled_level_bundle_entries[level];
+    int left = 0;
+    int right = menu->manual.tiled_level_bundle_entry_counts[level] - 1;
+
+    while (left <= right) {
+        int mid = left + ((right - left) / 2);
+        manual_tile_bundle_entry_t *entry = &entries[mid];
+
         if (entry->page == page && entry->row == row && entry->col == col) {
             return entry;
         }
+
+        bool go_right = false;
+        if (entry->page < page) {
+            go_right = true;
+        } else if (entry->page == page && entry->row < row) {
+            go_right = true;
+        } else if (entry->page == page && entry->row == row && entry->col < col) {
+            go_right = true;
+        }
+
+        if (go_right) {
+            left = mid + 1;
+        } else {
+            right = mid - 1;
+        }
     }
+
     return NULL;
 }
 
-static bool manual_read_bundle_chunk (path_t *bundle_file, manual_tile_bundle_entry_t *entry, uint8_t **out_data, size_t *out_size) {
-    if (!bundle_file || !entry || !out_data || !out_size) {
+static bool manual_read_bundle_chunk (menu_t *menu, int level, manual_tile_bundle_entry_t *entry, uint8_t **out_data, size_t *out_size) {
+    if (!menu || level < 0 || level >= MANUAL_TILED_LEVEL_MAX || !entry || !out_data || !out_size) {
         return false;
     }
 
     *out_data = NULL;
     *out_size = 0;
 
-    FILE *file = fopen(path_get(bundle_file), "rb");
+    FILE *file = manual_get_tile_bundle_stream(menu, level);
     if (!file) {
         return false;
     }
 
     if (fseek(file, (long)entry->offset, SEEK_SET) != 0) {
-        fclose(file);
         return false;
     }
 
     uint8_t *buffer = malloc(entry->size);
     if (!buffer) {
-        fclose(file);
         return false;
     }
 
     size_t read_size = fread(buffer, 1, entry->size, file);
-    fclose(file);
     if (read_size != entry->size) {
         free(buffer);
         return false;
@@ -419,8 +485,8 @@ static void manual_get_tile_dimensions (menu_t *menu, int level, int row, int co
     }
 }
 
-static surface_t *manual_read_bundle_rgba16_surface (menu_t *menu, path_t *bundle_file, manual_tile_bundle_entry_t *entry, int level, int row, int col) {
-    if (!menu || !bundle_file || !entry || level < 0 || level >= MANUAL_TILED_LEVEL_MAX) {
+static surface_t *manual_read_bundle_rgba16_surface (menu_t *menu, manual_tile_bundle_entry_t *entry, int level, int row, int col) {
+    if (!menu || !entry || level < 0 || level >= MANUAL_TILED_LEVEL_MAX) {
         return NULL;
     }
 
@@ -437,25 +503,22 @@ static surface_t *manual_read_bundle_rgba16_surface (menu_t *menu, path_t *bundl
         return NULL;
     }
 
-    FILE *file = fopen(path_get(bundle_file), "rb");
+    FILE *file = manual_get_tile_bundle_stream(menu, level);
     if (!file) {
         return NULL;
     }
     if (fseek(file, (long)entry->offset, SEEK_SET) != 0) {
-        fclose(file);
         return NULL;
     }
 
     surface_t *image = calloc(1, sizeof(surface_t));
     if (!image) {
-        fclose(file);
         return NULL;
     }
     *image = surface_alloc(FMT_RGBA16, tile_size, tile_size);
     if (!image->buffer) {
         surface_free(image);
         free(image);
-        fclose(file);
         return NULL;
     }
     memset(image->buffer, 0, (size_t)image->height * (size_t)image->stride);
@@ -469,7 +532,6 @@ static surface_t *manual_read_bundle_rgba16_surface (menu_t *menu, path_t *bundl
             break;
         }
     }
-    fclose(file);
     if (!ok) {
         surface_free(image);
         free(image);
@@ -619,38 +681,6 @@ static float manual_get_base_scale_for_size (int page_width, int page_height) {
     return base_scale;
 }
 
-static void manual_page_callback (png_err_t err, surface_t *decoded_image, void *callback_data) {
-    menu_t *menu = (menu_t *)(callback_data);
-    bool prefetch_decode = manual_prefetch_decode_active;
-    manual_prefetch_decode_active = false;
-
-    if (prefetch_decode) {
-        menu->manual.prefetch_loading = false;
-    } else {
-        menu->manual.page_loading = false;
-    }
-
-    if (err != PNG_OK) {
-        if (decoded_image) {
-            surface_free(decoded_image);
-            free(decoded_image);
-        }
-        menu_show_error(menu, convert_error_message(err));
-        return;
-    }
-
-    if (prefetch_decode) {
-        manual_free_prefetch_image(menu);
-        menu->manual.prefetch_image = decoded_image;
-        menu->manual.prefetched_page = manual_prefetch_target_page;
-    } else {
-        manual_free_current_image(menu);
-        menu->manual.image = decoded_image;
-        menu->manual.loaded_page = menu->manual.current_page;
-        menu->manual.loaded_zoom_asset = manual_should_use_zoom_asset(menu);
-    }
-}
-
 static void manual_complete_tile_load (menu_t *menu, surface_t *decoded_image) {
     if (!menu || !decoded_image) {
         return;
@@ -758,14 +788,22 @@ static bool manual_start_page_load (menu_t *menu) {
     menu->manual.loaded_zoom_asset = use_zoom_asset;
     manual_free_prefetch_image(menu);
 
-    manual_prefetch_decode_active = false;
-    png_err_t err = png_decoder_start(page_path, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT, manual_page_callback, menu);
-    if (err != PNG_OK) {
-        menu_show_error(menu, convert_error_message(err));
+    surface_t *native_image = native_image_load_sidecar_rgba16(page_path, MANUAL_NATIVE_SIDECAR, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT);
+    if (native_image) {
+        menu->manual.image = native_image;
+        menu->manual.loaded_page = menu->manual.current_page;
+        menu->manual.page_loading = false;
+        return true;
+    }
+
+    menu->manual.image = native_image_load_sidecar_rgba16(page_path, MANUAL_NATIVE_SIDECAR, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT);
+    if (!menu->manual.image) {
+        menu_show_error(menu, "Manual native page image is missing");
         return false;
     }
 
-    menu->manual.page_loading = true;
+    menu->manual.loaded_page = menu->manual.current_page;
+    menu->manual.page_loading = false;
     return true;
 }
 
@@ -790,15 +828,17 @@ static void manual_maybe_start_prefetch (menu_t *menu) {
         return;
     }
 
-    manual_prefetch_decode_active = true;
-    manual_prefetch_target_page = target_page;
-    png_err_t err = png_decoder_start(page_path, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT, manual_page_callback, menu);
-    if (err != PNG_OK) {
-        manual_prefetch_decode_active = false;
-        manual_prefetch_target_page = -1;
+    surface_t *native_image = native_image_load_sidecar_rgba16(page_path, MANUAL_NATIVE_SIDECAR, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT);
+    if (!native_image) {
         return;
     }
-    menu->manual.prefetch_loading = true;
+
+    manual_free_prefetch_image(menu);
+    menu->manual.prefetch_image = native_image;
+    menu->manual.prefetched_page = target_page;
+    menu->manual.prefetch_loading = false;
+    manual_prefetch_decode_active = false;
+    manual_prefetch_target_page = -1;
 }
 
 static void manual_clamp_pan (menu_t *menu) {
@@ -1215,7 +1255,6 @@ static void manual_start_next_tile_load (menu_t *menu) {
             if (menu->manual.tiled_level_bundle_format[request.level] == MANUAL_TILE_BUNDLE_FORMAT_RGBA16) {
                 surface_t *tile_image = manual_read_bundle_rgba16_surface(
                     menu,
-                    menu->manual.tiled_level_bundle_files[request.level],
                     bundle_entry,
                     request.level,
                     request.row,
@@ -1232,7 +1271,7 @@ static void manual_start_next_tile_load (menu_t *menu) {
 
             uint8_t *png_data = NULL;
             size_t png_size = 0;
-            if (!manual_read_bundle_chunk(menu->manual.tiled_level_bundle_files[request.level], bundle_entry, &png_data, &png_size)) {
+            if (!manual_read_bundle_chunk(menu, request.level, bundle_entry, &png_data, &png_size)) {
                 manual_tile_loading = false;
                 continue;
             }
@@ -1276,11 +1315,23 @@ static void draw_surface_region (surface_t *image, float draw_x, float draw_y, i
     if (src_y >= MANUAL_MAX_BLIT_COORD) {
         src_y = MANUAL_MAX_BLIT_COORD - 1;
     }
+    if (src_x >= image->width) {
+        src_x = image->width - 1;
+    }
+    if (src_y >= image->height) {
+        src_y = image->height - 1;
+    }
     if (src_width > (MANUAL_MAX_BLIT_COORD - src_x)) {
         src_width = MANUAL_MAX_BLIT_COORD - src_x;
     }
     if (src_height > (MANUAL_MAX_BLIT_COORD - src_y)) {
         src_height = MANUAL_MAX_BLIT_COORD - src_y;
+    }
+    if (src_width > (image->width - src_x)) {
+        src_width = image->width - src_x;
+    }
+    if (src_height > (image->height - src_y)) {
+        src_height = image->height - src_y;
     }
     if (src_width < 1) {
         src_width = 1;
@@ -1289,18 +1340,45 @@ static void draw_surface_region (surface_t *image, float draw_x, float draw_y, i
         src_height = 1;
     }
 
-    rdpq_tex_upload(TILE0, image, NULL);
-    rdpq_texture_rectangle_scaled(
-        TILE0,
-        draw_x,
-        draw_y,
-        draw_x + ((float)src_width * total_scale),
-        draw_y + ((float)src_height * total_scale),
-        src_x,
-        src_y,
-        src_x + src_width,
-        src_y + src_height
-    );
+    int bytes_per_pixel = 2;
+    int line_bytes = manual_align_up(src_width * bytes_per_pixel, 8);
+    int max_strip_rows = MANUAL_TMEM_BYTES / line_bytes;
+    if (max_strip_rows < 1) {
+        max_strip_rows = 1;
+    }
+
+    int strip_y = src_y;
+    int remaining_height = src_height;
+    while (remaining_height > 0) {
+        int strip_height = remaining_height;
+        if (strip_height > max_strip_rows) {
+            strip_height = max_strip_rows;
+        }
+
+        rdpq_tex_upload_sub(
+            TILE0,
+            image,
+            NULL,
+            src_x,
+            strip_y,
+            src_x + src_width,
+            strip_y + strip_height
+        );
+        rdpq_texture_rectangle_scaled(
+            TILE0,
+            draw_x,
+            draw_y + ((float)(strip_y - src_y) * total_scale),
+            draw_x + ((float)src_width * total_scale),
+            draw_y + ((float)((strip_y - src_y) + strip_height) * total_scale),
+            src_x,
+            strip_y,
+            src_x + src_width,
+            strip_y + strip_height
+        );
+
+        strip_y += strip_height;
+        remaining_height -= strip_height;
+    }
 }
 
 static void draw_full_page (menu_t *menu, surface_t *display) {
