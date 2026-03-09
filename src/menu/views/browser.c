@@ -1372,8 +1372,7 @@ static void playlist_grid_slot_prepare(menu_t *menu, int slot_index, int entry_i
     if (memory_cache_only) {
         have_meta = playlist_grid_get_boxart_meta_by_index_cached_only(menu, entry_index, game_code, safe_title);
     } else {
-        have_meta = playlist_grid_get_boxart_meta_by_index(menu, entry_index, game_code, safe_title) ||
-                    playlist_grid_get_boxart_meta(entry->path, game_code, safe_title);
+        have_meta = playlist_grid_get_boxart_meta_by_index(menu, entry_index, game_code, safe_title);
     }
 
     if (have_meta) {
