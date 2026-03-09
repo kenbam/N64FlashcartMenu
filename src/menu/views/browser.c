@@ -3549,10 +3549,10 @@ static char *normalize_path (const char *path) {
         prefix_len = 1;
     }
 
-    char work[1024];
+    static char work[1024];
     memcpy(work, path, path_len + 1);
 
-    char *seg_ptrs[128];
+    static char *seg_ptrs[128];
     size_t seg_count = 0;
 
     char *cursor = work + prefix_len;
