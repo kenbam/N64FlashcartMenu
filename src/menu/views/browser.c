@@ -52,6 +52,43 @@ static const char *hidden_root_paths[] = {
     NULL,
 };
 
+/*
+ * ========================================================================
+ * Playlist 3-tier cache architecture
+ * ========================================================================
+ *
+ * Tier 1 — Memory LRU (playlist_mem_cache[])
+ *   Up to PLAYLIST_MEM_CACHE_ENTRIES slots.  Stores parsed entry paths,
+ *   playlist properties, and the content hash.  Hit cost: zero SD I/O.
+ *   Eviction: least-recently-used tick counter.
+ *
+ * Tier 2 — Disk binary cache (sd:/menu/cache/playlists/pl_<hash>.cache)
+ *   Written after a full M3U parse if the source file meets size/entry
+ *   thresholds.  Format: fixed header, length-prefixed strings for props,
+ *   then length-prefixed entry paths.  Validated by magic, version, and
+ *   FNV-1a content hash of the source M3U bytes.
+ *
+ * Tier 3 — Full M3U parse
+ *   Reads the .m3u/.m3u8 line by line, resolves relative paths, handles
+ *   #EXTM3U directives (theme, bgm, bg, viz, grid, smart queries, etc.).
+ *   Result is stored into tier 1 and optionally tier 2.
+ *
+ * Prewarm: on browser init the most-recently-used playlists (stored in
+ * recent.txt) are loaded from tier 2 into tier 1 across idle frames to
+ * give instant navigation to frequently visited playlists.
+ *
+ * Disk cache binary format (version 3):
+ *   playlist_cache_header_t  (fixed 48-byte header)
+ *   len-prefixed string      theme
+ *   len-prefixed string      bgm
+ *   len-prefixed string      bg
+ *   len-prefixed string      screensaver_logo
+ *   len-prefixed string[]    entry_count × entry paths
+ *
+ * Each len-prefixed string: uint32_t length, then `length` bytes (no NUL).
+ * Length 0 means empty/NULL string; length > 65536 is rejected on read.
+ */
+
 #define PLAYLIST_CACHE_MAGIC   (0x504C4331u)
 #define PLAYLIST_CACHE_VERSION (3u)
 #define PLAYLIST_CACHE_DIR     "menu/cache/playlists"
