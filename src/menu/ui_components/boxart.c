@@ -563,7 +563,7 @@ static bool resolve_boxart_directory(const char *storage_prefix, const char *gam
 }
 
 static bool resolve_boxart_image_path(const char *storage_prefix, const char *game_code, const char *rom_title,
-                                      file_image_type_t current_image_view, bool prefer_grid_thumb,
+                                      file_image_type_t current_image_view,
                                       char **resolved_image_path_out) {
     path_t *path = NULL;
     if (!resolve_boxart_directory(storage_prefix, game_code, rom_title, &path)) {
@@ -579,15 +579,7 @@ static bool resolve_boxart_image_path(const char *storage_prefix, const char *ga
         case IMAGE_BOXART_BOTTOM:  path_push(path, "boxart_bottom.png"); break;
         case IMAGE_BOXART_TOP:     path_push(path, "boxart_top.png"); break;
         default:
-            if (prefer_grid_thumb) {
-                path_push(path, "boxart_front.grid.png");
-                if (!file_exists(path_get(path))) {
-                    path_pop(path);
-                    path_push(path, "boxart_front.png");
-                }
-            } else {
-                path_push(path, "boxart_front.png");
-            }
+            path_push(path, "boxart_front.png");
             break;
     }
 
@@ -663,7 +655,7 @@ static void png_decoder_callback(png_err_t err, surface_t *decoded_image, void *
  * @return Pointer to the initialized boxart component, or NULL on failure.
  */
 static component_boxart_t *ui_components_boxart_init_with_options(const char *storage_prefix, const char *game_code, const char *rom_title,
-                                                                  file_image_type_t current_image_view, bool prefer_grid_thumb, bool memory_cache_only, bool async_only) {
+                                                                  file_image_type_t current_image_view, bool memory_cache_only, bool async_only) {
     boxart_queue_pump();
 
     component_boxart_t *b = calloc(1, sizeof(component_boxart_t));
@@ -672,7 +664,7 @@ static component_boxart_t *ui_components_boxart_init_with_options(const char *st
     }
 
     char *resolved_image_path = NULL;
-    if (!resolve_boxart_image_path(storage_prefix, game_code, rom_title, current_image_view, prefer_grid_thumb, &resolved_image_path)) {
+    if (!resolve_boxart_image_path(storage_prefix, game_code, rom_title, current_image_view, &resolved_image_path)) {
         free(b);
         return NULL;
     }
@@ -744,23 +736,23 @@ static component_boxart_t *ui_components_boxart_init_with_options(const char *st
 }
 
 component_boxart_t *ui_components_boxart_init(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, false, false);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, false);
 }
 
 component_boxart_t *ui_components_boxart_init_async(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, false, true);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, true);
 }
 
 component_boxart_t *ui_components_boxart_init_memory_cached(const char *storage_prefix, const char *game_code, const char *rom_title, file_image_type_t current_image_view) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, false, true, false);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, current_image_view, true, false);
 }
 
 component_boxart_t *ui_components_boxart_init_grid(const char *storage_prefix, const char *game_code, const char *rom_title) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, false, false);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, false, false);
 }
 
 component_boxart_t *ui_components_boxart_init_grid_memory_cached(const char *storage_prefix, const char *game_code, const char *rom_title) {
-    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, true, false);
+    return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, false);
 }
 
 /**
