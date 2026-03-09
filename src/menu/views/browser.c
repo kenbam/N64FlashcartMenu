@@ -1065,6 +1065,7 @@ typedef struct {
     int entry_index;
     char *entry_path;
     component_boxart_t *boxart;
+    bool boxart_resolved;
 } playlist_grid_thumb_slot_t;
 
 #define PLAYLIST_GRID_VISIBLE_SLOTS 12
@@ -1240,7 +1241,7 @@ static void playlist_grid_slot_prepare(menu_t *menu, int slot_index, int entry_i
     if (slot->entry_index == entry_index &&
         slot->entry_path &&
         strcmp(slot->entry_path, entry->path) == 0 &&
-        (slot->boxart != NULL || memory_cache_only)) {
+        (slot->boxart_resolved || memory_cache_only)) {
         return;
     }
 
@@ -1251,6 +1252,7 @@ static void playlist_grid_slot_prepare(menu_t *menu, int slot_index, int entry_i
     free(slot->entry_path);
     slot->entry_path = strdup(entry->path);
     slot->entry_index = entry_index;
+    slot->boxart_resolved = false;
     if (!slot->entry_path) {
         return;
     }
@@ -1268,6 +1270,10 @@ static void playlist_grid_slot_prepare(menu_t *menu, int slot_index, int entry_i
         slot->boxart = memory_cache_only
             ? ui_components_boxart_init_grid_memory_cached(menu->storage_prefix, game_code, safe_title)
             : ui_components_boxart_init_grid(menu->storage_prefix, game_code, safe_title);
+    }
+
+    if (!memory_cache_only) {
+        slot->boxart_resolved = true;
     }
 }
 
@@ -2064,7 +2070,7 @@ static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work) {
         playlist_grid_slot_prepare(menu, selected_slot, selected, false);
     }
 
-    int prep_budget = 1;
+    int prep_budget = 2;
     for (int n = 0; n < prep_budget && visible > 0; n++) {
         int i = playlist_grid_prepare_phase % visible;
         playlist_grid_prepare_phase = (playlist_grid_prepare_phase + 1) % (visible > 0 ? visible : 1);
