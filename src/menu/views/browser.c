@@ -1073,7 +1073,6 @@ typedef struct {
 static playlist_grid_thumb_slot_t playlist_grid_slots[PLAYLIST_GRID_THUMB_SLOTS];
 static int playlist_grid_slots_page_start = -1;
 static entry_t *playlist_grid_slots_list = NULL;
-static uint32_t playlist_grid_draw_tick = 0;
 static int playlist_grid_prepare_phase = 0;
 static int playlist_grid_prefetch_phase = 0;
 static bool playlist_grid_page_mem_warm_done = false;
@@ -1828,19 +1827,20 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         return;
     }
 
-    playlist_grid_draw_tick++;
-
+    const int screen_w = display_get_width();
+    const int screen_h = display_get_height();
     const int cols = 4;
-    const int tile_w = 128;
-    const int tile_h = 120;
-    const int gap_x = 8;
-    const int gap_y = 10;
-    const int grid_x = 44;
-    const int grid_y = 64;
     const int rows = 3;
     const int page_size = cols * rows;
-    const int total_w = cols * tile_w + (cols - 1) * gap_x;
-    const int grid_bottom = grid_y + rows * tile_h + (rows - 1) * gap_y;
+    const int gap_x = 6;
+    const int gap_y = 6;
+    const int title_h = 14;
+    const int margin_x = 12;
+    const int tile_w = (screen_w - 2 * margin_x - (cols - 1) * gap_x) / cols;
+    const int art_h = 100;
+    const int tile_h = art_h + title_h;
+    const int grid_x = (screen_w - cols * tile_w - (cols - 1) * gap_x) / 2;
+    const int grid_y = 56;
 
     int selected = menu->browser.selected;
     int entries = menu->browser.entries;
@@ -1861,9 +1861,6 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         playlist_grid_slots_page_start = page_start;
     }
 
-    // panel backing for grid area
-    ui_components_box_draw(grid_x - 8, grid_y - 8, grid_x + total_w + 8, grid_bottom + 8, RGBA32(0x00, 0x00, 0x00, 0x54));
-
     for (int i = 0; i < visible; i++) {
         int entry_index = page_start + i;
         entry_t *entry = &menu->browser.list[entry_index];
@@ -1872,115 +1869,76 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         int x0 = grid_x + col * (tile_w + gap_x);
         int y0 = grid_y + row * (tile_h + gap_y);
         int x1 = x0 + tile_w;
-        int y1 = y0 + tile_h;
         bool is_selected = (entry_index == selected);
-        int pulse = 20 + (int)((playlist_grid_draw_tick + (uint32_t)(i * 7)) % 24);
-        if (pulse > 31) pulse = 62 - pulse;
-        if (pulse < 0) pulse = 0;
-
-        color_t frame = is_selected ? ui_components_file_list_highlight_color() : RGBA32(0x5A, 0x6A, 0x7A, 0xB0);
-        color_t card_bg = RGBA32(0x07, 0x0B, 0x11, is_selected ? 0xDC : 0xA8);
-        color_t art_bg = RGBA32(0x12, 0x18, 0x22, 0xE8);
-        color_t accent;
-        switch (entry->type) {
-            case ENTRY_TYPE_ROM: accent = RGBA32(0x8A, 0xC0, 0xFF, 0xFF); break;
-            case ENTRY_TYPE_DIR: accent = RGBA32(0xFF, 0xD4, 0x6A, 0xFF); break;
-            case ENTRY_TYPE_PLAYLIST: accent = RGBA32(0xFF, 0x9A, 0x57, 0xFF); break;
-            default: accent = RGBA32(0x9A, 0xA8, 0xB8, 0xFF); break;
-        }
-
-        ui_components_box_draw(x0, y0, x1, y1, card_bg);
-        ui_components_border_draw(x0, y0, x1, y1);
-        ui_components_box_draw(x0, y0, x1, y0 + 2, frame);
-        if (is_selected) {
-            ui_components_box_draw(x0 - 2, y0 - 2, x1 + 2, y0, RGBA32(0xFF, 0xFF, 0xFF, 0x18 + pulse));
-            ui_components_box_draw(x0 - 2, y1, x1 + 2, y1 + 2, RGBA32(0xFF, 0xFF, 0xFF, 0x10 + pulse / 2));
-        }
-        ui_components_box_draw(x0 + 4, y0 + 4, x1 - 4, y0 + 86, art_bg);
-        ui_components_box_draw(x0 + 4, y0 + 84, x1 - 4, y0 + 86, accent);
 
         playlist_grid_thumb_slot_t *slot = &playlist_grid_slots[i];
         if (slot->boxart && slot->boxart->image) {
             surface_t *img = slot->boxart->image;
-            const int art_x0 = x0 + 6;
-            const int art_y0 = y0 + 6;
-            const int art_x1 = x1 - 6;
-            const int art_y1 = y0 + 82;
-            const int art_w = art_x1 - art_x0;
-            const int art_h = art_y1 - art_y0;
-            float sx = (float)art_w / (float)img->width;
+            float sx = (float)tile_w / (float)img->width;
             float sy = (float)art_h / (float)img->height;
             float s = (sx < sy) ? sx : sy;
-            if (s > 1.0f) s = 1.0f;
             int draw_w = (int)(img->width * s);
             int draw_h = (int)(img->height * s);
             if (draw_w < 1) draw_w = 1;
             if (draw_h < 1) draw_h = 1;
-            int draw_x = art_x0 + (art_w - draw_w) / 2;
-            int draw_y = art_y0 + (art_h - draw_h) / 2;
+            int draw_x = x0 + (tile_w - draw_w) / 2;
+            int draw_y = y0 + (art_h - draw_h) / 2;
 
             rdpq_mode_push();
-                rdpq_set_mode_copy(false);
-                rdpq_set_scissor(art_x0, art_y0, art_x1, art_y1);
+                rdpq_set_mode_standard();
+                rdpq_mode_combiner(RDPQ_COMBINER_TEX);
+                rdpq_mode_filter(FILTER_BILINEAR);
+                rdpq_set_scissor(x0, y0, x1, y0 + art_h);
                 rdpq_tex_blit(img, draw_x, draw_y, &(rdpq_blitparms_t){
-                    .width = draw_w,
-                    .height = draw_h,
-                    .filtering = false,
+                    .scale_x = s,
+                    .scale_y = s,
                 });
-                rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+                rdpq_set_scissor(0, 0, screen_w, screen_h);
             rdpq_mode_pop();
         } else {
-            // Placeholder while metadata/thumbnail loads or for missing art.
-            ui_components_box_draw(x0 + 12, y0 + 12, x1 - 12, y0 + 24, RGBA32(0xFF, 0xFF, 0xFF, 0x12));
-            ui_components_box_draw(x0 + 12, y0 + 30, x1 - 28, y0 + 38, RGBA32(0xFF, 0xFF, 0xFF, 0x10));
-            ui_components_box_draw(x0 + 12, y0 + 44, x1 - 18, y0 + 52, RGBA32(0xFF, 0xFF, 0xFF, 0x0E));
-            ui_components_box_draw(x0 + 12, y0 + 58, x1 - 36, y0 + 66, RGBA32(0xFF, 0xFF, 0xFF, 0x0C));
-            rdpq_text_printf(&(rdpq_textparms_t){ .width = x1 - x0 - 12, .height = 12, .align = ALIGN_CENTER },
-                             FNT_DEFAULT, x0 + 6, y0 + 69, "%s", (slot->boxart && slot->boxart->loading) ? "Loading..." : "No Art");
+            rdpq_text_printf(&(rdpq_textparms_t){ .width = tile_w, .height = art_h, .align = ALIGN_CENTER, .valign = VALIGN_CENTER },
+                             FNT_DEFAULT, x0, y0, "%s", (slot->boxart && slot->boxart->loading) ? "..." : "");
         }
 
         if (is_selected) {
-            ui_components_border_draw(x0 - 1, y0 - 1, x1 + 1, y1 + 1);
+            ui_components_border_draw(x0 - 1, y0 - 1, x1 + 1, y0 + art_h + 1);
         }
 
-        rdpq_set_scissor(x0 + 6, y0 + 88, x1 - 6, y1 - 4);
         char title_buf[96];
+        rdpq_set_scissor(x0, y0 + art_h + 2, x1, y0 + tile_h);
         rdpq_text_printf(&(rdpq_textparms_t){
-                            .width = (x1 - x0) - 16,
-                            .height = (y1 - y0) - 92,
+                            .width = tile_w,
+                            .height = title_h,
                             .wrap = WRAP_ELLIPSES,
+                            .align = ALIGN_CENTER,
                             .style_id = is_selected ? STL_BLUE : STL_DEFAULT,
                         },
                         FNT_DEFAULT,
-                        x0 + 8,
-                        y0 + 92,
+                        x0,
+                        y0 + art_h + 2,
                         "%s",
                         browser_grid_display_name(entry->name, title_buf, sizeof(title_buf)));
-        rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+        rdpq_set_scissor(0, 0, screen_w, screen_h);
     }
 
-    // Caption/status strip
-    int screen_w = display_get_width();
-    int screen_h = display_get_height();
-    int footer_y0 = screen_h - 72;
-    int footer_y1 = screen_h - 34;
-    ui_components_box_draw(32, footer_y0, screen_w - 32, footer_y1, RGBA32(0x00, 0x00, 0x00, 0x66));
-    ui_components_border_draw(32, footer_y0, screen_w - 32, footer_y1);
+    // Footer: selected item name + page info
+    int footer_y = screen_h - 48;
     entry_t *sel = (selected >= 0 && selected < entries) ? &menu->browser.list[selected] : NULL;
     char caption_buf[128];
     ui_components_main_text_draw(
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
-        "@40,%d\n%s",
-        footer_y0 + 4,
+        "@%d,%d\n%s",
+        margin_x,
+        footer_y,
         sel ? browser_grid_display_name(sel->name, caption_buf, sizeof(caption_buf)) : ""
     );
     ui_components_main_text_draw(
         STL_GRAY,
         ALIGN_RIGHT, VALIGN_TOP,
         "@%d,%d\n%d/%d  Pg %d/%d",
-        screen_w - 40,
-        footer_y0 + 4,
+        screen_w - margin_x,
+        footer_y,
         selected + 1, entries,
         (selected / page_size) + 1,
         (entries + page_size - 1) / page_size
