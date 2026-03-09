@@ -235,9 +235,11 @@ png_err_t png_decoder_start (char *path, int max_width, int max_height, png_call
 
 png_err_t png_decoder_start_buffer_owned (uint8_t *png_data, size_t png_size, int max_width, int max_height, png_callback_t *callback, void *callback_data) {
     if (decoder != NULL) {
+        free(png_data);
         return PNG_ERR_BUSY;
     }
     if (png_data == NULL || png_size == 0) {
+        free(png_data);
         return PNG_ERR_BAD_FILE;
     }
 

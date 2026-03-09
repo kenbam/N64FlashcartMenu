@@ -1269,7 +1269,6 @@ static void manual_start_next_tile_load (menu_t *menu) {
             }
             err = png_decoder_start_buffer_owned(png_data, png_size, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT, manual_tile_callback, menu);
             if (err != PNG_OK) {
-                free(png_data);
                 manual_tile_loading = false;
             }
         } else {
