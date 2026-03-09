@@ -813,6 +813,7 @@ static void menu_bgm_poll (menu_t *menu) {
     bool decoder_busy = png_decoder_is_busy();
     bool loading_or_booting =
         (menu->mode == MENU_MODE_MUSIC_PLAYER) ||
+        (menu->mode == MENU_MODE_MANUAL_VIEWER) ||
         decoder_busy ||
         (menu->mode == MENU_MODE_BOOT) ||
         (menu->next_mode == MENU_MODE_BOOT);
@@ -1072,6 +1073,7 @@ static view_t menu_views[] = {
     { MENU_MODE_SYSTEM_INFO, view_system_info_init, view_system_info_display },
     { MENU_MODE_IMAGE_VIEWER, view_image_viewer_init, view_image_viewer_display },
     { MENU_MODE_TEXT_VIEWER, view_text_viewer_init, view_text_viewer_display },
+    { MENU_MODE_MANUAL_VIEWER, view_manual_viewer_init, view_manual_viewer_display },
     { MENU_MODE_MUSIC_PLAYER, view_music_player_init, view_music_player_display },
     { MENU_MODE_CREDITS, view_credits_init, view_credits_display },
     { MENU_MODE_SETTINGS_EDITOR, view_settings_init, view_settings_display },

@@ -113,6 +113,43 @@ static bool resolve_existing_rom_path(const char *storage_prefix, const char *cu
     return false;
 }
 
+static bool resolve_manual_directory_for_current_rom (menu_t *menu, path_t **out_manual_directory, const char *subdirectory) {
+    if (!menu || !out_manual_directory) {
+        return false;
+    }
+
+    path_t *metadata_directory = path_init(menu->storage_prefix, "menu/metadata");
+    if (!metadata_directory) {
+        return false;
+    }
+
+    if (!resolve_metadata_directory_for_rom(metadata_directory, menu->load.rom_info.game_code, NULL, 0)) {
+        path_free(metadata_directory);
+        return false;
+    }
+
+    path_push(metadata_directory, "manual");
+    if (subdirectory && subdirectory[0] != '\0') {
+        path_push(metadata_directory, (char *)subdirectory);
+    }
+    if (!directory_exists(path_get(metadata_directory))) {
+        path_free(metadata_directory);
+        return false;
+    }
+
+    path_t *manifest_path = path_clone(metadata_directory);
+    path_push(manifest_path, "manifest.ini");
+    bool ok = file_exists(path_get(manifest_path));
+    path_free(manifest_path);
+    if (!ok) {
+        path_free(metadata_directory);
+        return false;
+    }
+
+    *out_manual_directory = metadata_directory;
+    return true;
+}
+
 static bool resolve_bookkeeping_rom_path(menu_t *menu, bookkeeping_item_t *item) {
     if (!menu || !item) {
         return false;
@@ -674,6 +711,76 @@ static void set_menu_next_mode (menu_t *menu, void *arg) {
     menu->next_mode = next_mode;
 }
 
+static void open_manual (menu_t *menu, void *arg) {
+    (void)arg;
+
+    path_t *manual_directory = NULL;
+    if (!resolve_manual_directory_for_current_rom(menu, &manual_directory, NULL)) {
+        menu_show_error(menu, "No manual package found for this ROM");
+        return;
+    }
+
+    if (menu->manual.directory) {
+        path_free(menu->manual.directory);
+    }
+    if (menu->manual.pages_directory) {
+        path_free(menu->manual.pages_directory);
+        menu->manual.pages_directory = NULL;
+    }
+    if (menu->manual.zoom_pages_directory) {
+        path_free(menu->manual.zoom_pages_directory);
+        menu->manual.zoom_pages_directory = NULL;
+    }
+    if (menu->manual.tiled_preview_directory) {
+        path_free(menu->manual.tiled_preview_directory);
+        menu->manual.tiled_preview_directory = NULL;
+    }
+    if (menu->manual.tiled_pages_directory) {
+        path_free(menu->manual.tiled_pages_directory);
+        menu->manual.tiled_pages_directory = NULL;
+    }
+
+    menu->manual.directory = manual_directory;
+    menu->manual.return_mode = MENU_MODE_LOAD_ROM;
+    menu->manual.tiled_beta = false;
+    menu->next_mode = MENU_MODE_MANUAL_VIEWER;
+}
+
+static void open_manual_tiled_beta (menu_t *menu, void *arg) {
+    (void)arg;
+
+    path_t *manual_directory = NULL;
+    if (!resolve_manual_directory_for_current_rom(menu, &manual_directory, "tiled")) {
+        menu_show_error(menu, "No tiled manual beta package found for this ROM");
+        return;
+    }
+
+    if (menu->manual.directory) {
+        path_free(menu->manual.directory);
+    }
+    if (menu->manual.pages_directory) {
+        path_free(menu->manual.pages_directory);
+        menu->manual.pages_directory = NULL;
+    }
+    if (menu->manual.zoom_pages_directory) {
+        path_free(menu->manual.zoom_pages_directory);
+        menu->manual.zoom_pages_directory = NULL;
+    }
+    if (menu->manual.tiled_preview_directory) {
+        path_free(menu->manual.tiled_preview_directory);
+        menu->manual.tiled_preview_directory = NULL;
+    }
+    if (menu->manual.tiled_pages_directory) {
+        path_free(menu->manual.tiled_pages_directory);
+        menu->manual.tiled_pages_directory = NULL;
+    }
+
+    menu->manual.directory = manual_directory;
+    menu->manual.return_mode = MENU_MODE_LOAD_ROM;
+    menu->manual.tiled_beta = true;
+    menu->next_mode = MENU_MODE_MANUAL_VIEWER;
+}
+
 static component_context_menu_t options_context_menu = { .list = {
     { .text = "Set CIC Type", .submenu = &set_cic_type_context_menu },
     { .text = "Set Save Type", .submenu = &set_save_type_context_menu },
@@ -684,6 +791,8 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Use Cheats", .submenu = &set_cheat_options_menu },
     { .text = "Virtual Controller Pak", .submenu = &set_virtual_pak_options_menu },
     { .text = "Datel Code Editor", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_DATEL_CODE_EDITOR) },
+    { .text = "Open Manual", .action = open_manual },
+    { .text = "View Manual (Tiled Beta)", .action = open_manual_tiled_beta },
 #ifdef FEATURE_PATCHER_GUI_ENABLED
     { .text = "Use Patches", .submenu = &set_patcher_options_menu },
 #endif

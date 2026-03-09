@@ -11,6 +11,7 @@
 #include <miniz.h>
 #include <miniz_zip.h>
 #include <time.h>
+#include <surface.h>
 
 #include "boot/boot.h"
 #include "disk_info.h"
@@ -49,7 +50,8 @@ typedef enum {
     MENU_MODE_HISTORY,
     MENU_MODE_PLAYTIME,
     MENU_MODE_DATEL_CODE_EDITOR,
-    MENU_MODE_EXTRACT_FILE
+    MENU_MODE_EXTRACT_FILE,
+    MENU_MODE_MANUAL_VIEWER
 } menu_mode_t;
 
 /** @brief File entry type enumeration */
@@ -79,6 +81,19 @@ typedef struct {
     int32_t index;
     time_t last_played;
 } entry_t;
+
+typedef struct {
+    int32_t page;
+    int32_t row;
+    int32_t col;
+    uint32_t offset;
+    uint32_t size;
+} manual_tile_bundle_entry_t;
+
+typedef enum {
+    MANUAL_TILE_BUNDLE_FORMAT_PNG = 0,
+    MANUAL_TILE_BUNDLE_FORMAT_RGBA16 = 1,
+} manual_tile_bundle_format_t;
 
 /** @brief Browser sort mode */
 typedef enum {
@@ -168,6 +183,50 @@ typedef struct {
         bool emulator_file;
         bool extract_file;
     } load_pending;
+
+    struct {
+        path_t *directory;
+        path_t *pages_directory;
+        path_t *zoom_pages_directory;
+        path_t *tiled_preview_directory;
+        path_t *tiled_pages_directory;
+        path_t *tiled_level_directories[3];
+        path_t *tiled_level_bundle_files[3];
+        menu_mode_t return_mode;
+        int32_t page_count;
+        int32_t current_page;
+        int32_t zoom_level;
+        int32_t max_zoom_level;
+        int32_t loaded_page;
+        int32_t prefetched_page;
+        bool has_zoom_pages;
+        bool loaded_zoom_asset;
+        bool tiled_beta;
+        bool page_loading;
+        bool prefetch_loading;
+        int32_t tiled_level_count;
+        int32_t tiled_active_level;
+        int32_t tiled_level_zoom[3];
+        int32_t tiled_level_page_width[3];
+        int32_t tiled_level_page_height[3];
+        int32_t tiled_level_tile_size[3];
+        int32_t tiled_level_rows[3];
+        int32_t tiled_level_cols[3];
+        int32_t tiled_level_bundle_entry_counts[3];
+        int32_t tiled_level_bundle_format[3];
+        int32_t tiled_page_width;
+        int32_t tiled_page_height;
+        int32_t tiled_tile_size;
+        int32_t tiled_rows;
+        int32_t tiled_cols;
+        float pan_x;
+        float pan_y;
+        bool tiled_level_bundle_enabled[3];
+        surface_t *image;
+        surface_t *prefetch_image;
+        manual_tile_bundle_entry_t *tiled_level_bundle_entries[3];
+        char title[ROM_METADATA_NAME_LENGTH];
+    } manual;
 } menu_t;
 
 

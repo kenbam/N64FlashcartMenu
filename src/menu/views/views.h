@@ -113,6 +113,21 @@ void view_text_viewer_init(menu_t *menu);
 void view_text_viewer_display(menu_t *menu, surface_t *display);
 
 /**
+ * @brief Initialize the manual viewer view.
+ *
+ * @param menu Pointer to the menu structure.
+ */
+void view_manual_viewer_init(menu_t *menu);
+
+/**
+ * @brief Display the manual viewer view.
+ *
+ * @param menu Pointer to the menu structure.
+ * @param display Pointer to the display surface.
+ */
+void view_manual_viewer_display(menu_t *menu, surface_t *display);
+
+/**
  * @brief Initialize the music player view.
  *
  * @param menu Pointer to the menu structure.
