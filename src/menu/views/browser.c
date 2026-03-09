@@ -1940,7 +1940,6 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         }
 
         if (is_selected) {
-            ui_components_box_draw(x0 - 1, y0 - 1, x1 + 1, y1 + 1, RGBA32(0xFF, 0xFF, 0xFF, 0x10));
             ui_components_border_draw(x0 - 1, y0 - 1, x1 + 1, y1 + 1);
         }
 
