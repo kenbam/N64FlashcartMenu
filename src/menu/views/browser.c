@@ -1924,6 +1924,16 @@ static void browser_list_free (menu_t *menu) {
     menu->browser.selected = -1;
 }
 
+void view_browser_deinit (menu_t *menu) {
+    if (!menu) {
+        return;
+    }
+    browser_list_free(menu);
+    for (int i = 0; i < PLAYLIST_MEM_CACHE_ENTRIES; i++) {
+        playlist_mem_cache_entry_clear(&playlist_mem_cache[i]);
+    }
+}
+
 static bool load_archive (menu_t *menu) {
     browser_list_free(menu);
 

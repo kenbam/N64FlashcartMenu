@@ -1044,10 +1044,7 @@ static void menu_deinit (menu_t *menu) {
     path_free(menu->load.disk_slots.primary.disk_path);
     path_free(menu->load.rom_path);
     free(menu->runtime_bgm_override_file);
-    for (int i = 0; i < menu->browser.entries; i++) {
-        free(menu->browser.list[i].name);
-    }
-    free(menu->browser.list);
+    view_browser_deinit(menu);
     path_free(menu->browser.directory);
     free(menu);
 

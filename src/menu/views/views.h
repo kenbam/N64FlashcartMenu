@@ -49,6 +49,13 @@ void view_browser_init(menu_t *menu);
  * @param display Pointer to the display surface.
  */
 void view_browser_display(menu_t *menu, surface_t *display);
+
+/**
+ * @brief Deinitialize the browser view, freeing all allocations.
+ *
+ * @param menu Pointer to the menu structure.
+ */
+void view_browser_deinit(menu_t *menu);
 void browser_playlist_perf_note_bgm_reload(uint32_t ms);
 void browser_playlist_perf_note_screensaver_logo_reload(uint32_t ms);
 
