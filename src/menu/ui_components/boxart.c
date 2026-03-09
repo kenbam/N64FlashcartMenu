@@ -56,6 +56,48 @@ static int g_boxart_load_queue_count = 0;
 static void boxart_queue_pump(void);
 static void png_decoder_callback(png_err_t err, surface_t *decoded_image, void *callback_data);
 
+/* Cache resolved boxart directory paths to avoid repeated SD stat cascades.
+ * Keyed by the 3-byte game code prefix (category + unique_code[2]).
+ * A resolved_dir of NULL means "no boxart directory exists for this code." */
+#define BOXART_DIR_CACHE_SIZE 32
+typedef struct {
+    char code_prefix[3];
+    bool valid;
+    bool found;
+    char *resolved_dir;     /* Full path including storage prefix, or NULL */
+} boxart_dir_cache_entry_t;
+
+static boxart_dir_cache_entry_t g_boxart_dir_cache[BOXART_DIR_CACHE_SIZE];
+
+static boxart_dir_cache_entry_t *boxart_dir_cache_find(const char *game_code) {
+    for (int i = 0; i < BOXART_DIR_CACHE_SIZE; i++) {
+        if (g_boxart_dir_cache[i].valid &&
+            g_boxart_dir_cache[i].code_prefix[0] == game_code[0] &&
+            g_boxart_dir_cache[i].code_prefix[1] == game_code[1] &&
+            g_boxart_dir_cache[i].code_prefix[2] == game_code[2]) {
+            return &g_boxart_dir_cache[i];
+        }
+    }
+    return NULL;
+}
+
+static boxart_dir_cache_entry_t *boxart_dir_cache_alloc(const char *game_code) {
+    for (int i = 0; i < BOXART_DIR_CACHE_SIZE; i++) {
+        if (!g_boxart_dir_cache[i].valid) {
+            g_boxart_dir_cache[i].valid = true;
+            memcpy(g_boxart_dir_cache[i].code_prefix, game_code, 3);
+            return &g_boxart_dir_cache[i];
+        }
+    }
+    /* Evict slot 0 (simple, grid pages are small) */
+    free(g_boxart_dir_cache[0].resolved_dir);
+    g_boxart_dir_cache[0].resolved_dir = NULL;
+    g_boxart_dir_cache[0].valid = true;
+    memcpy(g_boxart_dir_cache[0].code_prefix, game_code, 3);
+    g_boxart_dir_cache[0].found = false;
+    return &g_boxart_dir_cache[0];
+}
+
 static bool string_ends_with(const char *s, const char *suffix) {
     if (!s || !suffix) {
         return false;
@@ -444,17 +486,15 @@ static bool resolve_metadata_boxart_directory (path_t *path, const char *game_co
     return false;
 }
 
-static bool resolve_boxart_image_path(const char *storage_prefix, const char *game_code, const char *rom_title,
-                                      file_image_type_t current_image_view, bool prefer_grid_thumb,
-                                      char **resolved_image_path_out) {
-    char boxart_path[32] = {0};
-    bool found = false;
-    path_t *path = path_init(storage_prefix, METADATA_BASE_DIRECTORY);
-    if (!path) {
-        return false;
-    }
+static bool resolve_boxart_directory(const char *storage_prefix, const char *game_code, const char *rom_title, path_t **path_out) {
+    bool is_homebrew = (game_code[1] == 'E' && game_code[2] == 'D');
 
-    if (game_code[1] == 'E' && game_code[2] == 'D') {
+    /* Homebrew uses title-based paths — not cacheable by game_code prefix. */
+    if (is_homebrew) {
+        path_t *path = path_init(storage_prefix, METADATA_BASE_DIRECTORY);
+        if (!path) {
+            return false;
+        }
         char safe_title[21];
         memcpy(safe_title, rom_title, 20);
         safe_title[20] = '\0';
@@ -463,49 +503,98 @@ static bool resolve_boxart_image_path(const char *storage_prefix, const char *ga
                 *p = '_';
             }
         }
+        char boxart_path[48];
         snprintf(boxart_path, sizeof(boxart_path), HOMEBREW_ID_SUBDIRECTORY"/%s", safe_title);
         path_push(path, boxart_path);
+        if (directory_exists(path_get(path))) {
+            *path_out = path;
+            return true;
+        }
+        path_free(path);
+        return false;
+    }
+
+    /* Check directory cache for this game code prefix. */
+    boxart_dir_cache_entry_t *cached = boxart_dir_cache_find(game_code);
+    if (cached) {
+        if (!cached->found) {
+            return false;
+        }
+        path_t *path = path_create(cached->resolved_dir);
+        if (!path) {
+            return false;
+        }
+        *path_out = path;
+        return true;
+    }
+
+    /* Cache miss — do the full directory search. */
+    char boxart_subdir[32] = {0};
+    path_t *path = path_init(storage_prefix, METADATA_BASE_DIRECTORY);
+    bool dir_found = false;
+
+    if (path && resolve_metadata_boxart_directory(path, game_code, boxart_subdir, sizeof(boxart_subdir))) {
+        dir_found = true;
     } else {
-        if (!resolve_metadata_boxart_directory(path, game_code, boxart_path, sizeof(boxart_path))) {
-            path_free(path);
-            path = path_init(storage_prefix, OLD_BOXART_DIRECTORY);
-            if (!path) {
-                return false;
-            }
-            if (!resolve_metadata_boxart_directory(path, game_code, boxart_path, sizeof(boxart_path))) {
-                boxart_path[0] = '\0';
-            }
+        path_free(path);
+        path = path_init(storage_prefix, OLD_BOXART_DIRECTORY);
+        if (path && resolve_metadata_boxart_directory(path, game_code, boxart_subdir, sizeof(boxart_subdir))) {
+            dir_found = true;
         }
     }
 
-    debugf("Boxart: Using path %s\n", boxart_path);
+    if (dir_found && !directory_exists(path_get(path))) {
+        dir_found = false;
+    }
 
-    if (directory_exists(path_get(path))) {
-        switch (current_image_view) {
-            case IMAGE_GAMEPAK_FRONT:  path_push(path, "gamepak_front.png"); break;
-            case IMAGE_GAMEPAK_BACK:   path_push(path, "gamepak_back.png"); break;
-            case IMAGE_BOXART_BACK:    path_push(path, "boxart_back.png"); break;
-            case IMAGE_BOXART_LEFT:    path_push(path, "boxart_left.png"); break;
-            case IMAGE_BOXART_RIGHT:   path_push(path, "boxart_right.png"); break;
-            case IMAGE_BOXART_BOTTOM:  path_push(path, "boxart_bottom.png"); break;
-            case IMAGE_BOXART_TOP:     path_push(path, "boxart_top.png"); break;
-            default:
-                if (prefer_grid_thumb) {
-                    path_push(path, "boxart_front.grid.png");
-                    if (!file_exists(path_get(path))) {
-                        path_pop(path);
-                        path_push(path, "boxart_front.png");
-                    }
-                } else {
+    /* Store result in cache. */
+    boxart_dir_cache_entry_t *entry = boxart_dir_cache_alloc(game_code);
+    if (dir_found) {
+        entry->found = true;
+        entry->resolved_dir = strdup(path_get(path));
+        *path_out = path;
+        return true;
+    } else {
+        entry->found = false;
+        entry->resolved_dir = NULL;
+        path_free(path);
+        return false;
+    }
+}
+
+static bool resolve_boxart_image_path(const char *storage_prefix, const char *game_code, const char *rom_title,
+                                      file_image_type_t current_image_view, bool prefer_grid_thumb,
+                                      char **resolved_image_path_out) {
+    path_t *path = NULL;
+    if (!resolve_boxart_directory(storage_prefix, game_code, rom_title, &path)) {
+        return false;
+    }
+
+    switch (current_image_view) {
+        case IMAGE_GAMEPAK_FRONT:  path_push(path, "gamepak_front.png"); break;
+        case IMAGE_GAMEPAK_BACK:   path_push(path, "gamepak_back.png"); break;
+        case IMAGE_BOXART_BACK:    path_push(path, "boxart_back.png"); break;
+        case IMAGE_BOXART_LEFT:    path_push(path, "boxart_left.png"); break;
+        case IMAGE_BOXART_RIGHT:   path_push(path, "boxart_right.png"); break;
+        case IMAGE_BOXART_BOTTOM:  path_push(path, "boxart_bottom.png"); break;
+        case IMAGE_BOXART_TOP:     path_push(path, "boxart_top.png"); break;
+        default:
+            if (prefer_grid_thumb) {
+                path_push(path, "boxart_front.grid.png");
+                if (!file_exists(path_get(path))) {
+                    path_pop(path);
                     path_push(path, "boxart_front.png");
                 }
-                break;
-        }
+            } else {
+                path_push(path, "boxart_front.png");
+            }
+            break;
+    }
 
-        if (file_exists(path_get(path)) || native_image_sidecar_exists(path_get(path), BOXART_NATIVE_SIDECAR)) {
-            *resolved_image_path_out = strdup(path_get(path));
-            found = (*resolved_image_path_out != NULL);
-        }
+    bool found = false;
+    if (file_exists(path_get(path)) || native_image_sidecar_exists(path_get(path), BOXART_NATIVE_SIDECAR)) {
+        *resolved_image_path_out = strdup(path_get(path));
+        found = (*resolved_image_path_out != NULL);
     }
 
     path_free(path);
