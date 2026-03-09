@@ -17,20 +17,21 @@ static char *convert_error_message (mp3player_err_t err) {
     }
 }
 
-static void format_elapsed_duration (char *buffer, float elapsed, float duration) {
-    strcpy(buffer, "");
+static void format_elapsed_duration (char *buffer, size_t buf_size, float elapsed, float duration) {
+    size_t off = 0;
+    buffer[0] = '\0';
 
     if (duration >= 3600) {
-        sprintf(buffer + strlen(buffer), "%02d:", (int) (elapsed) / 3600);
+        off += snprintf(buffer + off, buf_size - off, "%02d:", (int) (elapsed) / 3600);
     }
-    sprintf(buffer + strlen(buffer), "%02d:%02d", ((int) (elapsed) % 3600) / 60, (int) (elapsed) % 60);
+    off += snprintf(buffer + off, buf_size - off, "%02d:%02d", ((int) (elapsed) % 3600) / 60, (int) (elapsed) % 60);
 
-    strcat(buffer, " / ");
+    off += snprintf(buffer + off, buf_size - off, " / ");
 
     if (duration >= 3600) {
-        sprintf(buffer + strlen(buffer), "%02d:", (int) (duration) / 3600);
+        off += snprintf(buffer + off, buf_size - off, "%02d:", (int) (duration) / 3600);
     }
-    sprintf(buffer + strlen(buffer), "%02d:%02d", ((int) (duration) % 3600) / 60, (int) (duration) % 60);
+    snprintf(buffer + off, buf_size - off, "%02d:%02d", ((int) (duration) % 3600) / 60, (int) (duration) % 60);
 }
 
 
@@ -80,6 +81,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
     format_elapsed_duration(
         formatted_track_elapsed_length,
+        sizeof(formatted_track_elapsed_length),
         mp3player_get_duration() * mp3player_get_progress(),
         mp3player_get_duration()
     );

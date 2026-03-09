@@ -66,29 +66,29 @@ void ui_components_set_file_list_top_inset(int inset_pixels) {
  * @param size Size of the file in bytes.
  * @return Number of characters written to the buffer.
  */
-static int format_file_size(char *buffer, int64_t size) {
+static int format_file_size(char *buffer, size_t buf_size, int64_t size) {
     if (size < 0) {
-        return sprintf(buffer, "unknown");
+        return snprintf(buffer, buf_size, "unknown");
     } else if (size == 0) {
-        return sprintf(buffer, "empty");
+        return snprintf(buffer, buf_size, "empty");
     } else if (size < 8 * 1024) {
-        return sprintf(buffer, "%lld B", size);
+        return snprintf(buffer, buf_size, "%lld B", size);
     } else if (size < 4 * 1024 * 1024) {
-        return sprintf(buffer, "%lld kB", size / 1024);
+        return snprintf(buffer, buf_size, "%lld kB", size / 1024);
     } else if (size < 1 * 1024 * 1024 * 1024) {
-        return sprintf(buffer, "%lld MB", size / 1024 / 1024);
+        return snprintf(buffer, buf_size, "%lld MB", size / 1024 / 1024);
     } else {
-        return sprintf(buffer, "%lld GB", size / 1024 / 1024 / 1024);
+        return snprintf(buffer, buf_size, "%lld GB", size / 1024 / 1024 / 1024);
     }
 }
 
-static int format_last_played(char *buffer, const entry_t *entry) {
+static int format_last_played(char *buffer, size_t buf_size, const entry_t *entry) {
     if (!buffer || !entry) {
-        return sprintf(buffer, "--");
+        return snprintf(buffer, buf_size, "--");
     }
 
     if (entry->type != ENTRY_TYPE_ROM && entry->type != ENTRY_TYPE_DISK && entry->type != ENTRY_TYPE_EMULATOR) {
-        return sprintf(buffer, "--");
+        return snprintf(buffer, buf_size, "--");
     }
 
     if (entry->last_played <= 0) {
@@ -96,7 +96,7 @@ static int format_last_played(char *buffer, const entry_t *entry) {
         return 0;
     }
     if (file_list_now <= 0) {
-        return sprintf(buffer, "Played");
+        return snprintf(buffer, buf_size, "Played");
     }
 
     int64_t delta = (int64_t)file_list_now - (int64_t)entry->last_played;
@@ -104,15 +104,15 @@ static int format_last_played(char *buffer, const entry_t *entry) {
         delta = 0;
     }
     if (delta < 86400) {
-        return sprintf(buffer, "Today");
+        return snprintf(buffer, buf_size, "Today");
     }
     if (delta < (86400 * 7)) {
-        return sprintf(buffer, "%lldd ago", (long long)(delta / 86400));
+        return snprintf(buffer, buf_size, "%lldd ago", (long long)(delta / 86400));
     }
     if (delta < (86400 * 30)) {
-        return sprintf(buffer, "%lldw ago", (long long)(delta / (86400 * 7)));
+        return snprintf(buffer, buf_size, "%lldw ago", (long long)(delta / (86400 * 7)));
     }
-    return sprintf(buffer, "%lldmo ago", (long long)(delta / (86400 * 30)));
+    return snprintf(buffer, buf_size, "%lldmo ago", (long long)(delta / (86400 * 30)));
 }
 
 /**
@@ -305,7 +305,7 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
             if (entry->type != ENTRY_TYPE_DIR) {
                 // Playlists typically have unknown entry sizes; last-played is higher-value.
-                rdpq_paragraph_builder_span(second_col, format_last_played(second_col, entry));
+                rdpq_paragraph_builder_span(second_col, format_last_played(second_col, sizeof(second_col), entry));
             }
             else {
                 rdpq_paragraph_builder_span(directory_icon, 5);

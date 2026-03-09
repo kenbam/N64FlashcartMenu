@@ -205,7 +205,7 @@ static void scan_metadata_images(menu_t *menu) {
             }
         }
 
-        sprintf(game_code_path, "homebrew/%s", safe_title); // should be HOMEBREW_ID_SUBDIRECTORY
+        snprintf(game_code_path, sizeof(game_code_path), "homebrew/%s", safe_title); // should be HOMEBREW_ID_SUBDIRECTORY
         path_push(path, game_code_path);
     }
     else {
