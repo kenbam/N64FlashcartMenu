@@ -66,7 +66,7 @@ static int32_t manual_tile_loading_page;
 static int32_t manual_tile_loading_row;
 static int32_t manual_tile_loading_col;
 static FILE *manual_tile_bundle_streams[MANUAL_TILED_LEVEL_MAX];
-static uint8_t manual_tile_bundle_stream_buffers[MANUAL_TILED_LEVEL_MAX][32768];
+static uint8_t *manual_tile_bundle_stream_buffers[MANUAL_TILED_LEVEL_MAX];
 static bool manual_tile_window_valid;
 static int32_t manual_tile_window_level;
 static int32_t manual_tile_window_page;
@@ -97,7 +97,14 @@ static FILE *manual_get_tile_bundle_stream (menu_t *menu, int level) {
         return NULL;
     }
 
-    setvbuf(file, (char *)manual_tile_bundle_stream_buffers[level], _IOFBF, sizeof(manual_tile_bundle_stream_buffers[level]));
+    if (!manual_tile_bundle_stream_buffers[level]) {
+        manual_tile_bundle_stream_buffers[level] = malloc(32768);
+        if (!manual_tile_bundle_stream_buffers[level]) {
+            fclose(file);
+            return NULL;
+        }
+    }
+    setvbuf(file, (char *)manual_tile_bundle_stream_buffers[level], _IOFBF, 32768);
     manual_tile_bundle_streams[level] = file;
     return file;
 }
@@ -110,6 +117,10 @@ static void manual_close_tile_bundle_stream (int level) {
     if (manual_tile_bundle_streams[level]) {
         fclose(manual_tile_bundle_streams[level]);
         manual_tile_bundle_streams[level] = NULL;
+    }
+    if (manual_tile_bundle_stream_buffers[level]) {
+        free(manual_tile_bundle_stream_buffers[level]);
+        manual_tile_bundle_stream_buffers[level] = NULL;
     }
 }
 
