@@ -238,7 +238,7 @@ void playtime_load (playtime_db_t *db) {
         playtime_save(db);
     }
 
-    mini_t *ini = mini_try_load(playtime_path);
+    mini_t *ini = mini_try_load_safe(playtime_path);
     int64_t count = mini_get_int(ini, "stats", "count", 0);
     if (count < 0) {
         count = 0;

@@ -63,7 +63,7 @@ void settings_load (settings_t *settings) {
         settings_save(&init);
     }
 
-    mini_t *ini = mini_try_load(settings_path);
+    mini_t *ini = mini_try_load_safe(settings_path);
 
     settings->schema_revision = mini_get_int(ini, "menu", "schema_revision", init.schema_revision);
     settings->first_run = mini_get_bool(ini, "menu", "first_run", init.first_run);

@@ -279,3 +279,34 @@ int mini_save_safe(void *opaque, int flags) {
     free(tmp_path);
     return mini_save(ini, flags);
 }
+
+/* NOTE: Coupled to mini_t struct layout (sets ini->path on recovery). */
+void *mini_try_load_safe(const char *path) {
+    mini_t *ini = mini_try_load(path);
+
+    /* If the file was empty/missing, check for orphaned .tmp from interrupted save */
+    if (ini && ini->head && !ini->head->head) {
+        size_t path_len = strlen(path);
+        char *tmp_path = malloc(path_len + 5);
+        if (tmp_path) {
+            memcpy(tmp_path, path, path_len);
+            memcpy(tmp_path + path_len, ".tmp", 5);
+            if (file_exists(tmp_path)) {
+                mini_t *recovered = mini_try_load(tmp_path);
+                if (recovered && recovered->head && recovered->head->head) {
+                    /* .tmp has data — use it and rename over the real file */
+                    free(recovered->path);
+                    recovered->path = strdup(path);
+                    mini_free(ini);
+                    file_rename(tmp_path, path);
+                    free(tmp_path);
+                    return recovered;
+                }
+                mini_free(recovered);
+            }
+            free(tmp_path);
+        }
+    }
+
+    return ini;
+}

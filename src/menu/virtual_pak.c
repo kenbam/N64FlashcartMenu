@@ -43,7 +43,7 @@ static void virtual_pak_session_load(virtual_pak_session_t *session) {
         return;
     }
 
-    mini_t *ini = mini_try_load(g_session_path);
+    mini_t *ini = mini_try_load_safe(g_session_path);
     if (!ini) {
         return;
     }

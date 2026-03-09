@@ -81,7 +81,7 @@ void bookkeeping_load (bookkeeping_t *history) {
         bookkeeping_save(&init);
     }
 
-    mini_t *bookkeeping_ini = mini_try_load(history_path);
+    mini_t *bookkeeping_ini = mini_try_load_safe(history_path);
     bookkeeping_ini_load_list(history->history_items, HISTORY_COUNT, bookkeeping_ini, "history");
     bookkeeping_ini_load_list(history->favorite_items, FAVORITES_COUNT, bookkeeping_ini, "favorite");
 

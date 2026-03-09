@@ -135,4 +135,15 @@ bool file_rename(const char *old_path, const char *new_path);
  */
 int mini_save_safe(void *ini, int flags);
 
+/**
+ * @brief Load a mini_t INI file with .tmp recovery.
+ *
+ * If the main file is empty/missing but a .tmp exists from an interrupted
+ * atomic save, recovers from the .tmp and renames it into place.
+ *
+ * @param path Path to the INI file.
+ * @return mini_t* (as void* to avoid exposing mini.h in this header).
+ */
+void *mini_try_load_safe(const char *path);
+
 #endif // UTILS_FS_H__
