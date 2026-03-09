@@ -472,7 +472,7 @@ static void playlist_recent_init(menu_t *menu) {
     }
 
     playlist_recent_prewarm_index = 0;
-    playlist_recent_prewarm_cooldown = 15;
+    playlist_recent_prewarm_cooldown = 3;
     playlist_recent_loaded = true;
 }
 
@@ -524,7 +524,7 @@ static void playlist_recent_remember(const char *playlist_path) {
 
     playlist_recent_save();
     playlist_recent_prewarm_index = 0;
-    playlist_recent_prewarm_cooldown = 15;
+    playlist_recent_prewarm_cooldown = 3;
 }
 
 static bool playlist_mem_cache_prewarm_from_disk(menu_t *menu, const char *playlist_path) {
@@ -630,7 +630,7 @@ static void playlist_recent_prewarm_tick(menu_t *menu) {
         playlist_mem_cache_prewarm_from_disk(menu, path);
     }
     playlist_recent_prewarm_index++;
-    playlist_recent_prewarm_cooldown = 15;
+    playlist_recent_prewarm_cooldown = 3;
 }
 
 static bool playlist_cache_write_string(FILE *f, const char *value) {
