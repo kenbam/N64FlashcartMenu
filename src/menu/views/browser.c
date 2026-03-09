@@ -2715,7 +2715,7 @@ static bool smart_playlist_collect_dir(
     int *capacity,
     int depth
 ) {
-    if (!menu || !dir_path || !query || !entries || !count || !capacity || depth > 12) {
+    if (!menu || !dir_path || !query || !entries || !count || !capacity || depth > 6) {
         return false;
     }
     if (!directory_exists(path_get(dir_path))) {
@@ -2748,14 +2748,19 @@ static bool smart_playlist_collect_dir(
                 return false;
             }
             path_t *rom_path = path_create(normalized);
-            rom_info_t rom_info = {0};
+            rom_info_t *rom_info = calloc(1, sizeof(rom_info_t));
+            if (!rom_info) {
+                free(normalized);
+                path_free(rom_path);
+                return false;
+            }
             rom_load_options_t load_options = {
                 .include_config = false,
                 .include_long_description = smart_playlist_query_needs_long_description(query),
             };
-            if (rom_path && rom_config_load_ex(rom_path, &rom_info, &load_options) == ROM_OK) {
+            if (rom_path && rom_config_load_ex(rom_path, rom_info, &load_options) == ROM_OK) {
                 smart_playlist_entry_t candidate = {0};
-                if (smart_playlist_matches(menu, query, normalized, &rom_info, &candidate)) {
+                if (smart_playlist_matches(menu, query, normalized, rom_info, &candidate)) {
                     int needed = *count + 1;
                     if (needed > 16384) {
                         smart_playlist_entry_free(&candidate);
@@ -2770,6 +2775,7 @@ static bool smart_playlist_collect_dir(
                         if (!next) {
                             free(normalized);
                             path_free(rom_path);
+                            free(rom_info);
                             smart_playlist_entry_free(&candidate);
                             return false;
                         }
@@ -2780,6 +2786,7 @@ static bool smart_playlist_collect_dir(
                     (*count)++;
                 }
             }
+            free(rom_info);
             path_free(rom_path);
             free(normalized);
         }
