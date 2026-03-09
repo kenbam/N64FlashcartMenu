@@ -1806,16 +1806,16 @@ static int browser_pick_random_index(menu_t *menu) {
         if (mode == RANDOM_MODE_ANY_GAME) {
             keep = true;
         } else if (mode == RANDOM_MODE_UNPLAYED) {
-            playtime_entry_t *stat = playtime_get(&menu->playtime, entry_path);
+            playtime_entry_t *stat = playtime_get_if_cached(&menu->playtime, entry_path);
             keep = (stat == NULL || stat->play_count == 0);
         } else if (mode == RANDOM_MODE_UNDERPLAYED) {
-            playtime_entry_t *stat = playtime_get(&menu->playtime, entry_path);
+            playtime_entry_t *stat = playtime_get_if_cached(&menu->playtime, entry_path);
             total_seconds = stat ? stat->total_seconds : 0;
             keep = true;
         } else if (mode == RANDOM_MODE_FAVORITES) {
             keep = path_is_favorite(menu, entry_path);
         } else if (mode == RANDOM_MODE_SMART) {
-            playtime_entry_t *stat = playtime_get(&menu->playtime, entry_path);
+            playtime_entry_t *stat = playtime_get_if_cached(&menu->playtime, entry_path);
             total_seconds = stat ? stat->total_seconds : 0;
             last_played = stat ? stat->last_played : 0;
             play_count = stat ? stat->play_count : 0;
