@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <dir.h>
 #include "utils/cpakfs_utils.h"
+#include "utils/fs.h"
 
 #define MAX_STRING_LENGTH 62
 
@@ -250,9 +251,11 @@ static void dump_complete_cpak(int port) {
 
     get_rtc_time(string_datetime_cpak);
     char complete_filename[200];
+    char tmp_filename[205];
     snprintf(complete_filename, sizeof(complete_filename), "%s/CPAK_%s%s", CPAK_PATH, string_datetime_cpak, CPAK_EXTENSION);
+    snprintf(tmp_filename, sizeof(tmp_filename), "%s.tmp", complete_filename);
 
-    FILE *fp = fopen(complete_filename, "wb");
+    FILE *fp = fopen(tmp_filename, "wb");
     if (!fp) {
         snprintf(failure_message_note, sizeof(failure_message_note), "Failed to open file for writing: %s\n", complete_filename);
         error_message_displayed = true;
@@ -288,7 +291,11 @@ static void dump_complete_cpak(int port) {
     }
 
     free(bankbuf);
-    fclose(fp);
+    if (fclose(fp) != 0 || !file_rename(tmp_filename, complete_filename)) {
+        snprintf(failure_message_note, sizeof(failure_message_note), "Failed to finalize file: %s", complete_filename);
+        error_message_displayed = true;
+        return;
+    }
     process_complete_full_dump = true;
 }
 
@@ -308,11 +315,14 @@ static void dump_single_note(int _port, int16_t selected_index) {
         return;
     }
 
-    snprintf(filename_note, sizeof(filename_note), "%s/%s_%s%s", CPAK_NOTES_PATH, controller_pak_name_notes[selected_index], string_datetime_cpak, CPAK_NOTE_EXTENSION);
+    char final_filename[256];
+    char tmp_filename[261];
+    snprintf(final_filename, sizeof(final_filename), "%s/%s_%s%s", CPAK_NOTES_PATH, controller_pak_name_notes[selected_index], string_datetime_cpak, CPAK_NOTE_EXTENSION);
+    snprintf(tmp_filename, sizeof(tmp_filename), "%s.tmp", final_filename);
 
-    fDump = fopen(filename_note, "wb");
+    fDump = fopen(tmp_filename, "wb");
     if (fDump == NULL) {
-        snprintf(failure_message_note, sizeof(failure_message_note), "Unable to create dump file: %s", filename_note);
+        snprintf(failure_message_note, sizeof(failure_message_note), "Unable to create dump file: %s", final_filename);
         fclose(fSource);
         error_message_displayed = true;
         return;
@@ -320,7 +330,7 @@ static void dump_single_note(int _port, int16_t selected_index) {
 
     surface_t *d = display_try_get();
     rdpq_attach(d, NULL);
-    
+
     ui_components_messagebox_draw(
         "Which note would you like to dump?\n\n"
         "Note selected: N.%-2.2d\n\n"
@@ -346,21 +356,13 @@ static void dump_single_note(int _port, int16_t selected_index) {
     }
 
     fclose(fSource);
-    fclose(fDump);
+    if (fclose(fDump) != 0 || !file_rename(tmp_filename, final_filename)) {
+        snprintf(failure_message_note, sizeof(failure_message_note), "Failed to finalize file: %s", final_filename);
+        error_message_displayed = true;
+        return;
+    }
     process_complete_note_dump = true;
 
-}
-
-static bool file_exists(const char *filename)
-{
-    FILE *fp = fopen(filename, "r");
-    bool is_exist = false;
-    if (fp != NULL)
-    {
-        is_exist = true;
-        fclose(fp);
-    }
-    return is_exist;
 }
 
 static void delete_single_note(int _port, unsigned short selected_index) {
