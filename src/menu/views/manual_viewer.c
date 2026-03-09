@@ -788,14 +788,6 @@ static bool manual_start_page_load (menu_t *menu) {
     menu->manual.loaded_zoom_asset = use_zoom_asset;
     manual_free_prefetch_image(menu);
 
-    surface_t *native_image = native_image_load_sidecar_rgba16(page_path, MANUAL_NATIVE_SIDECAR, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT);
-    if (native_image) {
-        menu->manual.image = native_image;
-        menu->manual.loaded_page = menu->manual.current_page;
-        menu->manual.page_loading = false;
-        return true;
-    }
-
     menu->manual.image = native_image_load_sidecar_rgba16(page_path, MANUAL_NATIVE_SIDECAR, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT);
     if (!menu->manual.image) {
         menu_show_error(menu, "Manual native page image is missing");
