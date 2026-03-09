@@ -6,6 +6,7 @@
 #include "utils/fs.h"
 
 #define NATIVE_IMAGE_MAGIC (0x4E494D47u)
+#define NATIVE_IMAGE_MAX_DIM 1024
 
 typedef struct {
     uint32_t magic;
@@ -64,6 +65,7 @@ surface_t *native_image_load_rgba16_file(const char *path, int max_width, int ma
 
     bool invalid = (header.magic != NATIVE_IMAGE_MAGIC)
         || (header.width == 0) || (header.height == 0)
+        || (header.width > NATIVE_IMAGE_MAX_DIM) || (header.height > NATIVE_IMAGE_MAX_DIM)
         || (max_width > 0 && (int)header.width > max_width)
         || (max_height > 0 && (int)header.height > max_height);
     if (invalid) {
