@@ -76,19 +76,34 @@ typedef struct {
 } playlist_cache_header_t;
 
 typedef struct {
+    char *theme;
+    char *bgm;
+    char *bg;
+    char *screensaver_logo;
+    int viz_style;
+    int viz_intensity;
+    int text_panel_enabled;
+    int text_panel_alpha;
+    int grid_view;
+} playlist_props_t;
+
+#define PLAYLIST_PROPS_DEFAULT { NULL, NULL, NULL, NULL, -1, -1, -1, -1, -1 }
+
+static void playlist_props_free(playlist_props_t *props) {
+    if (!props) return;
+    free(props->theme);
+    free(props->bgm);
+    free(props->bg);
+    free(props->screensaver_logo);
+    *props = (playlist_props_t)PLAYLIST_PROPS_DEFAULT;
+}
+
+typedef struct {
     bool valid;
     uint32_t last_used_tick;
     char *playlist_path;
     uint64_t content_hash;
-    char *playlist_theme;
-    char *playlist_bgm;
-    char *playlist_bg;
-    char *playlist_screensaver_logo;
-    int playlist_viz_style;
-    int playlist_viz_intensity;
-    int playlist_text_panel_enabled;
-    int playlist_text_panel_alpha;
-    int playlist_grid_view;
+    playlist_props_t props;
     int entry_count;
     char **entry_paths;
 } playlist_mem_cache_entry_t;
@@ -99,15 +114,7 @@ static bool playlist_active_loaded = false;
 static char playlist_active_path[512];
 static uint64_t playlist_active_content_hash = 0;
 static bool playlist_active_static = false;
-static char *playlist_active_theme = NULL;
-static char *playlist_active_bgm = NULL;
-static char *playlist_active_bg = NULL;
-static char *playlist_active_screensaver_logo = NULL;
-static int playlist_active_viz_style = -1;
-static int playlist_active_viz_intensity = -1;
-static int playlist_active_text_panel_enabled = -1;
-static int playlist_active_text_panel_alpha = -1;
-static int playlist_active_grid_view = -1;
+static playlist_props_t playlist_active_props = PLAYLIST_PROPS_DEFAULT;
 
 static char playlist_recent_file_path[512];
 static char playlist_recent_paths[PLAYLIST_RECENT_LIMIT][512];
@@ -157,10 +164,7 @@ static void playlist_mem_cache_entry_clear(playlist_mem_cache_entry_t *entry) {
         return;
     }
     free(entry->playlist_path);
-    free(entry->playlist_theme);
-    free(entry->playlist_bgm);
-    free(entry->playlist_bg);
-    free(entry->playlist_screensaver_logo);
+    playlist_props_free(&entry->props);
     if (entry->entry_paths) {
         for (int i = 0; i < entry->entry_count; i++) {
             free(entry->entry_paths[i]);
@@ -175,23 +179,12 @@ static void playlist_active_clear(void) {
     playlist_active_path[0] = '\0';
     playlist_active_content_hash = 0;
     playlist_active_static = false;
-    free(playlist_active_theme); playlist_active_theme = NULL;
-    free(playlist_active_bgm); playlist_active_bgm = NULL;
-    free(playlist_active_bg); playlist_active_bg = NULL;
-    free(playlist_active_screensaver_logo); playlist_active_screensaver_logo = NULL;
-    playlist_active_viz_style = -1;
-    playlist_active_viz_intensity = -1;
-    playlist_active_text_panel_enabled = -1;
-    playlist_active_text_panel_alpha = -1;
-    playlist_active_grid_view = -1;
+    playlist_props_free(&playlist_active_props);
 }
 
 static void playlist_active_store(
     const char *playlist_path, uint64_t content_hash, bool is_static,
-    const char *theme, const char *bgm, const char *bg,
-    int viz_style, int viz_intensity,
-    int text_panel_enabled, int text_panel_alpha,
-    const char *screensaver_logo, int grid_view
+    const playlist_props_t *props
 ) {
     if (!playlist_path) {
         playlist_active_clear();
@@ -200,19 +193,16 @@ static void playlist_active_store(
     snprintf(playlist_active_path, sizeof(playlist_active_path), "%s", playlist_path);
     playlist_active_content_hash = content_hash;
     playlist_active_static = is_static;
-    free(playlist_active_theme);
-    playlist_active_theme = theme ? strdup(theme) : NULL;
-    free(playlist_active_bgm);
-    playlist_active_bgm = bgm ? strdup(bgm) : NULL;
-    free(playlist_active_bg);
-    playlist_active_bg = bg ? strdup(bg) : NULL;
-    free(playlist_active_screensaver_logo);
-    playlist_active_screensaver_logo = screensaver_logo ? strdup(screensaver_logo) : NULL;
-    playlist_active_viz_style = viz_style;
-    playlist_active_viz_intensity = viz_intensity;
-    playlist_active_text_panel_enabled = text_panel_enabled;
-    playlist_active_text_panel_alpha = text_panel_alpha;
-    playlist_active_grid_view = grid_view;
+    playlist_props_free(&playlist_active_props);
+    playlist_active_props.theme = props->theme ? strdup(props->theme) : NULL;
+    playlist_active_props.bgm = props->bgm ? strdup(props->bgm) : NULL;
+    playlist_active_props.bg = props->bg ? strdup(props->bg) : NULL;
+    playlist_active_props.screensaver_logo = props->screensaver_logo ? strdup(props->screensaver_logo) : NULL;
+    playlist_active_props.viz_style = props->viz_style;
+    playlist_active_props.viz_intensity = props->viz_intensity;
+    playlist_active_props.text_panel_enabled = props->text_panel_enabled;
+    playlist_active_props.text_panel_alpha = props->text_panel_alpha;
+    playlist_active_props.grid_view = props->grid_view;
     playlist_active_loaded = true;
 }
 
@@ -261,15 +251,7 @@ static playlist_mem_cache_entry_t *playlist_mem_cache_alloc(void) {
 static bool playlist_mem_cache_store(
     const char *playlist_path,
     uint64_t content_hash,
-    const char *playlist_theme,
-    const char *playlist_bgm,
-    const char *playlist_bg,
-    int playlist_viz_style,
-    int playlist_viz_intensity,
-    int playlist_text_panel_enabled,
-    int playlist_text_panel_alpha,
-    const char *playlist_screensaver_logo,
-    int playlist_grid_view,
+    const playlist_props_t *props,
     const char * const *entry_paths,
     int entry_count
 ) {
@@ -283,15 +265,15 @@ static bool playlist_mem_cache_store(
     }
 
     entry->playlist_path = strdup(playlist_path);
-    entry->playlist_theme = playlist_theme ? strdup(playlist_theme) : NULL;
-    entry->playlist_bgm = playlist_bgm ? strdup(playlist_bgm) : NULL;
-    entry->playlist_bg = playlist_bg ? strdup(playlist_bg) : NULL;
-    entry->playlist_screensaver_logo = playlist_screensaver_logo ? strdup(playlist_screensaver_logo) : NULL;
-    entry->playlist_viz_style = playlist_viz_style;
-    entry->playlist_viz_intensity = playlist_viz_intensity;
-    entry->playlist_text_panel_enabled = playlist_text_panel_enabled;
-    entry->playlist_text_panel_alpha = playlist_text_panel_alpha;
-    entry->playlist_grid_view = playlist_grid_view;
+    entry->props.theme = props->theme ? strdup(props->theme) : NULL;
+    entry->props.bgm = props->bgm ? strdup(props->bgm) : NULL;
+    entry->props.bg = props->bg ? strdup(props->bg) : NULL;
+    entry->props.screensaver_logo = props->screensaver_logo ? strdup(props->screensaver_logo) : NULL;
+    entry->props.viz_style = props->viz_style;
+    entry->props.viz_intensity = props->viz_intensity;
+    entry->props.text_panel_enabled = props->text_panel_enabled;
+    entry->props.text_panel_alpha = props->text_panel_alpha;
+    entry->props.grid_view = props->grid_view;
     entry->content_hash = content_hash;
     entry->entry_count = entry_count;
 
@@ -323,15 +305,7 @@ static bool playlist_mem_cache_try_load(
     const char *playlist_path,
     uint64_t content_hash,
     int *playlist_capacity,
-    char **playlist_theme,
-    char **playlist_bgm,
-    char **playlist_bg,
-    int *playlist_viz_style,
-    int *playlist_viz_intensity,
-    int *playlist_text_panel_enabled,
-    int *playlist_text_panel_alpha,
-    char **playlist_screensaver_logo,
-    int *playlist_grid_view
+    playlist_props_t *props
 ) {
     if (!menu || !playlist_path) {
         return false;
@@ -342,21 +316,18 @@ static bool playlist_mem_cache_try_load(
         return false;
     }
 
-    *playlist_theme = entry->playlist_theme ? strdup(entry->playlist_theme) : NULL;
-    *playlist_bgm = entry->playlist_bgm ? strdup(entry->playlist_bgm) : NULL;
-    *playlist_bg = entry->playlist_bg ? strdup(entry->playlist_bg) : NULL;
-    *playlist_screensaver_logo = entry->playlist_screensaver_logo ? strdup(entry->playlist_screensaver_logo) : NULL;
-    *playlist_viz_style = entry->playlist_viz_style;
-    *playlist_viz_intensity = entry->playlist_viz_intensity;
-    *playlist_text_panel_enabled = entry->playlist_text_panel_enabled;
-    *playlist_text_panel_alpha = entry->playlist_text_panel_alpha;
-    *playlist_grid_view = entry->playlist_grid_view;
+    props->theme = entry->props.theme ? strdup(entry->props.theme) : NULL;
+    props->bgm = entry->props.bgm ? strdup(entry->props.bgm) : NULL;
+    props->bg = entry->props.bg ? strdup(entry->props.bg) : NULL;
+    props->screensaver_logo = entry->props.screensaver_logo ? strdup(entry->props.screensaver_logo) : NULL;
+    props->viz_style = entry->props.viz_style;
+    props->viz_intensity = entry->props.viz_intensity;
+    props->text_panel_enabled = entry->props.text_panel_enabled;
+    props->text_panel_alpha = entry->props.text_panel_alpha;
+    props->grid_view = entry->props.grid_view;
 
     if (entry->entry_count > 0 && !browser_reserve_entry_capacity(menu, playlist_capacity, entry->entry_count)) {
-        free(*playlist_theme); *playlist_theme = NULL;
-        free(*playlist_bgm); *playlist_bgm = NULL;
-        free(*playlist_bg); *playlist_bg = NULL;
-        free(*playlist_screensaver_logo); *playlist_screensaver_logo = NULL;
+        playlist_props_free(props);
         browser_list_free(menu);
         menu->browser.playlist = true;
         return false;
@@ -364,10 +335,7 @@ static bool playlist_mem_cache_try_load(
 
     for (int i = 0; i < entry->entry_count; i++) {
         if (!playlist_append_rom_entry(menu, entry->entry_paths[i], playlist_capacity)) {
-            free(*playlist_theme); *playlist_theme = NULL;
-            free(*playlist_bgm); *playlist_bgm = NULL;
-            free(*playlist_bg); *playlist_bg = NULL;
-            free(*playlist_screensaver_logo); *playlist_screensaver_logo = NULL;
+            playlist_props_free(props);
             browser_list_free(menu);
             menu->browser.playlist = true;
             return false;
@@ -381,15 +349,7 @@ static void playlist_mem_cache_save(
     menu_t *menu,
     const char *playlist_path,
     uint64_t content_hash,
-    const char *playlist_theme,
-    const char *playlist_bgm,
-    const char *playlist_bg,
-    int playlist_viz_style,
-    int playlist_viz_intensity,
-    int playlist_text_panel_enabled,
-    int playlist_text_panel_alpha,
-    const char *playlist_screensaver_logo,
-    int playlist_grid_view
+    const playlist_props_t *props
 ) {
     if (!menu || !playlist_path || !content_hash) {
         return;
@@ -406,15 +366,7 @@ static void playlist_mem_cache_save(
     playlist_mem_cache_store(
         playlist_path,
         content_hash,
-        playlist_theme,
-        playlist_bgm,
-        playlist_bg,
-        playlist_viz_style,
-        playlist_viz_intensity,
-        playlist_text_panel_enabled,
-        playlist_text_panel_alpha,
-        playlist_screensaver_logo,
-        playlist_grid_view,
+        props,
         entry_paths,
         menu->browser.entries
     );
@@ -538,16 +490,20 @@ static bool playlist_mem_cache_prewarm_from_disk(menu_t *menu, const char *playl
         return true;
     }
 
-    char *playlist_theme = NULL;
-    char *playlist_bgm = NULL;
-    char *playlist_bg = NULL;
-    char *playlist_screensaver_logo = NULL;
+    playlist_props_t props = PLAYLIST_PROPS_DEFAULT;
     char **entry_paths = NULL;
 
-    ok = playlist_cache_read_string(f, &playlist_theme) &&
-         playlist_cache_read_string(f, &playlist_bgm) &&
-         playlist_cache_read_string(f, &playlist_bg) &&
-         playlist_cache_read_string(f, &playlist_screensaver_logo);
+    ok = playlist_cache_read_string(f, &props.theme) &&
+         playlist_cache_read_string(f, &props.bgm) &&
+         playlist_cache_read_string(f, &props.bg) &&
+         playlist_cache_read_string(f, &props.screensaver_logo);
+    if (ok) {
+        props.viz_style = header.viz_style;
+        props.viz_intensity = header.viz_intensity;
+        props.text_panel_enabled = header.text_panel_enabled;
+        props.text_panel_alpha = header.text_panel_alpha;
+        props.grid_view = header.grid_view_enabled;
+    }
     if (ok && header.entry_count > 0) {
         entry_paths = calloc((size_t)header.entry_count, sizeof(char *));
         ok = (entry_paths != NULL);
@@ -562,24 +518,13 @@ static bool playlist_mem_cache_prewarm_from_disk(menu_t *menu, const char *playl
         ok = playlist_mem_cache_store(
             playlist_path,
             header.content_hash,
-            playlist_theme,
-            playlist_bgm,
-            playlist_bg,
-            header.viz_style,
-            header.viz_intensity,
-            header.text_panel_enabled,
-            header.text_panel_alpha,
-            playlist_screensaver_logo,
-            header.grid_view_enabled,
+            &props,
             paths_const,
             (int)header.entry_count
         );
     }
 
-    free(playlist_theme);
-    free(playlist_bgm);
-    free(playlist_bg);
-    free(playlist_screensaver_logo);
+    playlist_props_free(&props);
     if (entry_paths) {
         for (uint32_t i = 0; i < header.entry_count; i++) {
             free(entry_paths[i]);
@@ -683,15 +628,7 @@ static bool playlist_cache_try_load(
     uint64_t content_hash,
     size_t file_size,
     int *playlist_capacity,
-    char **playlist_theme,
-    char **playlist_bgm,
-    char **playlist_bg,
-    int *playlist_viz_style,
-    int *playlist_viz_intensity,
-    int *playlist_text_panel_enabled,
-    int *playlist_text_panel_alpha,
-    char **playlist_screensaver_logo,
-    int *playlist_grid_view,
+    playlist_props_t *props,
     const char **cache_source
 ) {
     if (!menu || !playlist_path || !content_hash) {
@@ -703,15 +640,7 @@ static bool playlist_cache_try_load(
             playlist_path,
             content_hash,
             playlist_capacity,
-            playlist_theme,
-            playlist_bgm,
-            playlist_bg,
-            playlist_viz_style,
-            playlist_viz_intensity,
-            playlist_text_panel_enabled,
-            playlist_text_panel_alpha,
-            playlist_screensaver_logo,
-            playlist_grid_view)) {
+            props)) {
         if (cache_source) {
             *cache_source = "memory";
         }
@@ -744,16 +673,16 @@ static bool playlist_cache_try_load(
         return false;
     }
 
-    *playlist_viz_style = header.viz_style;
-    *playlist_viz_intensity = header.viz_intensity;
-    *playlist_text_panel_enabled = header.text_panel_enabled;
-    *playlist_text_panel_alpha = header.text_panel_alpha;
-    *playlist_grid_view = header.grid_view_enabled;
+    props->viz_style = header.viz_style;
+    props->viz_intensity = header.viz_intensity;
+    props->text_panel_enabled = header.text_panel_enabled;
+    props->text_panel_alpha = header.text_panel_alpha;
+    props->grid_view = header.grid_view_enabled;
 
-    if (!playlist_cache_read_string(f, playlist_theme) ||
-        !playlist_cache_read_string(f, playlist_bgm) ||
-        !playlist_cache_read_string(f, playlist_bg) ||
-        !playlist_cache_read_string(f, playlist_screensaver_logo)) {
+    if (!playlist_cache_read_string(f, &props->theme) ||
+        !playlist_cache_read_string(f, &props->bgm) ||
+        !playlist_cache_read_string(f, &props->bg) ||
+        !playlist_cache_read_string(f, &props->screensaver_logo)) {
         goto fail;
     }
 
@@ -779,15 +708,7 @@ static bool playlist_cache_try_load(
         menu,
         playlist_path,
         content_hash,
-        *playlist_theme,
-        *playlist_bgm,
-        *playlist_bg,
-        *playlist_viz_style,
-        *playlist_viz_intensity,
-        *playlist_text_panel_enabled,
-        *playlist_text_panel_alpha,
-        *playlist_screensaver_logo,
-        *playlist_grid_view
+        props
     );
     if (cache_source) {
         *cache_source = "disk";
@@ -796,10 +717,7 @@ static bool playlist_cache_try_load(
 
 fail:
     fclose(f);
-    free(*playlist_theme); *playlist_theme = NULL;
-    free(*playlist_bgm); *playlist_bgm = NULL;
-    free(*playlist_bg); *playlist_bg = NULL;
-    free(*playlist_screensaver_logo); *playlist_screensaver_logo = NULL;
+    playlist_props_free(props);
     browser_list_free(menu);
     menu->browser.playlist = true;
     return false;
@@ -810,15 +728,7 @@ static void playlist_cache_save(
     const char *playlist_path,
     uint64_t content_hash,
     size_t file_size,
-    const char *playlist_theme,
-    const char *playlist_bgm,
-    const char *playlist_bg,
-    int playlist_viz_style,
-    int playlist_viz_intensity,
-    int playlist_text_panel_enabled,
-    int playlist_text_panel_alpha,
-    const char *playlist_screensaver_logo,
-    int playlist_grid_view
+    const playlist_props_t *props
 ) {
     if (!menu || !playlist_path || !content_hash || menu->browser.entries < 0) {
         return;
@@ -846,18 +756,18 @@ static void playlist_cache_save(
         .source_mtime = 0,
         .content_hash = content_hash,
         .entry_count = (uint32_t)menu->browser.entries,
-        .viz_style = playlist_viz_style,
-        .viz_intensity = playlist_viz_intensity,
-        .text_panel_enabled = playlist_text_panel_enabled,
-        .text_panel_alpha = playlist_text_panel_alpha,
-        .grid_view_enabled = playlist_grid_view,
+        .viz_style = props->viz_style,
+        .viz_intensity = props->viz_intensity,
+        .text_panel_enabled = props->text_panel_enabled,
+        .text_panel_alpha = props->text_panel_alpha,
+        .grid_view_enabled = props->grid_view,
     };
 
     bool ok = (fwrite(&header, sizeof(header), 1, f) == 1);
-    ok = ok && playlist_cache_write_string(f, playlist_theme);
-    ok = ok && playlist_cache_write_string(f, playlist_bgm);
-    ok = ok && playlist_cache_write_string(f, playlist_bg);
-    ok = ok && playlist_cache_write_string(f, playlist_screensaver_logo);
+    ok = ok && playlist_cache_write_string(f, props->theme);
+    ok = ok && playlist_cache_write_string(f, props->bgm);
+    ok = ok && playlist_cache_write_string(f, props->bg);
+    ok = ok && playlist_cache_write_string(f, props->screensaver_logo);
 
     for (int i = 0; ok && i < menu->browser.entries; i++) {
         const char *entry_path = menu->browser.list[i].path ? menu->browser.list[i].path : "";
@@ -970,7 +880,7 @@ static bool browser_try_pick_menu_music_file(menu_t *menu);
 static bool browser_is_screensaver_logo_picker_root(menu_t *menu);
 static bool browser_try_pick_screensaver_logo_file(menu_t *menu);
 static void browser_restore_playlist_overrides(menu_t *menu);
-static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity, int text_panel_enabled, int text_panel_alpha, const char *screensaver_logo_path, int grid_view_enabled);
+static void browser_apply_playlist_overrides(menu_t *menu, const playlist_props_t *props);
 static void browser_apply_playlist_overrides_deferred(menu_t *menu);
 static bool browser_use_playlist_grid(menu_t *menu);
 static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work);
@@ -982,17 +892,9 @@ static bool playlist_append_rom_entry_unique(menu_t *menu, const char *normalize
 static char *playlist_cache_build_path(menu_t *menu, const char *playlist_path);
 static bool playlist_cache_try_load(menu_t *menu, const char *playlist_path,
     uint64_t content_hash, size_t file_size, int *playlist_capacity,
-    char **playlist_theme, char **playlist_bgm, char **playlist_bg,
-    int *playlist_viz_style, int *playlist_viz_intensity,
-    int *playlist_text_panel_enabled, int *playlist_text_panel_alpha,
-    char **playlist_screensaver_logo, int *playlist_grid_view,
-    const char **cache_source);
+    playlist_props_t *props, const char **cache_source);
 static void playlist_cache_save(menu_t *menu, const char *playlist_path,
-    uint64_t content_hash, size_t file_size,
-    const char *playlist_theme, const char *playlist_bgm, const char *playlist_bg,
-    int playlist_viz_style, int playlist_viz_intensity,
-    int playlist_text_panel_enabled, int playlist_text_panel_alpha,
-    const char *playlist_screensaver_logo, int playlist_grid_view);
+    uint64_t content_hash, size_t file_size, const playlist_props_t *props);
 
 typedef struct {
     bool active;
@@ -2929,7 +2831,7 @@ static void smart_playlist_sort_entries(smart_playlist_entry_t *entries, int cou
     smart_playlist_sort_query = NULL;
 }
 
-static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, char **theme_name, char **bgm_path, char **bg_path, int *viz_style, int *viz_intensity, int *text_panel_enabled, int *text_panel_alpha, char **screensaver_logo_path, int *grid_view_enabled, smart_playlist_query_t *smart_query) {
+static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const char *line, playlist_props_t *props, smart_playlist_query_t *smart_query) {
     if (!line || line[0] != '#') {
         return;
     }
@@ -2965,16 +2867,16 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
     }
 
     if (strcasecmp(key, "THEME") == 0) {
-        free(*theme_name);
-        *theme_name = strdup(value);
+        free(props->theme);
+        props->theme = strdup(value);
         return;
     }
 
     if (strcasecmp(key, "BGM") == 0 || strcasecmp(key, "MUSIC") == 0) {
         char *resolved = playlist_resolve_path(menu, playlist_dir, value);
         if (resolved) {
-            free(*bgm_path);
-            *bgm_path = resolved;
+            free(props->bgm);
+            props->bgm = resolved;
         }
         return;
     }
@@ -2982,17 +2884,17 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
     if (strcasecmp(key, "BACKGROUND") == 0 || strcasecmp(key, "BG") == 0) {
         char *resolved = playlist_resolve_path(menu, playlist_dir, value);
         if (resolved) {
-            free(*bg_path);
-            *bg_path = resolved;
+            free(props->bg);
+            props->bg = resolved;
         }
         return;
     }
 
     if (strcasecmp(key, "TEXT_PANEL") == 0 || strcasecmp(key, "TEXT_OVERLAY") == 0) {
         if (strcasecmp(value, "ON") == 0 || strcasecmp(value, "TRUE") == 0 || strcmp(value, "1") == 0) {
-            *text_panel_enabled = 1;
+            props->text_panel_enabled = 1;
         } else if (strcasecmp(value, "OFF") == 0 || strcasecmp(value, "FALSE") == 0 || strcmp(value, "0") == 0) {
-            *text_panel_enabled = 0;
+            props->text_panel_enabled = 0;
         }
         return;
     }
@@ -3003,7 +2905,7 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
         if (end && *end == '\0') {
             if (parsed < 0) parsed = 0;
             if (parsed > 255) parsed = 255;
-            *text_panel_alpha = (int)parsed;
+            props->text_panel_alpha = (int)parsed;
         }
         return;
     }
@@ -3011,36 +2913,36 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
     if (strcasecmp(key, "SCREENSAVER_LOGO") == 0 || strcasecmp(key, "SAVER_LOGO") == 0) {
         char *resolved = playlist_resolve_path(menu, playlist_dir, value);
         if (resolved) {
-            free(*screensaver_logo_path);
-            *screensaver_logo_path = resolved;
+            free(props->screensaver_logo);
+            props->screensaver_logo = resolved;
         }
         return;
     }
 
     if (strcasecmp(key, "VIZ_STYLE") == 0 || strcasecmp(key, "VISUALIZER_STYLE") == 0) {
-        if (strcasecmp(value, "BARS") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_BARS;
-        else if (strcasecmp(value, "PULSE") == 0 || strcasecmp(value, "PULSE_WASH") == 0 || strcasecmp(value, "PULSEWASH") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_PULSE_WASH;
-        else if (strcasecmp(value, "SUNBURST") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_SUNBURST;
-        else if (strcasecmp(value, "SCOPE") == 0 || strcasecmp(value, "OSC") == 0 || strcasecmp(value, "OSCILLOSCOPE") == 0) *viz_style = UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE;
+        if (strcasecmp(value, "BARS") == 0) props->viz_style = UI_BACKGROUND_VISUALIZER_BARS;
+        else if (strcasecmp(value, "PULSE") == 0 || strcasecmp(value, "PULSE_WASH") == 0 || strcasecmp(value, "PULSEWASH") == 0) props->viz_style = UI_BACKGROUND_VISUALIZER_PULSE_WASH;
+        else if (strcasecmp(value, "SUNBURST") == 0) props->viz_style = UI_BACKGROUND_VISUALIZER_SUNBURST;
+        else if (strcasecmp(value, "SCOPE") == 0 || strcasecmp(value, "OSC") == 0 || strcasecmp(value, "OSCILLOSCOPE") == 0) props->viz_style = UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE;
         else {
             char *end = NULL;
             long parsed = strtol(value, &end, 10);
             if (end && *end == '\0' && parsed >= 0 && parsed <= UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE) {
-                *viz_style = (int)parsed;
+                props->viz_style = (int)parsed;
             }
         }
         return;
     }
 
     if (strcasecmp(key, "VIZ_INTENSITY") == 0 || strcasecmp(key, "VISUALIZER_INTENSITY") == 0) {
-        if (strcasecmp(value, "SUBTLE") == 0 || strcasecmp(value, "LOW") == 0) *viz_intensity = 0;
-        else if (strcasecmp(value, "NORMAL") == 0 || strcasecmp(value, "MEDIUM") == 0) *viz_intensity = 1;
-        else if (strcasecmp(value, "FULL") == 0 || strcasecmp(value, "HIGH") == 0) *viz_intensity = 2;
+        if (strcasecmp(value, "SUBTLE") == 0 || strcasecmp(value, "LOW") == 0) props->viz_intensity = 0;
+        else if (strcasecmp(value, "NORMAL") == 0 || strcasecmp(value, "MEDIUM") == 0) props->viz_intensity = 1;
+        else if (strcasecmp(value, "FULL") == 0 || strcasecmp(value, "HIGH") == 0) props->viz_intensity = 2;
         else {
             char *end = NULL;
             long parsed = strtol(value, &end, 10);
             if (end && *end == '\0' && parsed >= 0 && parsed <= 2) {
-                *viz_intensity = (int)parsed;
+                props->viz_intensity = (int)parsed;
             }
         }
         return;
@@ -3048,9 +2950,9 @@ static void playlist_parse_directive(menu_t *menu, path_t *playlist_dir, const c
 
     if (strcasecmp(key, "VIEW") == 0 || strcasecmp(key, "BROWSER_VIEW") == 0 || strcasecmp(key, "LAYOUT") == 0) {
         if (strcasecmp(value, "GRID") == 0 || strcasecmp(value, "BOXART") == 0) {
-            *grid_view_enabled = 1;
+            props->grid_view = 1;
         } else if (strcasecmp(value, "LIST") == 0) {
-            *grid_view_enabled = 0;
+            props->grid_view = 0;
         }
         return;
     }
@@ -3202,21 +3104,21 @@ static void browser_restore_playlist_overrides(menu_t *menu) {
     playlist_toast.frames_left = 0;
 }
 
-static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_name, const char *bgm_path, const char *bg_path, int viz_style, int viz_intensity, int text_panel_enabled, int text_panel_alpha, const char *screensaver_logo_path, int grid_view_enabled) {
-    if (!menu) {
+static void browser_apply_playlist_overrides(menu_t *menu, const playlist_props_t *props) {
+    if (!menu || !props) {
         return;
     }
 
-    int theme_id = playlist_theme_id_from_string(theme_name);
+    int theme_id = playlist_theme_id_from_string(props->theme);
     bool want_theme = (theme_id >= 0);
-    bool want_bgm = (bgm_path && bgm_path[0] != '\0');
-    bool want_bg = (bg_path && bg_path[0] != '\0');
-    bool want_viz_style = (viz_style >= 0 && viz_style <= UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE);
-    bool want_viz_intensity = (viz_intensity >= 0 && viz_intensity <= 2);
-    bool want_text_panel_enabled = (text_panel_enabled == 0 || text_panel_enabled == 1);
-    bool want_text_panel_alpha = (text_panel_alpha >= 0 && text_panel_alpha <= 255);
-    bool want_screensaver_logo = (screensaver_logo_path && screensaver_logo_path[0] != '\0');
-    bool want_grid_view = (grid_view_enabled == 0 || grid_view_enabled == 1);
+    bool want_bgm = (props->bgm && props->bgm[0] != '\0');
+    bool want_bg = (props->bg && props->bg[0] != '\0');
+    bool want_viz_style = (props->viz_style >= 0 && props->viz_style <= UI_BACKGROUND_VISUALIZER_OSCILLOSCOPE);
+    bool want_viz_intensity = (props->viz_intensity >= 0 && props->viz_intensity <= 2);
+    bool want_text_panel_enabled = (props->text_panel_enabled == 0 || props->text_panel_enabled == 1);
+    bool want_text_panel_alpha = (props->text_panel_alpha >= 0 && props->text_panel_alpha <= 255);
+    bool want_screensaver_logo = (props->screensaver_logo && props->screensaver_logo[0] != '\0');
+    bool want_grid_view = (props->grid_view == 0 || props->grid_view == 1);
     if (!want_theme && !want_bgm && !want_bg && !want_viz_style && !want_viz_intensity && !want_text_panel_enabled && !want_text_panel_alpha && !want_screensaver_logo && !want_grid_view) {
         return;
     }
@@ -3237,29 +3139,29 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
 
     if (want_bgm) {
         free(playlist_override.pending_bgm_path);
-        playlist_override.pending_bgm_path = strdup(bgm_path);
+        playlist_override.pending_bgm_path = strdup(props->bgm);
     }
     if (want_text_panel_enabled || want_text_panel_alpha) {
-        bool enabled = want_text_panel_enabled ? (text_panel_enabled != 0) : menu->settings.text_panel_enabled;
-        uint8_t alpha = want_text_panel_alpha ? (uint8_t)text_panel_alpha : menu->settings.text_panel_alpha;
+        bool enabled = want_text_panel_enabled ? (props->text_panel_enabled != 0) : menu->settings.text_panel_enabled;
+        uint8_t alpha = want_text_panel_alpha ? (uint8_t)props->text_panel_alpha : menu->settings.text_panel_alpha;
         ui_components_set_text_panel(enabled, alpha);
         playlist_override.text_panel_applied = true;
     }
     if (want_screensaver_logo) {
         free(playlist_override.pending_screensaver_logo_path);
-        playlist_override.pending_screensaver_logo_path = strdup(strip_fs_prefix((char *)screensaver_logo_path));
+        playlist_override.pending_screensaver_logo_path = strdup(strip_fs_prefix((char *)props->screensaver_logo));
     }
 
     if (want_viz_style) {
-        ui_components_background_set_visualizer_style(viz_style);
+        ui_components_background_set_visualizer_style(props->viz_style);
         playlist_override.viz_style_applied = true;
     }
     if (want_viz_intensity) {
-        ui_components_background_set_visualizer_intensity(viz_intensity);
+        ui_components_background_set_visualizer_intensity(props->viz_intensity);
         playlist_override.viz_intensity_applied = true;
     }
     if (want_grid_view) {
-        playlist_grid_view_enabled = (grid_view_enabled == 1);
+        playlist_grid_view_enabled = (props->grid_view == 1);
         playlist_override.grid_view_applied = true;
         playlist_grid_runtime_override = -1;
         playlist_grid_slots_clear();
@@ -3267,7 +3169,7 @@ static void browser_apply_playlist_overrides(menu_t *menu, const char *theme_nam
 
     if (want_bg) {
         free(playlist_override.background_path);
-        playlist_override.background_path = strdup(bg_path);
+        playlist_override.background_path = strdup(props->bg);
         playlist_override.background_deferred = (playlist_override.background_path != NULL);
     }
 
@@ -3374,11 +3276,7 @@ static bool load_playlist (menu_t *menu) {
         playlist_perf_reset();
         playlist_perf_commit(menu, "reuse", 0, 0, 0, 0, menu->browser.entries);
         playlist_recent_remember(path_get(menu->browser.directory));
-        browser_apply_playlist_overrides(menu,
-            playlist_active_theme, playlist_active_bgm, playlist_active_bg,
-            playlist_active_viz_style, playlist_active_viz_intensity,
-            playlist_active_text_panel_enabled, playlist_active_text_panel_alpha,
-            playlist_active_screensaver_logo, playlist_active_grid_view);
+        browser_apply_playlist_overrides(menu, &playlist_active_props);
         return false;
     }
 
@@ -3417,15 +3315,7 @@ static bool load_playlist (menu_t *menu) {
 
     menu->browser.playlist = true;
 
-    char *playlist_theme = NULL;
-    char *playlist_bgm = NULL;
-    char *playlist_bg = NULL;
-    int playlist_viz_style = -1;
-    int playlist_viz_intensity = -1;
-    int playlist_text_panel_enabled = -1;
-    int playlist_text_panel_alpha = -1;
-    char *playlist_screensaver_logo = NULL;
-    int playlist_grid_view = -1;
+    playlist_props_t props = PLAYLIST_PROPS_DEFAULT;
 
     if (playlist_cache_try_load(
             menu,
@@ -3433,15 +3323,7 @@ static bool load_playlist (menu_t *menu) {
             content_hash,
             file_size,
             &playlist_capacity,
-            &playlist_theme,
-            &playlist_bgm,
-            &playlist_bg,
-            &playlist_viz_style,
-            &playlist_viz_intensity,
-            &playlist_text_panel_enabled,
-            &playlist_text_panel_alpha,
-            &playlist_screensaver_logo,
-            &playlist_grid_view,
+            &props,
             &cache_source)) {
         free(file_buf);
         if (menu->browser.entries > 0) {
@@ -3453,23 +3335,16 @@ static bool load_playlist (menu_t *menu) {
         browser_apply_sort(menu);
 
         playlist_recent_remember(path_get(menu->browser.directory));
-        playlist_active_store(path_get(menu->browser.directory), content_hash, true,
-            playlist_theme, playlist_bgm, playlist_bg,
-            playlist_viz_style, playlist_viz_intensity,
-            playlist_text_panel_enabled, playlist_text_panel_alpha,
-            playlist_screensaver_logo, playlist_grid_view);
+        playlist_active_store(path_get(menu->browser.directory), content_hash, true, &props);
         playlist_perf_commit(menu, cache_source ? cache_source : "cache", elapsed_ms(open_start_us), 0, 0, 0, menu->browser.entries);
-        browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
+        browser_apply_playlist_overrides(menu, &props);
         char *playlist_context_path = playlist_find_context_text_path(menu->browser.directory);
         if (playlist_context_path) {
             playlist_prepend_text_entry(menu, playlist_context_path, &playlist_capacity);
             free(playlist_context_path);
         }
 
-        free(playlist_theme);
-        free(playlist_bgm);
-        free(playlist_bg);
-        free(playlist_screensaver_logo);
+        playlist_props_free(&props);
             return false;
     }
 
@@ -3501,7 +3376,7 @@ static bool load_playlist (menu_t *menu) {
             continue;
         }
         if (trimmed[0] == '#') {
-            playlist_parse_directive(menu, playlist_dir, trimmed, &playlist_theme, &playlist_bgm, &playlist_bg, &playlist_viz_style, &playlist_viz_intensity, &playlist_text_panel_enabled, &playlist_text_panel_alpha, &playlist_screensaver_logo, &playlist_grid_view, &smart_query);
+            playlist_parse_directive(menu, playlist_dir, trimmed, &props, &smart_query);
             continue;
         }
 
@@ -3519,10 +3394,7 @@ static bool load_playlist (menu_t *menu) {
         if (!normalized) {
             path_free(entry_path);
             free(file_buf);
-            free(playlist_theme);
-            free(playlist_bgm);
-            free(playlist_bg);
-            free(playlist_screensaver_logo);
+            playlist_props_free(&props);
             browser_list_free(menu);
             path_free(playlist_dir);
             return true;
@@ -3538,10 +3410,7 @@ static bool load_playlist (menu_t *menu) {
             free(normalized);
             path_free(entry_path);
             free(file_buf);
-            free(playlist_theme);
-            free(playlist_bgm);
-            free(playlist_bg);
-            free(playlist_screensaver_logo);
+            playlist_props_free(&props);
             browser_list_free(menu);
             path_free(playlist_dir);
             return true;
@@ -3562,10 +3431,7 @@ static bool load_playlist (menu_t *menu) {
         if (smart_query.root_count == 0) {
             path_t *default_root = path_init(menu->storage_prefix, "/");
             if (!default_root) {
-                free(playlist_theme);
-                free(playlist_bgm);
-                free(playlist_bg);
-                free(playlist_screensaver_logo);
+                playlist_props_free(&props);
                 browser_list_free(menu);
                 path_free(playlist_dir);
                 return true;
@@ -3586,10 +3452,7 @@ static bool load_playlist (menu_t *menu) {
                     smart_playlist_entry_free(&generated[j]);
                 }
                 free(generated);
-                free(playlist_theme);
-                free(playlist_bgm);
-                free(playlist_bg);
-                free(playlist_screensaver_logo);
+                playlist_props_free(&props);
                 browser_list_free(menu);
                 path_free(playlist_dir);
                 return true;
@@ -3604,10 +3467,7 @@ static bool load_playlist (menu_t *menu) {
                     smart_playlist_entry_free(&generated[j]);
                 }
                 free(generated);
-                free(playlist_theme);
-                free(playlist_bgm);
-                free(playlist_bg);
-                free(playlist_screensaver_logo);
+                playlist_props_free(&props);
                 browser_list_free(menu);
                 path_free(playlist_dir);
                 return true;
@@ -3634,38 +3494,18 @@ static bool load_playlist (menu_t *menu) {
             menu,
             path_get(menu->browser.directory),
             content_hash,
-            playlist_theme,
-            playlist_bgm,
-            playlist_bg,
-            playlist_viz_style,
-            playlist_viz_intensity,
-            playlist_text_panel_enabled,
-            playlist_text_panel_alpha,
-            playlist_screensaver_logo,
-            playlist_grid_view
+            &props
         );
         playlist_cache_save(
             menu,
             path_get(menu->browser.directory),
             content_hash,
             file_size,
-            playlist_theme,
-            playlist_bgm,
-            playlist_bg,
-            playlist_viz_style,
-            playlist_viz_intensity,
-            playlist_text_panel_enabled,
-            playlist_text_panel_alpha,
-            playlist_screensaver_logo,
-            playlist_grid_view
+            &props
         );
         playlist_recent_remember(path_get(menu->browser.directory));
         cache_save_ms = elapsed_ms(cache_save_start_us);
-        playlist_active_store(path_get(menu->browser.directory), content_hash, true,
-            playlist_theme, playlist_bgm, playlist_bg,
-            playlist_viz_style, playlist_viz_intensity,
-            playlist_text_panel_enabled, playlist_text_panel_alpha,
-            playlist_screensaver_logo, playlist_grid_view);
+        playlist_active_store(path_get(menu->browser.directory), content_hash, true, &props);
     } else {
         playlist_active_clear();
     }
@@ -3677,12 +3517,9 @@ static bool load_playlist (menu_t *menu) {
         free(playlist_context_path);
     }
 
-    browser_apply_playlist_overrides(menu, playlist_theme, playlist_bgm, playlist_bg, playlist_viz_style, playlist_viz_intensity, playlist_text_panel_enabled, playlist_text_panel_alpha, playlist_screensaver_logo, playlist_grid_view);
+    browser_apply_playlist_overrides(menu, &props);
     path_free(playlist_dir);
-    free(playlist_theme);
-    free(playlist_bgm);
-    free(playlist_bg);
-    free(playlist_screensaver_logo);
+    playlist_props_free(&props);
 
     return false;
 }
