@@ -15,6 +15,7 @@
 #include "../sound.h"
 #include "constants.h"
 #include "utils/fs.h"
+#include "utils/hash.h"
 
 #define CACHE_METADATA_MAGIC    (0x424B4731)
 #define BACKGROUND_NATIVE_SIDECAR ".nimg"
@@ -67,16 +68,6 @@ static void visualizer_reset_state(component_background_t *c) {
     memset(c->vis_caps, 0, sizeof(c->vis_caps));
     c->vis_tick = 0;
     c->vis_frame_tick = 0;
-}
-
-static uint64_t fnv1a64_str(const char *s) {
-    uint64_t h = 14695981039346656037ULL;
-    if (!s) return h;
-    while (*s) {
-        h ^= (uint8_t)(*s++);
-        h *= 1099511628211ULL;
-    }
-    return h;
 }
 
 static char *make_variant_cache_path(const char *base_cache_location, const char *source_path) {

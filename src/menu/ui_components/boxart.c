@@ -15,6 +15,7 @@
 #include "../png_decoder.h"
 #include "constants.h"
 #include "utils/fs.h"
+#include "utils/hash.h"
 
 #define OLD_BOXART_DIRECTORY       "menu/boxart"
 #define METADATA_BASE_DIRECTORY    "menu/metadata"
@@ -67,17 +68,6 @@ static bool string_ends_with(const char *s, const char *suffix) {
     return strcmp(s + (s_len - suffix_len), suffix) == 0;
 }
 
-static uint64_t fnv1a64_str(const char *s) {
-    uint64_t h = 14695981039346656037ULL;
-    if (!s) {
-        return h;
-    }
-    while (*s) {
-        h ^= (uint8_t)(*s++);
-        h *= 1099511628211ULL;
-    }
-    return h;
-}
 
 static surface_t *surface_clone_rgba16(surface_t *src) {
     if (!src || !src->buffer) {

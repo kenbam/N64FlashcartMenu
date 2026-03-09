@@ -19,6 +19,7 @@
 #include "rom_info.h"
 #include "rom_patch.h"
 #include "utils/fs.h"
+#include "utils/hash.h"
 
 #define PATCHES_DIR "menu/patches"
 #define PATCH_CACHE_DIR "menu/cache/patched"
@@ -52,27 +53,6 @@ static void sanitize_token(const char *input, char *out, size_t out_len) {
         }
     }
     out[j] = '\0';
-}
-
-static uint32_t fnv1a_update_u8(uint32_t h, uint8_t v) {
-    h ^= v;
-    h *= 16777619u;
-    return h;
-}
-
-static uint32_t fnv1a_update_str(uint32_t h, const char *s) {
-    while (s && *s) {
-        h = fnv1a_update_u8(h, (uint8_t)(*s));
-        s++;
-    }
-    return fnv1a_update_u8(h, 0xFF);
-}
-
-static uint32_t fnv1a_update_u64(uint32_t h, uint64_t v) {
-    for (int i = 0; i < 8; i++) {
-        h = fnv1a_update_u8(h, (uint8_t)((v >> (i * 8)) & 0xFF));
-    }
-    return h;
 }
 
 static bool read_u16_be(FILE *f, uint16_t *out) {
@@ -450,21 +430,21 @@ static uint32_t build_cache_key(
     const char *manifest_path,
     const char patch_paths[PATCH_MAX_FILES][512]
 ) {
-    uint32_t h = 2166136261u;
-    h = fnv1a_update_str(h, manifest_name);
-    h = fnv1a_update_str(h, manifest_path);
-    h = fnv1a_update_str(h, manifest->type);
-    h = fnv1a_update_u64(h, (uint64_t)manifest->has_expected_check_code);
-    h = fnv1a_update_u64(h, manifest->expected_check_code);
-    h = fnv1a_update_u64(h, (uint64_t)manifest->has_expected_rom_size);
-    h = fnv1a_update_u64(h, (uint64_t)manifest->expected_rom_size);
-    h = fnv1a_update_str(h, manifest->expected_game_code);
+    uint32_t h = FNV1A_32_OFFSET_BASIS;
+    h = fnv1a32_str(h, manifest_name);
+    h = fnv1a32_str(h, manifest_path);
+    h = fnv1a32_str(h, manifest->type);
+    h = fnv1a32_u64(h, (uint64_t)manifest->has_expected_check_code);
+    h = fnv1a32_u64(h, manifest->expected_check_code);
+    h = fnv1a32_u64(h, (uint64_t)manifest->has_expected_rom_size);
+    h = fnv1a32_u64(h, (uint64_t)manifest->expected_rom_size);
+    h = fnv1a32_str(h, manifest->expected_game_code);
 
     for (int i = 0; i < manifest->files_count; i++) {
-        h = fnv1a_update_str(h, manifest->files[i]);
-        h = fnv1a_update_str(h, patch_paths[i]);
+        h = fnv1a32_str(h, manifest->files[i]);
+        h = fnv1a32_str(h, patch_paths[i]);
         int64_t sz = file_get_size((char *)patch_paths[i]);
-        h = fnv1a_update_u64(h, (uint64_t)sz);
+        h = fnv1a32_u64(h, (uint64_t)sz);
     }
     return h;
 }

@@ -17,6 +17,7 @@
 #include "../rom_info.h"
 #include "../ui_components/constants.h"
 #include "utils/fs.h"
+#include "utils/hash.h"
 #include "views.h"
 #include "../sound.h"
 
@@ -114,28 +115,6 @@ static int playlist_recent_count = 0;
 static int playlist_recent_prewarm_index = 0;
 static int playlist_recent_prewarm_cooldown = 0;
 static bool playlist_recent_loaded = false;
-
-static uint64_t fnv1a64_str(const char *s) {
-    uint64_t h = 14695981039346656037ULL;
-    if (!s) {
-        return h;
-    }
-    while (*s) {
-        h ^= (uint8_t)(*s++);
-        h *= 1099511628211ULL;
-    }
-    return h;
-}
-
-static uint64_t fnv1a64_buf(const void *data, size_t len) {
-    uint64_t h = 14695981039346656037ULL;
-    const uint8_t *p = (const uint8_t *)data;
-    for (size_t i = 0; i < len; i++) {
-        h ^= p[i];
-        h *= 1099511628211ULL;
-    }
-    return h;
-}
 
 static bool string_ends_with_ignore_case(const char *value, const char *suffix) {
     if (!value || !suffix) {
