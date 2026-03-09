@@ -70,7 +70,7 @@ static void visualizer_reset_state(component_background_t *c) {
 }
 
 static uint64_t fnv1a64_str(const char *s) {
-    uint64_t h = 1469598103934665603ULL;
+    uint64_t h = 14695981039346656037ULL;
     if (!s) return h;
     while (*s) {
         h ^= (uint8_t)(*s++);

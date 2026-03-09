@@ -116,7 +116,7 @@ static int playlist_recent_prewarm_cooldown = 0;
 static bool playlist_recent_loaded = false;
 
 static uint64_t fnv1a64_str(const char *s) {
-    uint64_t h = 1469598103934665603ULL;
+    uint64_t h = 14695981039346656037ULL;
     if (!s) {
         return h;
     }
@@ -128,7 +128,7 @@ static uint64_t fnv1a64_str(const char *s) {
 }
 
 static uint64_t fnv1a64_buf(const void *data, size_t len) {
-    uint64_t h = 1469598103934665603ULL;
+    uint64_t h = 14695981039346656037ULL;
     const uint8_t *p = (const uint8_t *)data;
     for (size_t i = 0; i < len; i++) {
         h ^= p[i];
