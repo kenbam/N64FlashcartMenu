@@ -1073,11 +1073,7 @@ typedef struct {
 static playlist_grid_thumb_slot_t playlist_grid_slots[PLAYLIST_GRID_THUMB_SLOTS];
 static int playlist_grid_slots_page_start = -1;
 static entry_t *playlist_grid_slots_list = NULL;
-static int playlist_grid_prepare_phase = 0;
-static int playlist_grid_prefetch_phase = 0;
 static bool playlist_grid_page_mem_warm_done = false;
-static uint32_t playlist_grid_prepare_tick = 0;
-static int playlist_grid_idle_frames = 0;
 
 typedef struct {
     bool attempted;
@@ -1101,10 +1097,7 @@ static void playlist_grid_slots_clear(void) {
     }
     playlist_grid_slots_page_start = -1;
     playlist_grid_slots_list = NULL;
-    playlist_grid_prepare_phase = 0;
-    playlist_grid_prefetch_phase = 0;
     playlist_grid_page_mem_warm_done = false;
-    playlist_grid_idle_frames = 0;
 }
 
 static void playlist_grid_meta_index_clear(void) {
@@ -1973,13 +1966,7 @@ static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work) {
         playlist_grid_page_mem_warm_done = false;
     }
 
-    if (defer_work) {
-        playlist_grid_idle_frames = 0;
-        return; // immediate visual feedback: placeholders first, async prep next frame
-    }
-
-    // Fast warm pass on page entry: memory cache only (no disk reads / PNG decode). This makes revisiting
-    // a recently seen playlist page feel instant and avoids extra audio disruption.
+    // First pass: try memory cache only (instant, no I/O).
     if (!playlist_grid_page_mem_warm_done) {
         for (int i = 0; i < visible; i++) {
             playlist_grid_slot_prepare(menu, i, page_start + i, true);
@@ -1987,50 +1974,16 @@ static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work) {
         playlist_grid_page_mem_warm_done = true;
     }
 
-    bool nav_active = menu->actions.go_up || menu->actions.go_down ||
-                      menu->actions.go_left || menu->actions.go_right ||
-                      menu->actions.go_fast || menu->actions.toggle_view ||
-                      menu->actions.lz_context;
-    if (nav_active) {
-        playlist_grid_idle_frames = 0;
-        return;
-    }
-    if (playlist_grid_idle_frames < 60) {
-        playlist_grid_idle_frames++;
-    }
-
-    sound_bgm_meter_t meter = {0};
-    bool have_meter = sound_bgm_meter_get(&meter);
-    bool bgm_active = have_meter && meter.valid &&
-                      ((meter.peak_l > 0.001f) || (meter.peak_r > 0.001f) ||
-                       (meter.avg_l > 0.001f) || (meter.avg_r > 0.001f));
-
-    // Idle-only + audio-aware throttling. Disk cache reads / PNG decode can contend with audio, so defer until
-    // the user pauses and slow down further when music is active.
-    int idle_threshold = bgm_active ? 8 : 3;
-    if (playlist_grid_idle_frames < idle_threshold) {
+    if (defer_work) {
         return;
     }
 
-    playlist_grid_prepare_tick++;
-    bool decoder_busy = png_decoder_is_busy();
-    int cadence = bgm_active ? (decoder_busy ? 8 : 5) : (decoder_busy ? 4 : 2);
-    if (menu->actions.go_fast) {
-        cadence += 1;
-    }
-    if ((playlist_grid_prepare_tick % (uint32_t)cadence) != 0) {
-        return;
-    }
-
+    // Queue all unresolved tiles immediately — selected tile first.
     int selected_slot = selected - page_start;
     if (selected_slot >= 0 && selected_slot < visible) {
         playlist_grid_slot_prepare(menu, selected_slot, selected, false);
     }
-
-    int prep_budget = 2;
-    for (int n = 0; n < prep_budget && visible > 0; n++) {
-        int i = playlist_grid_prepare_phase % visible;
-        playlist_grid_prepare_phase = (playlist_grid_prepare_phase + 1) % (visible > 0 ? visible : 1);
+    for (int i = 0; i < visible; i++) {
         if (i == selected_slot) continue;
         playlist_grid_slot_prepare(menu, i, page_start + i, false);
     }
