@@ -655,6 +655,9 @@ static bool playlist_cache_read_string(FILE *f, char **out) {
     if (len == 0) {
         return true;
     }
+    if (len > 65536u) {
+        return false;
+    }
     char *value = calloc(1, (size_t)len + 1);
     if (!value) {
         return false;
