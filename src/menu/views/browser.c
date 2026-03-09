@@ -1496,60 +1496,31 @@ static bool path_is_hidden (path_t *path) {
     return false;
 }
 
-static int compare_entry (const void *pa, const void *pb) {
-    entry_t *a = (entry_t *) (pa);
-    entry_t *b = (entry_t *) (pb);
+static const uint8_t entry_type_sort_priority[] = {
+    [ENTRY_TYPE_DIR]       = 0,
+    [ENTRY_TYPE_ARCHIVE]   = 1,
+    [ENTRY_TYPE_DISK]      = 2,
+    [ENTRY_TYPE_EMULATOR]  = 3,
+    [ENTRY_TYPE_IMAGE]     = 4,
+    [ENTRY_TYPE_MUSIC]     = 5,
+    [ENTRY_TYPE_ROM]       = 6,
+    [ENTRY_TYPE_ROM_CHEAT] = 7,
+    [ENTRY_TYPE_ROM_PATCH] = 8,
+    [ENTRY_TYPE_PLAYLIST]  = 9,
+    [ENTRY_TYPE_SAVE]      = 10,
+    [ENTRY_TYPE_TEXT]       = 11,
+    [ENTRY_TYPE_OTHER]     = 12,
+    [ENTRY_TYPE_ARCHIVED]  = 13,
+};
 
-    if (a->type != b->type) {
-        if (a->type == ENTRY_TYPE_DIR) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_DIR) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_ARCHIVE) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_ARCHIVE) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_DISK) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_DISK) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_EMULATOR) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_EMULATOR) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_IMAGE) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_IMAGE) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_MUSIC) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_MUSIC) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_ROM) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_ROM) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_ROM_CHEAT) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_ROM_CHEAT) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_ROM_PATCH) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_ROM_PATCH) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_PLAYLIST) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_PLAYLIST) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_SAVE) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_SAVE) {
-            return 1;
-        } else if (a->type == ENTRY_TYPE_TEXT) {
-            return -1;
-        } else if (b->type == ENTRY_TYPE_TEXT) {
-            return 1;
-        }
+static int compare_entry (const void *pa, const void *pb) {
+    const entry_t *a = (const entry_t *) (pa);
+    const entry_t *b = (const entry_t *) (pb);
+
+    int pri_a = entry_type_sort_priority[a->type];
+    int pri_b = entry_type_sort_priority[b->type];
+    if (pri_a != pri_b) {
+        return pri_a - pri_b;
     }
 
     return strcasecmp((const char *) (a->name), (const char *) (b->name));
