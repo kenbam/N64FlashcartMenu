@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fatfs/ff.h>
+#include <mini.c/src/mini.h>
 
 #include "fs.h"
 #include "utils.h"
@@ -229,4 +231,51 @@ bool directory_create(char *path) {
     free(directory);
 
     return error;
+}
+
+bool file_rename(const char *old_path, const char *new_path) {
+    const char *old_fat = strip_fs_prefix((char *)old_path);
+    const char *new_fat = strip_fs_prefix((char *)new_path);
+    f_unlink(new_fat);
+    return (f_rename(old_fat, new_fat) == FR_OK);
+}
+
+/* NOTE: Coupled to mini_t struct layout (accesses ini->path directly). */
+int mini_save_safe(void *opaque, int flags) {
+    mini_t *ini = (mini_t *)opaque;
+    if (!ini->path || strlen(ini->path) < 1) {
+        return MINI_INVALID_PATH;
+    }
+
+    size_t path_len = strlen(ini->path);
+    char *tmp_path = malloc(path_len + 5);
+    if (!tmp_path) {
+        /* OOM fallback: direct write */
+        return mini_save(ini, flags);
+    }
+    memcpy(tmp_path, ini->path, path_len);
+    memcpy(tmp_path + path_len, ".tmp", 5);
+
+    /* Write to .tmp first */
+    char *orig_path = ini->path;
+    ini->path = tmp_path;
+    int result = mini_save(ini, flags);
+    ini->path = orig_path;
+
+    if (result != MINI_OK) {
+        /* .tmp write failed — fall back to direct write */
+        free(tmp_path);
+        return mini_save(ini, flags);
+    }
+
+    /* .tmp is good — atomic rename over the real file */
+    if (file_rename(tmp_path, ini->path)) {
+        free(tmp_path);
+        return MINI_OK;
+    }
+
+    /* Rename failed — fall back to direct write, clean up .tmp */
+    f_unlink(strip_fs_prefix(tmp_path));
+    free(tmp_path);
+    return mini_save(ini, flags);
 }

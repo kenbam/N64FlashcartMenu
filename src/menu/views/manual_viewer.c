@@ -186,7 +186,6 @@ static bool manual_start_page_load (menu_t *menu) {
     if (menu->manual.prefetch_loading) {
         png_decoder_abort();
         menu->manual.prefetch_loading = false;
-
     }
 
     manual_free_current_image(menu);

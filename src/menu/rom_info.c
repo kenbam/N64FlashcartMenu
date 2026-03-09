@@ -1506,7 +1506,7 @@ static rom_err_t save_rom_config_setting_to_file (path_t *path, const char *type
     bool empty = mini_empty(rom_config_ini);
 
     if (!empty) {
-        if (mini_save(rom_config_ini, MINI_FLAGS_NONE) != MINI_OK) {
+        if (mini_save_safe(rom_config_ini, MINI_FLAGS_NONE) != MINI_OK) {
             path_free(rom_info_path);
             mini_free(rom_config_ini);
             return ROM_ERR_SAVE_IO;
@@ -1559,7 +1559,7 @@ static rom_err_t save_rom_config_string_setting_to_file (path_t *path, const cha
     bool empty = mini_empty(rom_config_ini);
 
     if (!empty) {
-        if (mini_save(rom_config_ini, MINI_FLAGS_NONE) != MINI_OK) {
+        if (mini_save_safe(rom_config_ini, MINI_FLAGS_NONE) != MINI_OK) {
             path_free(rom_info_path);
             mini_free(rom_config_ini);
             return ROM_ERR_SAVE_IO;

@@ -354,7 +354,7 @@ void playtime_save (playtime_db_t *db) {
         }
     }
 
-    mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
+    mini_save_safe(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
     mini_free(ini);
 }
 

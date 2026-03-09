@@ -126,7 +126,7 @@ void bookkeeping_save (bookkeeping_t *history) {
     bookkeeping_ini_save_list(history->history_items, HISTORY_COUNT, bookkeeping_ini, "history");
     bookkeeping_ini_save_list(history->favorite_items, FAVORITES_COUNT, bookkeeping_ini, "favorite");
 
-    mini_save(bookkeeping_ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
+    mini_save_safe(bookkeeping_ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
     mini_free(bookkeeping_ini);    
 }
 

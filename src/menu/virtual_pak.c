@@ -78,7 +78,7 @@ static void virtual_pak_session_save(const virtual_pak_session_t *session) {
     mini_set_string(ini, "session", "rom_path", session->rom_path);
     mini_set_string(ini, "session", "pak_path", session->pak_path);
     mini_set_string(ini, "session", "backup_path", session->backup_path);
-    mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
+    mini_save_safe(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
     mini_free(ini);
 }
 
@@ -131,10 +131,7 @@ static bool virtual_pak_dump_controller_to_file(int controller, const char *out_
         return false;
     }
 
-    char temp_path[576];
-    snprintf(temp_path, sizeof(temp_path), "%s.tmp", out_path);
-
-    FILE *f = fopen(temp_path, "wb");
+    FILE *f = fopen(out_path, "wb");
     if (!f) {
         return false;
     }
@@ -152,16 +149,7 @@ static bool virtual_pak_dump_controller_to_file(int controller, const char *out_
     if (fclose(f)) {
         ok = false;
     }
-    if (!ok) {
-        remove(temp_path);
-        return false;
-    }
-    remove((char *)out_path);
-    if (rename(temp_path, out_path) != 0) {
-        remove(temp_path);
-        return false;
-    }
-    return true;
+    return ok;
 }
 
 static bool virtual_pak_restore_file_to_controller(int controller, const char *pak_path) {

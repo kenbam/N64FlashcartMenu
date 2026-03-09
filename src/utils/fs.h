@@ -110,4 +110,29 @@ bool directory_exists(char *path);
  */
 bool directory_create(char *path);
 
+/**
+ * @brief Atomically rename a file, replacing the destination if it exists.
+ *
+ * Uses FatFs f_rename under the hood. Removes the destination first
+ * since FAT32 rename cannot overwrite.
+ *
+ * @param old_path Source path.
+ * @param new_path Destination path.
+ * @return true on success, false on error.
+ */
+bool file_rename(const char *old_path, const char *new_path);
+
+/**
+ * @brief Save a mini_t INI file safely using write-to-tmp then atomic rename.
+ *
+ * Writes to a .tmp file first, then atomically renames over the target.
+ * If the target file is missing on load, callers can check for a .tmp
+ * to recover from an interrupted save.
+ *
+ * @param ini The mini_t instance to save.
+ * @param flags mini_save flags (e.g. MINI_FLAGS_SKIP_EMPTY_GROUPS).
+ * @return MINI_OK on success, or a MINI_* error code.
+ */
+int mini_save_safe(void *ini, int flags);
+
 #endif // UTILS_FS_H__

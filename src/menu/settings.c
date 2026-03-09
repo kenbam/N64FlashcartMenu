@@ -184,7 +184,7 @@ void settings_save (settings_t *settings) {
     mini_set_bool(ini, "menu_beta_flag", "selected_row_shimmer_enabled", settings->selected_row_shimmer_enabled);
     // mini_set_bool(ini, "menu_beta_flag", "rumble_enabled", settings->rumble_enabled);
 
-    mini_save(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
+    mini_save_safe(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
 
     mini_free(ini);
 }
