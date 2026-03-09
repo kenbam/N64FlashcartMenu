@@ -3200,6 +3200,56 @@ static void browser_apply_playlist_overrides_deferred(menu_t *menu) {
     }
 }
 
+static bool smart_playlist_execute(menu_t *menu, smart_playlist_query_t *query, int *playlist_capacity) {
+    if (!query->enabled) {
+        return true;
+    }
+
+    smart_playlist_entry_t *generated = NULL;
+    int generated_count = 0;
+    int generated_capacity = 0;
+
+    if (query->root_count == 0) {
+        path_t *default_root = path_init(menu->storage_prefix, "/");
+        if (!default_root) {
+            return false;
+        }
+        smart_playlist_add_root(query, path_get(default_root));
+        path_free(default_root);
+    }
+
+    for (int i = 0; i < query->root_count; i++) {
+        path_t *root = path_create(query->roots[i]);
+        if (!root) {
+            continue;
+        }
+        bool ok = smart_playlist_collect_dir(menu, root, query, &generated, &generated_count, &generated_capacity, 0);
+        path_free(root);
+        if (!ok) {
+            for (int j = 0; j < generated_count; j++) {
+                smart_playlist_entry_free(&generated[j]);
+            }
+            free(generated);
+            return false;
+        }
+    }
+
+    generated_count = smart_playlist_deduplicate_entries(generated, generated_count);
+    smart_playlist_sort_entries(generated, generated_count, query);
+    for (int i = 0; i < generated_count; i++) {
+        if (!playlist_append_rom_entry_unique(menu, generated[i].path, playlist_capacity)) {
+            for (int j = i; j < generated_count; j++) {
+                smart_playlist_entry_free(&generated[j]);
+            }
+            free(generated);
+            return false;
+        }
+        smart_playlist_entry_free(&generated[i]);
+    }
+    free(generated);
+    return true;
+}
+
 static bool load_playlist (menu_t *menu) {
     uint64_t open_start_us = get_ticks_us();
     uint64_t parse_start_us = 0;
@@ -3365,58 +3415,12 @@ static bool load_playlist (menu_t *menu) {
 
     if (smart_query.enabled) {
         smart_start_us = get_ticks_us();
-        smart_playlist_entry_t *generated = NULL;
-        int generated_count = 0;
-        int generated_capacity = 0;
-
-        if (smart_query.root_count == 0) {
-            path_t *default_root = path_init(menu->storage_prefix, "/");
-            if (!default_root) {
-                playlist_props_free(&props);
-                browser_list_free(menu);
-                path_free(playlist_dir);
-                return true;
-            }
-            smart_playlist_add_root(&smart_query, path_get(default_root));
-            path_free(default_root);
+        if (!smart_playlist_execute(menu, &smart_query, &playlist_capacity)) {
+            playlist_props_free(&props);
+            browser_list_free(menu);
+            path_free(playlist_dir);
+            return true;
         }
-
-        for (int i = 0; i < smart_query.root_count; i++) {
-            path_t *root = path_create(smart_query.roots[i]);
-            if (!root) {
-                continue;
-            }
-            bool ok = smart_playlist_collect_dir(menu, root, &smart_query, &generated, &generated_count, &generated_capacity, 0);
-            path_free(root);
-            if (!ok) {
-                for (int j = 0; j < generated_count; j++) {
-                    smart_playlist_entry_free(&generated[j]);
-                }
-                free(generated);
-                playlist_props_free(&props);
-                browser_list_free(menu);
-                path_free(playlist_dir);
-                return true;
-            }
-        }
-
-        generated_count = smart_playlist_deduplicate_entries(generated, generated_count);
-        smart_playlist_sort_entries(generated, generated_count, &smart_query);
-        for (int i = 0; i < generated_count; i++) {
-            if (!playlist_append_rom_entry_unique(menu, generated[i].path, &playlist_capacity)) {
-                for (int j = i; j < generated_count; j++) {
-                    smart_playlist_entry_free(&generated[j]);
-                }
-                free(generated);
-                playlist_props_free(&props);
-                browser_list_free(menu);
-                path_free(playlist_dir);
-                return true;
-            }
-            smart_playlist_entry_free(&generated[i]);
-        }
-        free(generated);
-
         smart_ms = elapsed_ms(smart_start_us);
     }
 
