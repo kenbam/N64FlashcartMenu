@@ -2705,6 +2705,9 @@ static bool browser_reserve_entry_capacity(menu_t *menu, int *capacity, int extr
     }
 
     int needed = menu->browser.entries + extra_entries;
+    if (needed < 0 || needed > 16384) {
+        return false;
+    }
     if (*capacity >= needed) {
         return true;
     }
@@ -2712,6 +2715,9 @@ static bool browser_reserve_entry_capacity(menu_t *menu, int *capacity, int extr
     int next_capacity = (*capacity > 0) ? *capacity : 16;
     while (next_capacity < needed) {
         next_capacity *= 2;
+        if (next_capacity > 16384) {
+            return false;
+        }
     }
 
     entry_t *next = realloc(menu->browser.list, (size_t)next_capacity * sizeof(entry_t));
@@ -2889,9 +2895,13 @@ static bool smart_playlist_collect_dir(
                 smart_playlist_entry_t candidate = {0};
                 if (smart_playlist_matches(menu, query, normalized, &rom_info, &candidate)) {
                     int needed = *count + 1;
+                    if (needed > 16384) {
+                        smart_playlist_entry_free(&candidate);
+                        continue;
+                    }
                     if (*capacity < needed) {
                         int next_capacity = (*capacity > 0) ? *capacity : 32;
-                        while (next_capacity < needed) {
+                        while (next_capacity < needed && next_capacity <= 16384) {
                             next_capacity *= 2;
                         }
                         smart_playlist_entry_t *next = realloc(*entries, (size_t)next_capacity * sizeof(**entries));
