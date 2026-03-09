@@ -1080,19 +1080,6 @@ static uint32_t playlist_grid_prepare_tick = 0;
 static int playlist_grid_idle_frames = 0;
 
 typedef struct {
-    bool valid;
-    bool rom_info_loaded;
-    uint32_t last_used_tick;
-    char *entry_path;
-    char game_code[4];
-    char rom_title[21];
-} playlist_grid_meta_cache_entry_t;
-
-#define PLAYLIST_GRID_META_CACHE_ENTRIES 64
-static playlist_grid_meta_cache_entry_t playlist_grid_meta_cache[PLAYLIST_GRID_META_CACHE_ENTRIES];
-static uint32_t playlist_grid_meta_cache_tick = 1;
-
-typedef struct {
     bool attempted;
     bool loaded;
     char game_code[4];
@@ -1218,96 +1205,6 @@ static bool playlist_grid_get_boxart_meta_by_index_cached_only(menu_t *menu, int
     return true;
 }
 
-static playlist_grid_meta_cache_entry_t *playlist_grid_meta_cache_find(const char *entry_path) {
-    if (!entry_path) {
-        return NULL;
-    }
-    for (int i = 0; i < PLAYLIST_GRID_META_CACHE_ENTRIES; i++) {
-        playlist_grid_meta_cache_entry_t *e = &playlist_grid_meta_cache[i];
-        if (!e->valid || !e->entry_path) {
-            continue;
-        }
-        if (strcmp(e->entry_path, entry_path) == 0) {
-            e->last_used_tick = ++playlist_grid_meta_cache_tick;
-            return e;
-        }
-    }
-    return NULL;
-}
-
-static playlist_grid_meta_cache_entry_t *playlist_grid_meta_cache_alloc(const char *entry_path) {
-    if (!entry_path) {
-        return NULL;
-    }
-
-    playlist_grid_meta_cache_entry_t *empty = NULL;
-    playlist_grid_meta_cache_entry_t *oldest = &playlist_grid_meta_cache[0];
-    for (int i = 0; i < PLAYLIST_GRID_META_CACHE_ENTRIES; i++) {
-        playlist_grid_meta_cache_entry_t *e = &playlist_grid_meta_cache[i];
-        if (!e->valid) {
-            empty = e;
-            break;
-        }
-        if (e->last_used_tick < oldest->last_used_tick) {
-            oldest = e;
-        }
-    }
-
-    playlist_grid_meta_cache_entry_t *slot = empty ? empty : oldest;
-    free(slot->entry_path);
-    memset(slot, 0, sizeof(*slot));
-    slot->entry_path = strdup(entry_path);
-    if (!slot->entry_path) {
-        return NULL;
-    }
-    slot->valid = true;
-    slot->last_used_tick = ++playlist_grid_meta_cache_tick;
-    return slot;
-}
-
-static bool playlist_grid_get_boxart_meta(const char *entry_path, char game_code_out[4], char rom_title_out[21]) {
-    if (!entry_path || !game_code_out || !rom_title_out) {
-        return false;
-    }
-
-    playlist_grid_meta_cache_entry_t *cached = playlist_grid_meta_cache_find(entry_path);
-    if (cached) {
-        if (!cached->rom_info_loaded) {
-            return false;
-        }
-        memcpy(game_code_out, cached->game_code, 4);
-        memcpy(rom_title_out, cached->rom_title, 21);
-        return true;
-    }
-
-    path_t *rom_path = path_create(entry_path);
-    if (!rom_path) {
-        return false;
-    }
-
-    rom_info_t rom_info = {0};
-    bool ok = (rom_config_load(rom_path, &rom_info) == ROM_OK);
-    path_free(rom_path);
-
-    playlist_grid_meta_cache_entry_t *slot = playlist_grid_meta_cache_alloc(entry_path);
-    if (!slot) {
-        return false;
-    }
-
-    if (!ok) {
-        slot->rom_info_loaded = false;
-        return false;
-    }
-
-    slot->rom_info_loaded = true;
-    memcpy(slot->game_code, rom_info.game_code, 4);
-    memcpy(slot->rom_title, rom_info.title, 20);
-    slot->rom_title[20] = '\0';
-
-    memcpy(game_code_out, slot->game_code, 4);
-    memcpy(rom_title_out, slot->rom_title, 21);
-    return true;
-}
 
 static const char *browser_grid_display_name(const char *name, char *buffer, size_t buffer_size) {
     if (!name || !buffer || buffer_size == 0) {
