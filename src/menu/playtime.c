@@ -250,13 +250,13 @@ void playtime_load (playtime_db_t *db) {
     bool migrated = false;
     for (int64_t i = 0; i < count; i++) {
         char key[64];
-        sprintf(key, "%lld_path", (long long)i);
+        snprintf(key, sizeof(key), "%lld_path", (long long)i);
         const char *path = mini_get_string(ini, "stats", key, "");
         if (path == NULL || path[0] == '\0') {
             continue;
         }
 
-        sprintf(key, "%lld_game_id", (long long)i);
+        snprintf(key, sizeof(key), "%lld_game_id", (long long)i);
         const char *game_id = mini_get_string(ini, "stats", key, "");
 
         playtime_add_entry(db, path, game_id);
@@ -265,25 +265,25 @@ void playtime_load (playtime_db_t *db) {
             migrated = true;
         }
 
-        sprintf(key, "%lld_total", (long long)i);
+        snprintf(key, sizeof(key), "%lld_total", (long long)i);
         entry->total_seconds = (uint64_t)mini_get_int(ini, "stats", key, 0);
 
-        sprintf(key, "%lld_last_session", (long long)i);
+        snprintf(key, sizeof(key), "%lld_last_session", (long long)i);
         entry->last_session_seconds = (uint64_t)mini_get_int(ini, "stats", key, 0);
 
-        sprintf(key, "%lld_last_played", (long long)i);
+        snprintf(key, sizeof(key), "%lld_last_played", (long long)i);
         entry->last_played = (int64_t)mini_get_int(ini, "stats", key, 0);
 
-        sprintf(key, "%lld_active_start", (long long)i);
+        snprintf(key, sizeof(key), "%lld_active_start", (long long)i);
         entry->active_start = (int64_t)mini_get_int(ini, "stats", key, 0);
 
-        sprintf(key, "%lld_active", (long long)i);
+        snprintf(key, sizeof(key), "%lld_active", (long long)i);
         entry->active = mini_get_int(ini, "stats", key, 0) ? true : false;
 
-        sprintf(key, "%lld_play_count", (long long)i);
+        snprintf(key, sizeof(key), "%lld_play_count", (long long)i);
         entry->play_count = (uint32_t)mini_get_int(ini, "stats", key, 0);
 
-        sprintf(key, "%lld_recent_count", (long long)i);
+        snprintf(key, sizeof(key), "%lld_recent_count", (long long)i);
         int64_t recent_count = mini_get_int(ini, "stats", key, 0);
         if (recent_count < 0) {
             recent_count = 0;
@@ -293,9 +293,9 @@ void playtime_load (playtime_db_t *db) {
         }
         entry->recent_sessions_count = (uint32_t)recent_count;
         for (uint32_t j = 0; j < entry->recent_sessions_count; j++) {
-            sprintf(key, "%lld_recent_%u_duration", (long long)i, (unsigned int)j);
+            snprintf(key, sizeof(key), "%lld_recent_%u_duration", (long long)i, (unsigned int)j);
             entry->recent_sessions[j].duration_seconds = (uint64_t)mini_get_int(ini, "stats", key, 0);
-            sprintf(key, "%lld_recent_%u_ended_at", (long long)i, (unsigned int)j);
+            snprintf(key, sizeof(key), "%lld_recent_%u_ended_at", (long long)i, (unsigned int)j);
             entry->recent_sessions[j].ended_at = (int64_t)mini_get_int(ini, "stats", key, 0);
         }
     }
@@ -320,36 +320,36 @@ void playtime_save (playtime_db_t *db) {
         char key[64];
         playtime_entry_t *entry = &db->entries[i];
 
-        sprintf(key, "%u_path", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_path", (unsigned int)i);
         mini_set_string(ini, "stats", key, entry->path ? entry->path : "");
 
-        sprintf(key, "%u_game_id", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_game_id", (unsigned int)i);
         mini_set_string(ini, "stats", key, entry->game_id);
 
-        sprintf(key, "%u_total", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_total", (unsigned int)i);
         mini_set_int(ini, "stats", key, (long long)entry->total_seconds);
 
-        sprintf(key, "%u_last_session", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_last_session", (unsigned int)i);
         mini_set_int(ini, "stats", key, (long long)entry->last_session_seconds);
 
-        sprintf(key, "%u_last_played", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_last_played", (unsigned int)i);
         mini_set_int(ini, "stats", key, (long long)entry->last_played);
 
-        sprintf(key, "%u_active_start", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_active_start", (unsigned int)i);
         mini_set_int(ini, "stats", key, (long long)entry->active_start);
 
-        sprintf(key, "%u_active", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_active", (unsigned int)i);
         mini_set_int(ini, "stats", key, entry->active ? 1 : 0);
 
-        sprintf(key, "%u_play_count", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_play_count", (unsigned int)i);
         mini_set_int(ini, "stats", key, (long long)entry->play_count);
 
-        sprintf(key, "%u_recent_count", (unsigned int)i);
+        snprintf(key, sizeof(key), "%u_recent_count", (unsigned int)i);
         mini_set_int(ini, "stats", key, (long long)entry->recent_sessions_count);
         for (uint32_t j = 0; j < entry->recent_sessions_count; j++) {
-            sprintf(key, "%u_recent_%u_duration", (unsigned int)i, (unsigned int)j);
+            snprintf(key, sizeof(key), "%u_recent_%u_duration", (unsigned int)i, (unsigned int)j);
             mini_set_int(ini, "stats", key, (long long)entry->recent_sessions[j].duration_seconds);
-            sprintf(key, "%u_recent_%u_ended_at", (unsigned int)i, (unsigned int)j);
+            snprintf(key, sizeof(key), "%u_recent_%u_ended_at", (unsigned int)i, (unsigned int)j);
             mini_set_int(ini, "stats", key, (long long)entry->recent_sessions[j].ended_at);
         }
     }
