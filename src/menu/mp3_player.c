@@ -468,7 +468,7 @@ mp3player_err_t mp3player_seek (int seconds) {
         return MP3PLAYER_ERR_IO;
     }
 
-    p->seek_predecode_frames = (position == p->data_start) ? 0 : SEEK_PREDECODE_FRAMES;
+    p->seek_predecode_frames = (position == (long)(p->data_start)) ? 0 : SEEK_PREDECODE_FRAMES;
 
     return MP3PLAYER_OK;
 }
@@ -526,8 +526,8 @@ float mp3player_get_progress (void) {
     }
 
     long data_size = p->file_size - p->data_start;
-    long data_consumed = ftell(p->f) - p->buffer_left;
-    long data_position = (data_consumed > p->data_start) ? (data_consumed - p->data_start) : 0;
+    long data_consumed = ftell(p->f) - (long)(p->buffer_left);
+    long data_position = (data_consumed > (long)(p->data_start)) ? (data_consumed - (long)(p->data_start)) : 0;
 
     return data_position / (float) (data_size);
 }

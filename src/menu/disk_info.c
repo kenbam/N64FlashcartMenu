@@ -91,8 +91,8 @@ static bool verify_system_data_lba (uint8_t *buffer) {
     return (
         (buffer[4] == 0x10) &&
         ((buffer[5] & 0xF0) == 0x10) &&
-        ((buffer[5] & 0x0F) <= DISK_TYPE_6) &&
-        (GET_U32(&buffer[24]) == 0xFFFFFFFF)
+        ((unsigned)(buffer[5] & 0x0F) <= DISK_TYPE_6) &&
+        ((uint32_t)(GET_U32(&buffer[24])) == 0xFFFFFFFFU)
     );
 }
 

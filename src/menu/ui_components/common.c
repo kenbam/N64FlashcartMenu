@@ -586,7 +586,7 @@ void ui_components_messagebox_draw (char *fmt, ...) {
  * @param fmt The format string.
  * @param ... The format arguments.
  */
-void ui_components_main_text_draw (menu_font_type_t style, rdpq_align_t align, rdpq_valign_t valign, char *fmt, ...) {
+void ui_components_main_text_draw (menu_font_style_t style, rdpq_align_t align, rdpq_valign_t valign, char *fmt, ...) {
     char buffer[1024];
     size_t nbytes = sizeof(buffer);
 
@@ -626,7 +626,7 @@ void ui_components_main_text_draw (menu_font_type_t style, rdpq_align_t align, r
  * @param fmt The format string.
  * @param ... The format arguments.
  */
-void ui_components_actions_bar_text_draw (menu_font_type_t style, rdpq_align_t align, rdpq_valign_t valign, char *fmt, ...) {
+void ui_components_actions_bar_text_draw (menu_font_style_t style, rdpq_align_t align, rdpq_valign_t valign, char *fmt, ...) {
     char buffer[256];
     size_t nbytes = sizeof(buffer);
 

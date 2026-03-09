@@ -27,7 +27,7 @@
 
 #define SUPPORTED_MAJOR_VERSION     (2)
 #define SUPPORTED_MINOR_VERSION     (17)
-#define SUPPORTED_REVISION          (0)
+#define SUPPORTED_REVISION          (0U)
 
 #define DISK_MAPPING_ROM_OFFSET     (0x02000000)
 #define DISK_MAX_SECTORS            (126820)
@@ -168,7 +168,7 @@ static bool disk_system_lba_is_bad (uint16_t lba, flashcart_disk_parameters_t *d
  */
 static void disk_set_thb_mapping (uint32_t offset, uint16_t track, uint8_t head, uint8_t block, bool valid, bool writable, int file_offset) {
     uint32_t index = (track << 2) | (head << 1) | (block);
-    uint32_t mapping = valid ? ((writable ? THB_WRITABLE_FLAG : 0) | (file_offset & ~(THB_WRITABLE_FLAG))) : THB_UNMAPPED;
+    uint32_t mapping = valid ? ((writable ? THB_WRITABLE_FLAG : 0) | ((uint32_t)(file_offset) & ~(THB_WRITABLE_FLAG))) : THB_UNMAPPED;
 
     io_write(ROM_ADDRESS + offset + (index * sizeof(uint32_t)), mapping);
 }
@@ -273,9 +273,12 @@ static flashcart_err_t sc64_init (void) {
     }
     if (minor < SUPPORTED_MINOR_VERSION) {
         return FLASHCART_ERR_OUTDATED;
-    } else if (minor == SUPPORTED_MINOR_VERSION && revision < SUPPORTED_REVISION) {
+    }
+#if SUPPORTED_REVISION > 0
+    if (minor == SUPPORTED_MINOR_VERSION && revision < SUPPORTED_REVISION) {
         return FLASHCART_ERR_OUTDATED;
     }
+#endif
 
     bool writeback_pending;
     do {

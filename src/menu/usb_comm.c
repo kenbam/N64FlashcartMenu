@@ -140,7 +140,7 @@ static void command_receive_file (menu_t *menu) {
     while (remaining > 0) {
         int block_size = MIN(remaining, sizeof(data));
         usb_read(data, block_size);
-        if (fwrite(data, 1, block_size, f) != block_size) {
+        if (fwrite(data, 1, block_size, f) != (size_t)(block_size)) {
             fclose(f);
             return usb_comm_send_error("Couldn't write all required data to the file\n");
         }

@@ -1105,7 +1105,7 @@ static view_t menu_views[] = {
  * @return view_t* Pointer to the view structure.
  */
 static view_t *menu_get_view (menu_mode_t id) {
-    for (int i = 0; i < sizeof(menu_views) / sizeof(view_t); i++) {
+    for (size_t i = 0; i < sizeof(menu_views) / sizeof(view_t); i++) {
         if (menu_views[i].id == id) {
             return &menu_views[i];
         }

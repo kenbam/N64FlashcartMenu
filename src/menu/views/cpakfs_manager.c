@@ -615,7 +615,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
     char has_mem_text[64];
     char free_space_cpak_text[64];
-    menu_font_type_t style;
+    menu_font_style_t style;
 
     style = STL_DEFAULT;
 

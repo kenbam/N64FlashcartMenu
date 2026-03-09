@@ -308,7 +308,7 @@ void png_decoder_poll (void) {
         if (err == SPNG_OK || err == SPNG_EOI) {
             decoder->decoded_rows += 1;
             uint16_t *image_buffer = decoder->image->buffer + (row_info.row_num * decoder->image->stride);
-            for (int i = 0; i < decoder->ihdr.width * 3; i += 3) {
+            for (uint32_t i = 0; i < decoder->ihdr.width * 3; i += 3) {
                 uint8_t r = decoder->row_buffer[i + 0] >> 3;
                 uint8_t g = decoder->row_buffer[i + 1] >> 3;
                 uint8_t b = decoder->row_buffer[i + 2] >> 3;

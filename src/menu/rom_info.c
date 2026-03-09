@@ -697,7 +697,7 @@ static void fix_rom_header_endianness (rom_header_t *rom_header, rom_info_t *rom
     switch (rom_header->pi_dom1_config) {
         case PI_CONFIG_LITTLE_ENDIAN:
             rom_info->endianness = ENDIANNESS_LITTLE;
-            for (int i = 0; i < sizeof(rom_header_t); i += 4) {
+            for (size_t i = 0; i < sizeof(rom_header_t); i += 4) {
                 SWAP_VARS(raw[i + 0], raw[i + 3]);
                 SWAP_VARS(raw[i + 1], raw[i + 2]);
             }
@@ -705,7 +705,7 @@ static void fix_rom_header_endianness (rom_header_t *rom_header, rom_info_t *rom
 
         case PI_CONFIG_BYTE_SWAPPED:
             rom_info->endianness = ENDIANNESS_BYTE_SWAP;
-            for (int i = 0; i < sizeof(rom_header_t); i += 2) {
+            for (size_t i = 0; i < sizeof(rom_header_t); i += 2) {
                 SWAP_VARS(raw[i + 0], raw[i + 1]);
             }
             break;
@@ -1527,6 +1527,7 @@ static rom_err_t save_rom_config_setting_to_file (path_t *path, const char *type
     return ROM_OK;
 }
 
+__attribute__((unused))
 static rom_err_t save_rom_config_string_setting_to_file (path_t *path, const char *type, const char *id, const char *value, const char *default_value) {
     path_t *rom_info_path = path_clone(path);
 

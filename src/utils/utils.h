@@ -41,7 +41,12 @@
  * @param b The second value.
  * @return The minimum of @p a and @p b.
  */
-#define MIN(a,b)        ({ typeof(a) _a = a; typeof(b) _b = b; _a < _b ? _a : _b; })
+#define MIN(a,b) ({ \
+    _Pragma("GCC diagnostic push") \
+    _Pragma("GCC diagnostic ignored \"-Wsign-compare\"") \
+    typeof(a) _a = a; typeof(b) _b = b; _a < _b ? _a : _b; \
+    _Pragma("GCC diagnostic pop") \
+})
 
 /**
  * @def KiB(x)

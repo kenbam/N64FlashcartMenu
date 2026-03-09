@@ -91,7 +91,7 @@ bool file_allocate(char *path, size_t size) {
         fclose(f);
         return true;
     }
-    if (ftell(f) != size) {
+    if ((size_t)(ftell(f)) != size) {
         fclose(f);
         return true;
     }
@@ -116,7 +116,7 @@ bool file_fill(char *path, uint8_t value) {
     uint8_t buffer[FS_SECTOR_SIZE * 8];
     size_t bytes_to_write;
 
-    for (int i = 0; i < sizeof(buffer); i++) {
+    for (size_t i = 0; i < sizeof(buffer); i++) {
         buffer[i] = value;
     }
 

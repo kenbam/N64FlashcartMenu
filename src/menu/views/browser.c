@@ -1781,7 +1781,7 @@ void view_browser_deinit (menu_t *menu) {
         return;
     }
     browser_list_free(menu);
-    for (int i = 0; i < PLAYLIST_MEM_CACHE_ENTRIES; i++) {
+    for (size_t i = 0; i < PLAYLIST_MEM_CACHE_ENTRIES; i++) {
         playlist_mem_cache_entry_clear(&playlist_mem_cache[i]);
     }
 }

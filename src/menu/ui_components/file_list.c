@@ -66,6 +66,7 @@ void ui_components_set_file_list_top_inset(int inset_pixels) {
  * @param size Size of the file in bytes.
  * @return Number of characters written to the buffer.
  */
+__attribute__((unused))
 static int format_file_size(char *buffer, size_t buf_size, int64_t size) {
     if (size < 0) {
         return snprintf(buffer, buf_size, "unknown");
