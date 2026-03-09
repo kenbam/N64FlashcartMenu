@@ -719,15 +719,7 @@ static void set_menu_next_mode (menu_t *menu, void *arg) {
     menu->next_mode = next_mode;
 }
 
-static void open_manual (menu_t *menu, void *arg) {
-    (void)arg;
-
-    path_t *manual_directory = NULL;
-    if (!resolve_manual_directory_for_current_rom(menu, &manual_directory, NULL)) {
-        menu_show_error(menu, "No manual package found for this ROM");
-        return;
-    }
-
+static void manual_prepare_launch (menu_t *menu, path_t *manual_directory, bool tiled_beta) {
     if (menu->manual.directory) {
         path_free(menu->manual.directory);
     }
@@ -750,8 +742,20 @@ static void open_manual (menu_t *menu, void *arg) {
 
     menu->manual.directory = manual_directory;
     menu->manual.return_mode = MENU_MODE_LOAD_ROM;
-    menu->manual.tiled_beta = false;
+    menu->manual.tiled_beta = tiled_beta;
     menu->next_mode = MENU_MODE_MANUAL_VIEWER;
+}
+
+static void open_manual (menu_t *menu, void *arg) {
+    (void)arg;
+
+    path_t *manual_directory = NULL;
+    if (!resolve_manual_directory_for_current_rom(menu, &manual_directory, NULL)) {
+        menu_show_error(menu, "No manual package found for this ROM");
+        return;
+    }
+
+    manual_prepare_launch(menu, manual_directory, false);
 }
 
 static void open_manual_tiled_beta (menu_t *menu, void *arg) {
@@ -763,30 +767,7 @@ static void open_manual_tiled_beta (menu_t *menu, void *arg) {
         return;
     }
 
-    if (menu->manual.directory) {
-        path_free(menu->manual.directory);
-    }
-    if (menu->manual.pages_directory) {
-        path_free(menu->manual.pages_directory);
-        menu->manual.pages_directory = NULL;
-    }
-    if (menu->manual.zoom_pages_directory) {
-        path_free(menu->manual.zoom_pages_directory);
-        menu->manual.zoom_pages_directory = NULL;
-    }
-    if (menu->manual.tiled_preview_directory) {
-        path_free(menu->manual.tiled_preview_directory);
-        menu->manual.tiled_preview_directory = NULL;
-    }
-    if (menu->manual.tiled_pages_directory) {
-        path_free(menu->manual.tiled_pages_directory);
-        menu->manual.tiled_pages_directory = NULL;
-    }
-
-    menu->manual.directory = manual_directory;
-    menu->manual.return_mode = MENU_MODE_LOAD_ROM;
-    menu->manual.tiled_beta = true;
-    menu->next_mode = MENU_MODE_MANUAL_VIEWER;
+    manual_prepare_launch(menu, manual_directory, true);
 }
 
 static component_context_menu_t options_context_menu = { .list = {
