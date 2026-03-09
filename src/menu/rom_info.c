@@ -1313,7 +1313,7 @@ static bool rom_identity_should_scan_dir(const char *dirname) {
 static bool rom_identity_scan_dir(path_t *dir_path, const char *target_game_id, char *out, size_t out_len, int depth) {
     static const char *rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
 
-    if (!dir_path || !target_game_id || !out || out_len == 0 || depth > 12) {
+    if (!dir_path || !target_game_id || !out || out_len == 0 || depth > 6) {
         return false;
     }
     if (!directory_exists(path_get(dir_path))) {
