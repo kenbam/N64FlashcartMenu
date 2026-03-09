@@ -3544,7 +3544,7 @@ static bool load_playlist (menu_t *menu) {
             free(playlist_bgm);
             free(playlist_bg);
             free(playlist_screensaver_logo);
-                    browser_list_free(menu);
+            browser_list_free(menu);
             path_free(playlist_dir);
             return true;
         }
@@ -3563,7 +3563,7 @@ static bool load_playlist (menu_t *menu) {
             free(playlist_bgm);
             free(playlist_bg);
             free(playlist_screensaver_logo);
-                    browser_list_free(menu);
+            browser_list_free(menu);
             path_free(playlist_dir);
             return true;
         }
@@ -3587,7 +3587,7 @@ static bool load_playlist (menu_t *menu) {
                 free(playlist_bgm);
                 free(playlist_bg);
                 free(playlist_screensaver_logo);
-                            browser_list_free(menu);
+                browser_list_free(menu);
                 path_free(playlist_dir);
                 return true;
             }
@@ -3611,7 +3611,7 @@ static bool load_playlist (menu_t *menu) {
                 free(playlist_bgm);
                 free(playlist_bg);
                 free(playlist_screensaver_logo);
-                            browser_list_free(menu);
+                browser_list_free(menu);
                 path_free(playlist_dir);
                 return true;
             }
@@ -3629,7 +3629,7 @@ static bool load_playlist (menu_t *menu) {
                 free(playlist_bgm);
                 free(playlist_bg);
                 free(playlist_screensaver_logo);
-                            browser_list_free(menu);
+                browser_list_free(menu);
                 path_free(playlist_dir);
                 return true;
             }
