@@ -231,6 +231,19 @@ bool rom_info_get_cic_seed(rom_info_t *rom_info, uint8_t *seed);
 rom_err_t rom_config_load(path_t *path, rom_info_t *rom_info);
 
 /**
+ * @brief Read only game_code and title from a ROM file header.
+ *
+ * Reads 64 bytes instead of the full 4KB header, skipping database lookup,
+ * config, and metadata loading. Intended for grid view boxart matching.
+ *
+ * @param path ROM file path string
+ * @param game_code_out Output buffer for 4-byte game code (not null-terminated)
+ * @param title_out Output buffer for null-terminated 20-char title (21 bytes)
+ * @return rom_err_t Error code
+ */
+rom_err_t rom_info_read_quick(const char *path, char game_code_out[4], char title_out[21]);
+
+/**
  * @brief Load ROM information with optional config/metadata controls.
  *
  * @param path Pointer to the path structure

@@ -1162,24 +1162,16 @@ static bool playlist_grid_get_boxart_meta_by_index(menu_t *menu, int entry_index
         return false;
     }
 
-    path_t *rom_path = path_create(entry->path);
-    if (!rom_path) {
-        idx->loaded = false;
-        return false;
-    }
-
-    rom_info_t rom_info = {0};
-    bool ok = (rom_config_load(rom_path, &rom_info) == ROM_OK);
-    path_free(rom_path);
-    if (!ok) {
+    char quick_game_code[4];
+    char quick_title[21];
+    if (rom_info_read_quick(entry->path, quick_game_code, quick_title) != ROM_OK) {
         idx->loaded = false;
         return false;
     }
 
     idx->loaded = true;
-    memcpy(idx->game_code, rom_info.game_code, 4);
-    memcpy(idx->rom_title, rom_info.title, 20);
-    idx->rom_title[20] = '\0';
+    memcpy(idx->game_code, quick_game_code, 4);
+    memcpy(idx->rom_title, quick_title, 21);
 
     memcpy(game_code_out, idx->game_code, 4);
     memcpy(rom_title_out, idx->rom_title, 21);

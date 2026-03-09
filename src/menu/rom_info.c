@@ -1726,3 +1726,40 @@ rom_err_t rom_config_load_ex(path_t *path, rom_info_t *rom_info, const rom_load_
 rom_err_t rom_config_load (path_t *path, rom_info_t *rom_info) {
     return rom_config_load_ex(path, rom_info, NULL);
 }
+
+rom_err_t rom_info_read_quick (const char *path, char game_code_out[4], char title_out[21]) {
+    #define ROM_HEADER_PREFIX_SIZE 64
+    uint8_t buf[ROM_HEADER_PREFIX_SIZE];
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return ROM_ERR_NO_FILE;
+    }
+    setbuf(f, NULL);
+    if (fread(buf, ROM_HEADER_PREFIX_SIZE, 1, f) != 1) {
+        fclose(f);
+        return ROM_ERR_LOAD_IO;
+    }
+    fclose(f);
+
+    uint32_t pi_config;
+    memcpy(&pi_config, buf, sizeof(pi_config));
+
+    if (pi_config == PI_CONFIG_LITTLE_ENDIAN) {
+        for (size_t i = 0; i < ROM_HEADER_PREFIX_SIZE; i += 4) {
+            SWAP_VARS(buf[i + 0], buf[i + 3]);
+            SWAP_VARS(buf[i + 1], buf[i + 2]);
+        }
+    } else if (pi_config == PI_CONFIG_BYTE_SWAPPED) {
+        for (size_t i = 0; i < ROM_HEADER_PREFIX_SIZE; i += 2) {
+            SWAP_VARS(buf[i + 0], buf[i + 1]);
+        }
+    }
+
+    memcpy(title_out, &buf[0x20], 20);
+    title_out[20] = '\0';
+    memcpy(game_code_out, &buf[0x3B], 4);
+
+    return ROM_OK;
+    #undef ROM_HEADER_PREFIX_SIZE
+}
