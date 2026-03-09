@@ -48,6 +48,7 @@ static char cached_last_played_buf[64];
 static char cached_recent_sessions_buf[512];
 static char cached_save_health_buf[128];
 static char cached_save_modified_buf[64];
+static bool cached_has_manual = false;
 
 static bool resolve_metadata_directory_for_rom (path_t *path, const char game_code[4], char *resolved, size_t resolved_size) {
     if ((path == NULL) || (game_code == NULL)) {
@@ -719,7 +720,7 @@ static void set_menu_next_mode (menu_t *menu, void *arg) {
     menu->next_mode = next_mode;
 }
 
-static void manual_prepare_launch (menu_t *menu, path_t *manual_directory, bool tiled_beta) {
+static void manual_prepare_launch (menu_t *menu, path_t *manual_directory) {
     if (menu->manual.directory) {
         path_free(menu->manual.directory);
     }
@@ -731,18 +732,9 @@ static void manual_prepare_launch (menu_t *menu, path_t *manual_directory, bool 
         path_free(menu->manual.zoom_pages_directory);
         menu->manual.zoom_pages_directory = NULL;
     }
-    if (menu->manual.tiled_preview_directory) {
-        path_free(menu->manual.tiled_preview_directory);
-        menu->manual.tiled_preview_directory = NULL;
-    }
-    if (menu->manual.tiled_pages_directory) {
-        path_free(menu->manual.tiled_pages_directory);
-        menu->manual.tiled_pages_directory = NULL;
-    }
 
     menu->manual.directory = manual_directory;
     menu->manual.return_mode = MENU_MODE_LOAD_ROM;
-    menu->manual.tiled_beta = tiled_beta;
     menu->next_mode = MENU_MODE_MANUAL_VIEWER;
 }
 
@@ -755,19 +747,7 @@ static void open_manual (menu_t *menu, void *arg) {
         return;
     }
 
-    manual_prepare_launch(menu, manual_directory, false);
-}
-
-static void open_manual_tiled_beta (menu_t *menu, void *arg) {
-    (void)arg;
-
-    path_t *manual_directory = NULL;
-    if (!resolve_manual_directory_for_current_rom(menu, &manual_directory, "tiled")) {
-        menu_show_error(menu, "No tiled manual beta package found for this ROM");
-        return;
-    }
-
-    manual_prepare_launch(menu, manual_directory, true);
+    manual_prepare_launch(menu, manual_directory);
 }
 
 static component_context_menu_t options_context_menu = { .list = {
@@ -781,7 +761,6 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Virtual Controller Pak", .submenu = &set_virtual_pak_options_menu },
     { .text = "Datel Code Editor", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_DATEL_CODE_EDITOR) },
     { .text = "Open Manual", .action = open_manual },
-    { .text = "View Manual (Tiled Beta)", .action = open_manual_tiled_beta },
 #ifdef FEATURE_PATCHER_GUI_ENABLED
     { .text = "Use Patches", .submenu = &set_patcher_options_menu },
 #endif
@@ -1107,6 +1086,7 @@ static void draw (menu_t *menu, surface_t *d) {
             "Virtual PAK:\t\t%s\n"
             "ESRB Rating:\t\t%s\n"
             "Age Rating:\t\t%s\n\n"
+            "Manual:\t\t\t%s\n"
             "Description:\n\t%s\n\n"
             "Datel Cheats:\t\t%s\n"
             "Patches:\t\t\t%s\n"
@@ -1136,6 +1116,7 @@ static void draw (menu_t *menu, surface_t *d) {
             virtual_pak,
             format_esrb_age_rating(menu->load.rom_info.metadata.esrb_age_rating),
             age_rating,
+            cached_has_manual ? "Available" : "Not found",
             format_rom_description(menu),
             format_boolean_type(menu->load.rom_info.settings.cheats_enabled),
             format_boolean_type(menu->load.rom_info.settings.patches_enabled),
@@ -1437,6 +1418,13 @@ void view_load_rom_init (menu_t *menu) {
         } else {
             snprintf(cached_save_health_buf, sizeof(cached_save_health_buf), "N/A");
             snprintf(cached_save_modified_buf, sizeof(cached_save_modified_buf), "N/A");
+        }
+
+        // Check if a manual package exists for this ROM.
+        {
+            path_t *manual_dir = NULL;
+            cached_has_manual = resolve_manual_directory_for_current_rom(menu, &manual_dir, NULL);
+            path_free(manual_dir);
         }
 
         rom_display_data_valid = true;

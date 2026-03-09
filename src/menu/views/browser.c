@@ -1072,6 +1072,10 @@ typedef struct {
 #define PLAYLIST_GRID_VISIBLE_SLOTS 12
 #define PLAYLIST_GRID_THUMB_SLOTS 25
 static playlist_grid_thumb_slot_t playlist_grid_slots[PLAYLIST_GRID_THUMB_SLOTS];
+// Reverse lookup: entry_index → slot_index. -1 = not cached.
+// Sized to max playlist entries (64 is plenty).
+#define PLAYLIST_GRID_MAX_ENTRIES 64
+static int8_t playlist_grid_entry_to_slot[PLAYLIST_GRID_MAX_ENTRIES];
 static entry_t *playlist_grid_slots_list = NULL;
 static bool playlist_grid_page_mem_warm_done = false;
 static uint32_t playlist_grid_frame_counter = 0;
@@ -1096,19 +1100,18 @@ static void playlist_grid_slots_clear(void) {
         memset(&playlist_grid_slots[i], 0, sizeof(playlist_grid_slots[i]));
         playlist_grid_slots[i].entry_index = -1;
     }
+    memset(playlist_grid_entry_to_slot, -1, sizeof(playlist_grid_entry_to_slot));
     playlist_grid_slots_list = NULL;
     playlist_grid_page_mem_warm_done = false;
     playlist_grid_frame_counter = 0;
 }
 
-// Find the slot currently holding this entry_index, or -1.
+// Find the slot currently holding this entry_index, or -1. O(1) via reverse lookup.
 static int playlist_grid_slot_find(int entry_index) {
-    for (int i = 0; i < PLAYLIST_GRID_THUMB_SLOTS; i++) {
-        if (playlist_grid_slots[i].entry_index == entry_index) {
-            return i;
-        }
+    if (entry_index < 0 || entry_index >= PLAYLIST_GRID_MAX_ENTRIES) {
+        return -1;
     }
-    return -1;
+    return playlist_grid_entry_to_slot[entry_index];
 }
 
 // Find a free slot, or evict the least-recently-used one.
@@ -1124,8 +1127,12 @@ static int playlist_grid_slot_alloc(void) {
             best = i;
         }
     }
-    // Evict LRU slot.
+    // Evict LRU slot — clear reverse lookup for old entry.
     if (best >= 0) {
+        int old_ei = playlist_grid_slots[best].entry_index;
+        if (old_ei >= 0 && old_ei < PLAYLIST_GRID_MAX_ENTRIES) {
+            playlist_grid_entry_to_slot[old_ei] = -1;
+        }
         if (playlist_grid_slots[best].boxart) {
             ui_components_boxart_free(playlist_grid_slots[best].boxart);
         }
@@ -1271,9 +1278,17 @@ static const char *browser_grid_display_name(const char *name, char *buffer, siz
     return buffer;
 }
 
+// Register entry→slot mapping in the reverse lookup table.
+static void playlist_grid_slot_register(int entry_index, int slot_index) {
+    if (entry_index >= 0 && entry_index < PLAYLIST_GRID_MAX_ENTRIES) {
+        playlist_grid_entry_to_slot[entry_index] = (int8_t)slot_index;
+    }
+}
+
 // Returns the slot index used, or -1 on failure.
 static int playlist_grid_slot_prepare(menu_t *menu, int entry_index, bool memory_cache_only) {
-    if (!menu || entry_index < 0 || entry_index >= menu->browser.entries) {
+    if (!menu || entry_index < 0 || entry_index >= menu->browser.entries ||
+        entry_index >= PLAYLIST_GRID_MAX_ENTRIES) {
         return -1;
     }
 
@@ -1293,7 +1308,6 @@ static int playlist_grid_slot_prepare(menu_t *menu, int entry_index, bool memory
         // Slot exists but needs full resolution — fall through.
     } else {
         if (memory_cache_only) {
-            // Allocate a slot only if we can service it from memory cache.
             char game_code[4];
             char safe_title[21];
             if (!playlist_grid_get_boxart_meta_by_index_cached_only(menu, entry_index, game_code, safe_title)) {
@@ -1306,6 +1320,7 @@ static int playlist_grid_slot_prepare(menu_t *menu, int entry_index, bool memory
             slot->entry_path = strdup(entry->path);
             slot->last_used_frame = playlist_grid_frame_counter;
             slot->boxart = ui_components_boxart_init_grid_memory_cached(menu->storage_prefix, game_code, safe_title);
+            playlist_grid_slot_register(entry_index, si);
             return si;
         }
         si = playlist_grid_slot_alloc();
@@ -1314,6 +1329,7 @@ static int playlist_grid_slot_prepare(menu_t *menu, int entry_index, bool memory
         slot->entry_index = entry_index;
         slot->entry_path = strdup(entry->path);
         slot->last_used_frame = playlist_grid_frame_counter;
+        playlist_grid_slot_register(entry_index, si);
     }
 
     // Full resolution (does I/O).
@@ -2050,23 +2066,25 @@ static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work) {
         return;
     }
 
-    // Resolve 1 tile per frame: current page first, then prefetch next page.
-    // Selected tile gets priority.
+    // Resolve up to 2 tiles per frame: current page first, then prefetch next.
+    // Selected tile always gets priority.
+    int resolved = 0;
     int sel_si = playlist_grid_slot_find(selected);
     if (sel_si < 0 || !playlist_grid_slots[sel_si].boxart_resolved) {
         playlist_grid_slot_prepare(menu, selected, false);
-        return;
+        resolved++;
     }
-    for (int i = 0; i < visible; i++) {
+    for (int i = 0; i < visible && resolved < 2; i++) {
         int ei = page_start + i;
         if (ei == selected) continue;
         int si = playlist_grid_slot_find(ei);
         if (si < 0 || !playlist_grid_slots[si].boxart_resolved) {
             playlist_grid_slot_prepare(menu, ei, false);
-            return;
+            resolved++;
         }
     }
-    // Current page done — prefetch next page 1 tile per frame.
+    if (resolved > 0) return;
+    // Current page done — prefetch next page.
     int next_page_start = page_start + page_size;
     if (next_page_start < entries) {
         int next_visible = entries - next_page_start;
