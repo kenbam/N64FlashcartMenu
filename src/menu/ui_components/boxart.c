@@ -755,6 +755,12 @@ component_boxart_t *ui_components_boxart_init_grid_memory_cached(const char *sto
     return ui_components_boxart_init_with_options(storage_prefix, game_code, rom_title, IMAGE_BOXART_FRONT, true, false);
 }
 
+void ui_components_boxart_prewarm_dir(const char *storage_prefix, const char *game_code, const char *rom_title) {
+    path_t *path = NULL;
+    resolve_boxart_directory(storage_prefix, game_code, rom_title, &path);
+    path_free(path);
+}
+
 /**
  * @brief Free the boxart component and its resources.
  *

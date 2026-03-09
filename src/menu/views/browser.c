@@ -1066,14 +1066,15 @@ typedef struct {
     char *entry_path;
     component_boxart_t *boxart;
     bool boxart_resolved;
+    uint32_t last_used_frame;
 } playlist_grid_thumb_slot_t;
 
 #define PLAYLIST_GRID_VISIBLE_SLOTS 12
-#define PLAYLIST_GRID_THUMB_SLOTS 13
+#define PLAYLIST_GRID_THUMB_SLOTS 25
 static playlist_grid_thumb_slot_t playlist_grid_slots[PLAYLIST_GRID_THUMB_SLOTS];
-static int playlist_grid_slots_page_start = -1;
 static entry_t *playlist_grid_slots_list = NULL;
 static bool playlist_grid_page_mem_warm_done = false;
+static uint32_t playlist_grid_frame_counter = 0;
 
 typedef struct {
     bool attempted;
@@ -1095,9 +1096,44 @@ static void playlist_grid_slots_clear(void) {
         memset(&playlist_grid_slots[i], 0, sizeof(playlist_grid_slots[i]));
         playlist_grid_slots[i].entry_index = -1;
     }
-    playlist_grid_slots_page_start = -1;
     playlist_grid_slots_list = NULL;
     playlist_grid_page_mem_warm_done = false;
+    playlist_grid_frame_counter = 0;
+}
+
+// Find the slot currently holding this entry_index, or -1.
+static int playlist_grid_slot_find(int entry_index) {
+    for (int i = 0; i < PLAYLIST_GRID_THUMB_SLOTS; i++) {
+        if (playlist_grid_slots[i].entry_index == entry_index) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Find a free slot, or evict the least-recently-used one.
+static int playlist_grid_slot_alloc(void) {
+    int best = -1;
+    uint32_t best_frame = UINT32_MAX;
+    for (int i = 0; i < PLAYLIST_GRID_THUMB_SLOTS; i++) {
+        if (playlist_grid_slots[i].entry_index < 0) {
+            return i;
+        }
+        if (playlist_grid_slots[i].last_used_frame < best_frame) {
+            best_frame = playlist_grid_slots[i].last_used_frame;
+            best = i;
+        }
+    }
+    // Evict LRU slot.
+    if (best >= 0) {
+        if (playlist_grid_slots[best].boxart) {
+            ui_components_boxart_free(playlist_grid_slots[best].boxart);
+        }
+        free(playlist_grid_slots[best].entry_path);
+        memset(&playlist_grid_slots[best], 0, sizeof(playlist_grid_slots[best]));
+        playlist_grid_slots[best].entry_index = -1;
+    }
+    return best;
 }
 
 static void playlist_grid_meta_index_clear(void) {
@@ -1190,6 +1226,23 @@ static bool playlist_grid_get_boxart_meta_by_index_cached_only(menu_t *menu, int
     return true;
 }
 
+// Pre-read all game codes and pre-resolve boxart directories at playlist load
+// time so grid browsing needs zero SD I/O.
+static void playlist_grid_prewarm_meta(menu_t *menu) {
+    if (!menu || !menu->browser.playlist || menu->browser.entries <= 0) {
+        return;
+    }
+    playlist_grid_meta_index_reset_for_current_list(menu);
+    if (!playlist_grid_meta_index) {
+        return;
+    }
+    char gc[4], title[21];
+    for (int i = 0; i < menu->browser.entries; i++) {
+        if (playlist_grid_get_boxart_meta_by_index(menu, i, gc, title)) {
+            ui_components_boxart_prewarm_dir(menu->storage_prefix, gc, title);
+        }
+    }
+}
 
 static const char *browser_grid_display_name(const char *name, char *buffer, size_t buffer_size) {
     if (!name || !buffer || buffer_size == 0) {
@@ -1218,55 +1271,64 @@ static const char *browser_grid_display_name(const char *name, char *buffer, siz
     return buffer;
 }
 
-static void playlist_grid_slot_prepare(menu_t *menu, int slot_index, int entry_index, bool memory_cache_only) {
-    if (!menu || slot_index < 0 || slot_index >= PLAYLIST_GRID_THUMB_SLOTS ||
-        entry_index < 0 || entry_index >= menu->browser.entries) {
-        return;
+// Returns the slot index used, or -1 on failure.
+static int playlist_grid_slot_prepare(menu_t *menu, int entry_index, bool memory_cache_only) {
+    if (!menu || entry_index < 0 || entry_index >= menu->browser.entries) {
+        return -1;
     }
 
-    playlist_grid_thumb_slot_t *slot = &playlist_grid_slots[slot_index];
     entry_t *entry = &menu->browser.list[entry_index];
     if (entry->type != ENTRY_TYPE_ROM || !entry->path) {
-        return;
+        return -1;
     }
 
-    if (slot->entry_index == entry_index &&
-        slot->entry_path &&
-        strcmp(slot->entry_path, entry->path) == 0 &&
-        (slot->boxart_resolved || memory_cache_only)) {
-        return;
+    // Check if this entry already has a slot.
+    int si = playlist_grid_slot_find(entry_index);
+    if (si >= 0) {
+        playlist_grid_thumb_slot_t *slot = &playlist_grid_slots[si];
+        slot->last_used_frame = playlist_grid_frame_counter;
+        if (slot->boxart_resolved || memory_cache_only) {
+            return si;
+        }
+        // Slot exists but needs full resolution — fall through.
+    } else {
+        if (memory_cache_only) {
+            // Allocate a slot only if we can service it from memory cache.
+            char game_code[4];
+            char safe_title[21];
+            if (!playlist_grid_get_boxart_meta_by_index_cached_only(menu, entry_index, game_code, safe_title)) {
+                return -1;
+            }
+            si = playlist_grid_slot_alloc();
+            if (si < 0) return -1;
+            playlist_grid_thumb_slot_t *slot = &playlist_grid_slots[si];
+            slot->entry_index = entry_index;
+            slot->entry_path = strdup(entry->path);
+            slot->last_used_frame = playlist_grid_frame_counter;
+            slot->boxart = ui_components_boxart_init_grid_memory_cached(menu->storage_prefix, game_code, safe_title);
+            return si;
+        }
+        si = playlist_grid_slot_alloc();
+        if (si < 0) return -1;
+        playlist_grid_thumb_slot_t *slot = &playlist_grid_slots[si];
+        slot->entry_index = entry_index;
+        slot->entry_path = strdup(entry->path);
+        slot->last_used_frame = playlist_grid_frame_counter;
     }
 
-    if (slot->boxart) {
-        ui_components_boxart_free(slot->boxart);
-        slot->boxart = NULL;
-    }
-    free(slot->entry_path);
-    slot->entry_path = strdup(entry->path);
-    slot->entry_index = entry_index;
-    slot->boxart_resolved = false;
-    if (!slot->entry_path) {
-        return;
-    }
-
+    // Full resolution (does I/O).
+    playlist_grid_thumb_slot_t *slot = &playlist_grid_slots[si];
     char game_code[4];
     char safe_title[21];
-    bool have_meta = false;
-    if (memory_cache_only) {
-        have_meta = playlist_grid_get_boxart_meta_by_index_cached_only(menu, entry_index, game_code, safe_title);
-    } else {
-        have_meta = playlist_grid_get_boxart_meta_by_index(menu, entry_index, game_code, safe_title);
-    }
-
+    bool have_meta = playlist_grid_get_boxart_meta_by_index(menu, entry_index, game_code, safe_title);
     if (have_meta) {
-        slot->boxart = memory_cache_only
-            ? ui_components_boxart_init_grid_memory_cached(menu->storage_prefix, game_code, safe_title)
-            : ui_components_boxart_init_grid(menu->storage_prefix, game_code, safe_title);
+        if (slot->boxart) {
+            ui_components_boxart_free(slot->boxart);
+        }
+        slot->boxart = ui_components_boxart_init_grid(menu->storage_prefix, game_code, safe_title);
     }
-
-    if (!memory_cache_only) {
-        slot->boxart_resolved = true;
-    }
+    slot->boxart_resolved = true;
+    return si;
 }
 
 static bool path_is_hidden (path_t *path) {
@@ -1825,15 +1887,18 @@ static void browser_playlist_grid_draw(menu_t *menu) {
     const int cols = 4;
     const int rows = 3;
     const int page_size = cols * rows;
-    const int gap_x = 6;
-    const int gap_y = 6;
-    const int title_h = 14;
-    const int margin_x = 12;
-    const int tile_w = (screen_w - 2 * margin_x - (cols - 1) * gap_x) / cols;
-    const int art_h = 100;
-    const int tile_h = art_h + title_h;
-    const int grid_x = (screen_w - cols * tile_w - (cols - 1) * gap_x) / 2;
-    const int grid_y = 56;
+    const int gap_x = 4;
+    const int gap_y = 4;
+    const int x0_area = VISIBLE_AREA_X0 + BORDER_THICKNESS + 2;
+    const int x1_area = VISIBLE_AREA_X1 - BORDER_THICKNESS - 2;
+    const int area_w = x1_area - x0_area;
+    const int tile_w = (area_w - (cols - 1) * gap_x) / cols;
+    const int header_h = 14;
+    const int header_y = VISIBLE_AREA_Y0 + TAB_HEIGHT + BORDER_THICKNESS + 2;
+    const int grid_y = header_y + header_h + 2;
+    const int grid_area_h = LAYOUT_ACTIONS_SEPARATOR_Y - grid_y;
+    const int tile_h = (grid_area_h - (rows - 1) * gap_y) / rows;
+    const int grid_x = x0_area + (area_w - cols * tile_w - (cols - 1) * gap_x) / 2;
 
     int selected = menu->browser.selected;
     int entries = menu->browser.entries;
@@ -1848,15 +1913,13 @@ static void browser_playlist_grid_draw(menu_t *menu) {
     int visible = entries - page_start;
     if (visible > page_size) visible = page_size;
 
-    if (playlist_grid_slots_list != menu->browser.list || playlist_grid_slots_page_start != page_start) {
+    if (playlist_grid_slots_list != menu->browser.list) {
         playlist_grid_slots_clear();
         playlist_grid_slots_list = menu->browser.list;
-        playlist_grid_slots_page_start = page_start;
     }
 
     for (int i = 0; i < visible; i++) {
         int entry_index = page_start + i;
-        entry_t *entry = &menu->browser.list[entry_index];
         int col = i % cols;
         int row = i / cols;
         int x0 = grid_x + col * (tile_w + gap_x);
@@ -1864,24 +1927,25 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         int x1 = x0 + tile_w;
         bool is_selected = (entry_index == selected);
 
-        playlist_grid_thumb_slot_t *slot = &playlist_grid_slots[i];
-        if (slot->boxart && slot->boxart->image) {
+        int si = playlist_grid_slot_find(entry_index);
+        playlist_grid_thumb_slot_t *slot = (si >= 0) ? &playlist_grid_slots[si] : NULL;
+        if (slot && slot->boxart && slot->boxart->image) {
             surface_t *img = slot->boxart->image;
             float sx = (float)tile_w / (float)img->width;
-            float sy = (float)art_h / (float)img->height;
+            float sy = (float)tile_h / (float)img->height;
             float s = (sx < sy) ? sx : sy;
             int draw_w = (int)(img->width * s);
             int draw_h = (int)(img->height * s);
             if (draw_w < 1) draw_w = 1;
             if (draw_h < 1) draw_h = 1;
             int draw_x = x0 + (tile_w - draw_w) / 2;
-            int draw_y = y0 + (art_h - draw_h) / 2;
+            int draw_y = y0 + (tile_h - draw_h) / 2;
 
             rdpq_mode_push();
                 rdpq_set_mode_standard();
                 rdpq_mode_combiner(RDPQ_COMBINER_TEX);
                 rdpq_mode_filter(FILTER_BILINEAR);
-                rdpq_set_scissor(x0, y0, x1, y0 + art_h);
+                rdpq_set_scissor(x0, y0, x1, y0 + tile_h);
                 rdpq_tex_blit(img, draw_x, draw_y, &(rdpq_blitparms_t){
                     .scale_x = s,
                     .scale_y = s,
@@ -1889,53 +1953,58 @@ static void browser_playlist_grid_draw(menu_t *menu) {
                 rdpq_set_scissor(0, 0, screen_w, screen_h);
             rdpq_mode_pop();
         } else {
-            rdpq_text_printf(&(rdpq_textparms_t){ .width = tile_w, .height = art_h, .align = ALIGN_CENTER, .valign = VALIGN_CENTER },
-                             FNT_DEFAULT, x0, y0, "%s", (slot->boxart && slot->boxart->loading) ? "..." : "");
+            char name_buf[64];
+            const char *label;
+            if (slot && slot->boxart && slot->boxart->loading) {
+                label = "...";
+            } else {
+                entry_t *entry = &menu->browser.list[entry_index];
+                label = browser_grid_display_name(entry->name, name_buf, sizeof(name_buf));
+            }
+            rdpq_set_scissor(x0, y0, x1, y0 + tile_h);
+            rdpq_text_printf(&(rdpq_textparms_t){
+                .width = tile_w, .height = tile_h,
+                .align = ALIGN_CENTER, .valign = VALIGN_CENTER,
+                .wrap = WRAP_WORD,
+            }, FNT_DEFAULT, x0, y0, "%s", label);
+            rdpq_set_scissor(0, 0, screen_w, screen_h);
         }
 
         if (is_selected) {
-            ui_components_border_draw(x0 - 1, y0 - 1, x1 + 1, y0 + art_h + 1);
+            int sy1 = y0 + tile_h;
+            rdpq_mode_push();
+                rdpq_set_mode_fill(RGBA32(0x30, 0x70, 0xFF, 0xFF));
+                rdpq_fill_rectangle(x0 - 2, y0 - 2, x1 + 2, y0);        // top
+                rdpq_fill_rectangle(x0 - 2, sy1, x1 + 2, sy1 + 2);      // bottom
+                rdpq_fill_rectangle(x0 - 2, y0, x0, sy1);                // left
+                rdpq_fill_rectangle(x1, y0, x1 + 2, sy1);                // right
+            rdpq_mode_pop();
         }
-
-        char title_buf[96];
-        rdpq_set_scissor(x0, y0 + art_h + 2, x1, y0 + tile_h);
-        rdpq_text_printf(&(rdpq_textparms_t){
-                            .width = tile_w,
-                            .height = title_h,
-                            .wrap = WRAP_ELLIPSES,
-                            .align = ALIGN_CENTER,
-                            .style_id = is_selected ? STL_BLUE : STL_DEFAULT,
-                        },
-                        FNT_DEFAULT,
-                        x0,
-                        y0 + art_h + 2,
-                        "%s",
-                        browser_grid_display_name(entry->name, title_buf, sizeof(title_buf)));
-        rdpq_set_scissor(0, 0, screen_w, screen_h);
     }
 
-    // Footer: selected item name + page info
-    int footer_y = screen_h - 48;
+    // Header: selected game name + page info above the grid
     entry_t *sel = (selected >= 0 && selected < entries) ? &menu->browser.list[selected] : NULL;
     char caption_buf[128];
+    rdpq_set_scissor(x0_area, header_y, x1_area, header_y + header_h);
     ui_components_main_text_draw(
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
         "@%d,%d\n%s",
-        margin_x,
-        footer_y,
+        x0_area,
+        header_y,
         sel ? browser_grid_display_name(sel->name, caption_buf, sizeof(caption_buf)) : ""
     );
     ui_components_main_text_draw(
         STL_GRAY,
         ALIGN_RIGHT, VALIGN_TOP,
         "@%d,%d\n%d/%d  Pg %d/%d",
-        screen_w - margin_x,
-        footer_y,
+        x1_area,
+        header_y,
         selected + 1, entries,
         (selected / page_size) + 1,
         (entries + page_size - 1) / page_size
     );
+    rdpq_set_scissor(0, 0, screen_w, screen_h);
 }
 
 static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work) {
@@ -1959,33 +2028,57 @@ static void browser_playlist_grid_prepare(menu_t *menu, bool defer_work) {
     if (visible > page_size) visible = page_size;
     if (visible <= 0) return;
 
-    if (playlist_grid_slots_list != menu->browser.list || playlist_grid_slots_page_start != page_start) {
+    playlist_grid_frame_counter++;
+
+    if (playlist_grid_slots_list != menu->browser.list) {
         playlist_grid_slots_clear();
         playlist_grid_slots_list = menu->browser.list;
-        playlist_grid_slots_page_start = page_start;
-        playlist_grid_page_mem_warm_done = false;
     }
 
-    // First pass: try memory cache only (instant, no I/O).
-    if (!playlist_grid_page_mem_warm_done) {
-        for (int i = 0; i < visible; i++) {
-            playlist_grid_slot_prepare(menu, i, page_start + i, true);
+    // First pass: try memory cache only for visible tiles (instant, no I/O).
+    for (int i = 0; i < visible; i++) {
+        int ei = page_start + i;
+        int si = playlist_grid_slot_find(ei);
+        if (si >= 0) {
+            playlist_grid_slots[si].last_used_frame = playlist_grid_frame_counter;
+        } else {
+            playlist_grid_slot_prepare(menu, ei, true);
         }
-        playlist_grid_page_mem_warm_done = true;
     }
 
     if (defer_work) {
         return;
     }
 
-    // Queue all unresolved tiles immediately — selected tile first.
-    int selected_slot = selected - page_start;
-    if (selected_slot >= 0 && selected_slot < visible) {
-        playlist_grid_slot_prepare(menu, selected_slot, selected, false);
+    // Resolve 1 tile per frame: current page first, then prefetch next page.
+    // Selected tile gets priority.
+    int sel_si = playlist_grid_slot_find(selected);
+    if (sel_si < 0 || !playlist_grid_slots[sel_si].boxart_resolved) {
+        playlist_grid_slot_prepare(menu, selected, false);
+        return;
     }
     for (int i = 0; i < visible; i++) {
-        if (i == selected_slot) continue;
-        playlist_grid_slot_prepare(menu, i, page_start + i, false);
+        int ei = page_start + i;
+        if (ei == selected) continue;
+        int si = playlist_grid_slot_find(ei);
+        if (si < 0 || !playlist_grid_slots[si].boxart_resolved) {
+            playlist_grid_slot_prepare(menu, ei, false);
+            return;
+        }
+    }
+    // Current page done — prefetch next page 1 tile per frame.
+    int next_page_start = page_start + page_size;
+    if (next_page_start < entries) {
+        int next_visible = entries - next_page_start;
+        if (next_visible > page_size) next_visible = page_size;
+        for (int i = 0; i < next_visible; i++) {
+            int ei = next_page_start + i;
+            int si = playlist_grid_slot_find(ei);
+            if (si < 0 || !playlist_grid_slots[si].boxart_resolved) {
+                playlist_grid_slot_prepare(menu, ei, false);
+                return;
+            }
+        }
     }
 }
 
@@ -3236,6 +3329,9 @@ static bool load_playlist (menu_t *menu) {
         playlist_recent_remember(path_get(menu->browser.directory));
         playlist_active_store(path_get(menu->browser.directory), content_hash, true, &props);
         playlist_perf_commit(menu, cache_source ? cache_source : "cache", elapsed_ms(open_start_us), 0, 0, 0, menu->browser.entries);
+        if (props.grid_view) {
+            playlist_grid_prewarm_meta(menu);
+        }
         browser_apply_playlist_overrides(menu, &props);
         char *playlist_context_path = playlist_find_context_text_path(menu->browser.directory);
         if (playlist_context_path) {
@@ -3370,6 +3466,9 @@ static bool load_playlist (menu_t *menu) {
         free(playlist_context_path);
     }
 
+    if (props.grid_view) {
+        playlist_grid_prewarm_meta(menu);
+    }
     browser_apply_playlist_overrides(menu, &props);
     path_free(playlist_dir);
     playlist_props_free(&props);
