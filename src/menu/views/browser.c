@@ -2691,6 +2691,7 @@ static bool smart_playlist_collect_dir(
                 .include_config = false,
                 .include_long_description = smart_playlist_query_needs_long_description(query),
             };
+            sound_poll();
             if (rom_path && rom_config_load_ex(rom_path, rom_info, &load_options) == ROM_OK) {
                 smart_playlist_entry_t candidate = {0};
                 if (smart_playlist_matches(menu, query, normalized, rom_info, &candidate)) {
