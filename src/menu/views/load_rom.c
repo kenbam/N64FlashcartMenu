@@ -966,7 +966,7 @@ static void process (menu_t *menu) {
         menu->load_pending.rom_file = true;
     } else if (menu->actions.back) {
         sound_play_effect(SFX_EXIT);
-        menu->next_mode = MENU_MODE_BROWSER;
+        menu->next_mode = menu->load.back_mode ? menu->load.back_mode : MENU_MODE_BROWSER;
     } else if (menu->actions.options) {
         ui_components_context_menu_show(&options_context_menu);
         sound_play_effect(SFX_SETTING);

@@ -4126,6 +4126,7 @@ static void process (menu_t *menu) {
             case ENTRY_TYPE_ROM:
                 path_free(menu->load.rom_path);
                 menu->load.rom_path = NULL;
+                menu->load.back_mode = MENU_MODE_BROWSER;
                 menu->next_mode = MENU_MODE_LOAD_ROM;
                 break;
             case ENTRY_TYPE_ROM_CHEAT:

@@ -162,6 +162,7 @@ typedef struct {
         int32_t load_history_id;
         int32_t load_favorite_id;
         bool combined_disk_rom;
+        menu_mode_t back_mode;
     } load;
 
     struct {

@@ -306,6 +306,7 @@ static void process(menu_t *menu) {
                 menu->load.rom_path = path_create(entry->path);
                 menu->load.load_history_id = -1;
                 menu->load.load_favorite_id = -1;
+                menu->load.back_mode = MENU_MODE_HISTORY;
                 menu->next_mode = MENU_MODE_LOAD_ROM;
                 sound_play_effect(SFX_ENTER);
             } else {
@@ -322,6 +323,7 @@ static void process(menu_t *menu) {
             menu->load.load_favorite_id = -1;
         }
 
+        menu->load.back_mode = MENU_MODE_HISTORY;
         if (item_list[selected_item].bookkeeping_type == BOOKKEEPING_TYPE_DISK) {
             menu->next_mode = MENU_MODE_LOAD_DISK;
             sound_play_effect(SFX_ENTER);
