@@ -140,7 +140,11 @@ void playtime_free (playtime_db_t *db) {
 }
 
 static void playtime_add_entry(playtime_db_t *db, const char *path, const char *game_id) {
-    db->entries = realloc(db->entries, (db->count + 1) * sizeof(playtime_entry_t));
+    playtime_entry_t *new_entries = realloc(db->entries, (db->count + 1) * sizeof(playtime_entry_t));
+    if (!new_entries) {
+        return;
+    }
+    db->entries = new_entries;
     playtime_entry_t *entry = &db->entries[db->count];
     memset(entry, 0, sizeof(*entry));
     entry->path = path ? strdup(path) : NULL;
@@ -238,6 +242,9 @@ void playtime_load (playtime_db_t *db) {
     int64_t count = mini_get_int(ini, "stats", "count", 0);
     if (count < 0) {
         count = 0;
+    }
+    if (count > 4096) {
+        count = 4096;
     }
 
     bool migrated = false;
