@@ -32,9 +32,7 @@ static path_t *combo_disk_flow_create_preferred_root(menu_t *menu) {
 
 static path_t *combo_disk_flow_create_browser_root(menu_t *menu) {
     path_t *preferred_root = combo_disk_flow_create_preferred_root(menu);
-    if (preferred_root &&
-        directory_exists(path_get(preferred_root)) &&
-        disk_pairing_directory_has_match_recursive(&menu->load.rom_info, preferred_root)) {
+    if (preferred_root && directory_exists(path_get(preferred_root))) {
         return preferred_root;
     }
 
@@ -67,37 +65,19 @@ static bool combo_disk_flow_scan_matches(
     *match_count = 0;
 
     path_t *preferred_root = combo_disk_flow_create_preferred_root(menu);
-    if (preferred_root && directory_exists(path_get(preferred_root))) {
-        bool scanned = combo_disk_flow_find_single_compatible_recursive(
-            menu,
-            preferred_root,
-            resolved_path,
-            resolved_len,
-            match_count
-        );
+    if (!preferred_root || !directory_exists(path_get(preferred_root))) {
         path_free(preferred_root);
-        if (!scanned) {
-            return false;
-        }
-        if (*match_count > 0) {
-            return true;
-        }
-    } else {
-        path_free(preferred_root);
+        return true;
     }
 
-    path_t *fallback_root = path_init(menu->storage_prefix, "/");
-    if (!fallback_root) {
-        return false;
-    }
     bool scanned = combo_disk_flow_find_single_compatible_recursive(
         menu,
-        fallback_root,
+        preferred_root,
         resolved_path,
         resolved_len,
         match_count
     );
-    path_free(fallback_root);
+    path_free(preferred_root);
     return scanned;
 }
 
