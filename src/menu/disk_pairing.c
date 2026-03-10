@@ -9,9 +9,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <libdragon.h>
+
 #include "disk_pairing.h"
 #include "path.h"
 #include "utils/fs.h"
+
+static const char *disk_pairing_extensions[] = { "ndd", NULL };
 
 static bool disk_pairing_is_expansion_code(char code) {
     return (code >= 'E') && (code <= 'Z');
@@ -90,6 +94,52 @@ bool disk_pairing_disk_matches_rom(const rom_info_t *rom_info, const disk_info_t
 
     return disk_pairing_region_matches_rom(rom_info, disk_info) &&
         disk_pairing_disk_id_matches_rom_game_code(rom_info->game_code, disk_info->id);
+}
+
+bool disk_pairing_path_matches_rom(const rom_info_t *rom_info, path_t *disk_path) {
+    if (!disk_path || !file_has_extensions(path_get(disk_path), disk_pairing_extensions)) {
+        return false;
+    }
+
+    disk_info_t disk_info;
+    return (disk_info_load(disk_path, &disk_info) == DISK_OK) &&
+        disk_pairing_disk_matches_rom(rom_info, &disk_info);
+}
+
+bool disk_pairing_directory_has_match_recursive(const rom_info_t *rom_info, path_t *directory) {
+    if (!rom_info || !directory || !directory_exists(path_get(directory))) {
+        return false;
+    }
+
+    dir_t info;
+    int result = dir_findfirst(path_get(directory), &info);
+    if (result < -1) {
+        return false;
+    }
+
+    while (result == 0) {
+        path_t *candidate = path_clone_push(directory, info.d_name);
+        if (!candidate) {
+            return false;
+        }
+
+        bool found = false;
+        if (info.d_type == DT_DIR) {
+            found = disk_pairing_directory_has_match_recursive(rom_info, candidate);
+        } else {
+            found = disk_pairing_path_matches_rom(rom_info, candidate);
+        }
+
+        path_free(candidate);
+
+        if (found) {
+            return true;
+        }
+
+        result = dir_findnext(path_get(directory), &info);
+    }
+
+    return false;
 }
 
 bool disk_pairing_resolve_configured_path(

@@ -11,6 +11,7 @@
 #include <stddef.h>
 
 #include "disk_info.h"
+#include "path.h"
 #include "rom_info.h"
 
 /**
@@ -47,6 +48,24 @@ bool disk_pairing_disk_id_matches_rom_game_code(const char rom_game_code[4], con
  * @return true when the disk can be paired with the ROM
  */
 bool disk_pairing_disk_matches_rom(const rom_info_t *rom_info, const disk_info_t *disk_info);
+
+/**
+ * @brief Load a disk file and check whether it matches the ROM.
+ *
+ * @param rom_info Loaded ROM information
+ * @param disk_path Disk file path
+ * @return true when the disk file is compatible with the ROM
+ */
+bool disk_pairing_path_matches_rom(const rom_info_t *rom_info, path_t *disk_path);
+
+/**
+ * @brief Returns true when a directory tree contains any compatible disk.
+ *
+ * @param rom_info Loaded ROM information
+ * @param directory Directory to scan recursively
+ * @return true when at least one compatible disk exists under the directory
+ */
+bool disk_pairing_directory_has_match_recursive(const rom_info_t *rom_info, path_t *directory);
 
 /**
  * @brief Resolve a stored disk path against the current storage root.

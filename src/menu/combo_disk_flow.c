@@ -15,8 +15,6 @@
 #include "utils/fs.h"
 #include "views/views.h"
 
-static const char *combo_disk_extensions[] = { "ndd", NULL };
-
 static bool combo_disk_flow_resolve_default(menu_t *menu, char *resolved_path, size_t resolved_len) {
     if (!combo_disk_flow_is_applicable(menu)) {
         return false;
@@ -73,9 +71,7 @@ static bool combo_disk_flow_try_launch_path(menu_t *menu, const char *disk_path_
         return false;
     }
 
-    disk_info_t disk_info;
-    disk_err_t err = disk_info_load(disk_path, &disk_info);
-    if (err != DISK_OK || !disk_pairing_disk_matches_rom(&menu->load.rom_info, &disk_info)) {
+    if (!disk_pairing_path_matches_rom(&menu->load.rom_info, disk_path)) {
         path_free(disk_path);
         return false;
     }
@@ -123,15 +119,11 @@ static bool combo_disk_flow_find_single_compatible_recursive(
                 path_free(candidate);
                 return false;
             }
-        } else if (file_has_extensions(info.d_name, combo_disk_extensions)) {
-            disk_info_t disk_info;
-            if (disk_info_load(candidate, &disk_info) == DISK_OK &&
-                disk_pairing_disk_matches_rom(&menu->load.rom_info, &disk_info)) {
-                if (*match_count == 0) {
-                    snprintf(resolved_path, resolved_len, "%s", path_get(candidate));
-                }
-                (*match_count)++;
+        } else if (disk_pairing_path_matches_rom(&menu->load.rom_info, candidate)) {
+            if (*match_count == 0) {
+                snprintf(resolved_path, resolved_len, "%s", path_get(candidate));
             }
+            (*match_count)++;
         }
 
         path_free(candidate);

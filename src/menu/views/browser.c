@@ -1588,21 +1588,18 @@ static bool browser_64dd_picker_entry_visible(menu_t *menu, path_t *directory, d
     if (!browser_picker_is_64dd_disk(menu) || !directory || !info) {
         return true;
     }
-    if (info->d_type == DT_DIR) {
-        return true;
-    }
-    if (!file_has_extensions(info->d_name, disk_extensions)) {
-        return false;
-    }
 
     path_t *candidate = path_clone_push(directory, info->d_name);
     if (!candidate) {
         return false;
     }
 
-    disk_info_t disk_info;
-    bool visible = (disk_info_load(candidate, &disk_info) == DISK_OK) &&
-        disk_pairing_disk_matches_rom(&menu->load.rom_info, &disk_info);
+    bool visible;
+    if (info->d_type == DT_DIR) {
+        visible = disk_pairing_directory_has_match_recursive(&menu->load.rom_info, candidate);
+    } else {
+        visible = disk_pairing_path_matches_rom(&menu->load.rom_info, candidate);
+    }
     path_free(candidate);
     return visible;
 }
