@@ -15,6 +15,14 @@
 #include "utils/fs.h"
 #include "views/views.h"
 
+static bool combo_disk_flow_find_single_compatible_recursive(
+    menu_t *menu,
+    path_t *directory,
+    char *resolved_path,
+    size_t resolved_len,
+    int *match_count
+);
+
 static bool combo_disk_flow_resolve_default(menu_t *menu, char *resolved_path, size_t resolved_len) {
     if (!combo_disk_flow_is_applicable(menu)) {
         return false;
@@ -26,6 +34,33 @@ static bool combo_disk_flow_resolve_default(menu_t *menu, char *resolved_path, s
         resolved_path,
         resolved_len
     );
+}
+
+static bool combo_disk_flow_scan_matches(
+    menu_t *menu,
+    char *resolved_path,
+    size_t resolved_len,
+    int *match_count
+) {
+    path_t *disk_root = path_init(menu->storage_prefix, "/N64 - N64DD");
+    if (!disk_root || !directory_exists(path_get(disk_root))) {
+        path_free(disk_root);
+        if (resolved_path && resolved_len > 0) {
+            resolved_path[0] = '\0';
+        }
+        *match_count = 0;
+        return true;
+    }
+
+    bool scanned = combo_disk_flow_find_single_compatible_recursive(
+        menu,
+        disk_root,
+        resolved_path,
+        resolved_len,
+        match_count
+    );
+    path_free(disk_root);
+    return scanned;
 }
 
 static void combo_disk_flow_open_picker(menu_t *menu, browser_picker_t picker) {
@@ -138,46 +173,51 @@ static bool combo_disk_flow_find_single_compatible_recursive(
     return result >= -1;
 }
 
-static bool combo_disk_flow_try_launch_single_match(menu_t *menu) {
-    path_t *disk_root = path_init(menu->storage_prefix, "/N64 - N64DD");
-    if (!disk_root || !directory_exists(path_get(disk_root))) {
-        path_free(disk_root);
-        return false;
-    }
-
-    char resolved_disk_path[ROM_CONFIG_PATH_LENGTH] = {0};
-    int match_count = 0;
-    bool scanned = combo_disk_flow_find_single_compatible_recursive(
-        menu,
-        disk_root,
-        resolved_disk_path,
-        sizeof(resolved_disk_path),
-        &match_count
-    );
-    path_free(disk_root);
-
-    if (!scanned || match_count != 1) {
-        return false;
-    }
-
-    rom_config_setting_set_default_disk_path(menu->load.rom_path, &menu->load.rom_info, strip_fs_prefix(resolved_disk_path));
-    return combo_disk_flow_try_launch_default(menu);
-}
-
 bool combo_disk_flow_is_applicable(const menu_t *menu) {
     return menu && disk_pairing_rom_is_combo(&menu->load.rom_info);
 }
 
-void combo_disk_flow_launch(menu_t *menu) {
+combo_disk_flow_result_t combo_disk_flow_launch(menu_t *menu) {
     if (!combo_disk_flow_is_applicable(menu)) {
         menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
-        return;
+        return COMBO_DISK_FLOW_NONE;
     }
 
-    if (!combo_disk_flow_try_launch_default(menu) &&
-        !combo_disk_flow_try_launch_single_match(menu)) {
-        combo_disk_flow_open_picker(menu, BROWSER_PICKER_64DD_DISK_LAUNCH);
+    if (combo_disk_flow_try_launch_default(menu)) {
+        return COMBO_DISK_FLOW_LAUNCHED_DISK;
     }
+
+    char resolved_disk_path[ROM_CONFIG_PATH_LENGTH] = {0};
+    int match_count = 0;
+    if (!combo_disk_flow_scan_matches(menu, resolved_disk_path, sizeof(resolved_disk_path), &match_count)) {
+        menu_show_error(menu, "Couldn't scan 64DD disk library");
+        return COMBO_DISK_FLOW_NONE;
+    }
+
+    if (match_count == 0) {
+        return COMBO_DISK_FLOW_NO_MATCH;
+    }
+
+    if (match_count == 1) {
+        rom_config_setting_set_default_disk_path(menu->load.rom_path, &menu->load.rom_info, strip_fs_prefix(resolved_disk_path));
+        return combo_disk_flow_try_launch_default(menu) ? COMBO_DISK_FLOW_LAUNCHED_DISK : COMBO_DISK_FLOW_NONE;
+    }
+
+    combo_disk_flow_open_picker(menu, BROWSER_PICKER_64DD_DISK_LAUNCH);
+    return COMBO_DISK_FLOW_OPENED_PICKER;
+}
+
+combo_disk_flow_result_t combo_disk_flow_launch_required(menu_t *menu) {
+    if (!combo_disk_flow_is_applicable(menu)) {
+        menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
+        return COMBO_DISK_FLOW_NONE;
+    }
+
+    combo_disk_flow_result_t result = combo_disk_flow_launch(menu);
+    if (result == COMBO_DISK_FLOW_NO_MATCH) {
+        menu_show_error(menu, "No compatible 64DD disk found for this ROM");
+    }
+    return result;
 }
 
 void combo_disk_flow_set_default(menu_t *menu) {
@@ -185,7 +225,6 @@ void combo_disk_flow_set_default(menu_t *menu) {
         menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
         return;
     }
-
     combo_disk_flow_open_picker(menu, BROWSER_PICKER_64DD_DISK_DEFAULT);
 }
 

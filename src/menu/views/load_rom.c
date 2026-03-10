@@ -752,7 +752,7 @@ static void open_manual (menu_t *menu, void *arg) {
 }
 static void launch_with_64dd_disk(menu_t *menu, void *arg) {
     (void)arg;
-    combo_disk_flow_launch(menu);
+    combo_disk_flow_launch_required(menu);
 }
 
 static void set_default_64dd_disk(menu_t *menu, void *arg) {
@@ -987,7 +987,9 @@ static void process (menu_t *menu) {
 
     if (menu->actions.enter) {
         if (combo_disk_flow_is_applicable(menu)) {
-            launch_with_64dd_disk(menu, NULL);
+            if (combo_disk_flow_launch(menu) == COMBO_DISK_FLOW_NO_MATCH) {
+                menu->load_pending.rom_file = true;
+            }
         } else {
             menu->load_pending.rom_file = true;
         }
@@ -1213,7 +1215,7 @@ static void draw (menu_t *menu, surface_t *d) {
             "%s\n"
             "B: Back\n"
             ,
-            combo_disk_flow_is_applicable(menu) ? "A: Launch with 64DD Disk" : "A: Load and run ROM"
+            combo_disk_flow_is_applicable(menu) ? "A: Load ROM / 64DD" : "A: Load and run ROM"
         );
 
         ui_components_actions_bar_text_draw(
