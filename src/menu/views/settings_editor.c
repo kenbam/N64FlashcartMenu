@@ -78,6 +78,11 @@ static void open_menu_music_picker (menu_t *menu, void *arg) {
     menu->browser.valid = false;
     menu->browser.reload = false;
     menu->browser.picker = BROWSER_PICKER_MENU_BGM;
+    if (menu->browser.picker_root) {
+        path_free(menu->browser.picker_root);
+    }
+    menu->browser.picker_root = path_clone(music_dir);
+    menu->browser.picker_return_mode = MENU_MODE_SETTINGS_EDITOR;
 
     if (menu->browser.select_file) {
         path_free(menu->browser.select_file);
@@ -141,6 +146,11 @@ static void open_screensaver_logo_picker (menu_t *menu, void *arg) {
     menu->browser.valid = false;
     menu->browser.reload = false;
     menu->browser.picker = BROWSER_PICKER_SCREENSAVER_LOGO;
+    if (menu->browser.picker_root) {
+        path_free(menu->browser.picker_root);
+    }
+    menu->browser.picker_root = path_clone(logos_dir);
+    menu->browser.picker_return_mode = MENU_MODE_SETTINGS_EDITOR;
 
     if (menu->browser.select_file) {
         path_free(menu->browser.select_file);

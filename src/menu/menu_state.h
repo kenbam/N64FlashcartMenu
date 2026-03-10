@@ -93,6 +93,8 @@ typedef enum {
     BROWSER_PICKER_NONE = 0,
     BROWSER_PICKER_MENU_BGM = 1,
     BROWSER_PICKER_SCREENSAVER_LOGO = 2,
+    BROWSER_PICKER_64DD_DISK_LAUNCH = 3,
+    BROWSER_PICKER_64DD_DISK_DEFAULT = 4,
 } browser_picker_t;
 
 typedef struct {
@@ -153,6 +155,8 @@ typedef struct {
         path_t* select_file;
         browser_sort_t sort_mode;
         browser_picker_t picker;
+        path_t *picker_root;
+        menu_mode_t picker_return_mode;
     } browser;
 
     struct {
