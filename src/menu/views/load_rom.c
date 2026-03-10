@@ -50,6 +50,7 @@ static char cached_recent_sessions_buf[512];
 static char cached_save_health_buf[128];
 static char cached_save_modified_buf[64];
 static bool cached_has_manual = false;
+static const char *combo_disk_extensions[] = { "ndd", NULL };
 
 static bool resolve_metadata_directory_for_rom (path_t *path, const char game_code[4], char *resolved, size_t resolved_size) {
     if ((path == NULL) || (game_code == NULL)) {
@@ -829,6 +830,73 @@ static bool combo_rom_try_launch_with_default_disk(menu_t *menu) {
     return true;
 }
 
+static bool combo_rom_find_single_compatible_disk_recursive(menu_t *menu, path_t *directory, char *resolved_path, size_t resolved_len, int *match_count) {
+    dir_t info;
+    int result = dir_findfirst(path_get(directory), &info);
+    if (result < -1) {
+        return false;
+    }
+
+    while (result == 0) {
+        path_t *candidate = path_clone_push(directory, info.d_name);
+        if (!candidate) {
+            return false;
+        }
+
+        if (info.d_type == DT_DIR) {
+            if (!combo_rom_find_single_compatible_disk_recursive(menu, candidate, resolved_path, resolved_len, match_count)) {
+                path_free(candidate);
+                return false;
+            }
+        } else if (file_has_extensions(info.d_name, combo_disk_extensions)) {
+            disk_info_t disk_info;
+            if (disk_info_load(candidate, &disk_info) == DISK_OK &&
+                disk_pairing_disk_matches_rom(&menu->load.rom_info, &disk_info)) {
+                if (*match_count == 0) {
+                    snprintf(resolved_path, resolved_len, "%s", path_get(candidate));
+                }
+                (*match_count)++;
+            }
+        }
+
+        path_free(candidate);
+
+        if (*match_count > 1) {
+            break;
+        }
+
+        result = dir_findnext(path_get(directory), &info);
+    }
+
+    return result >= -1;
+}
+
+static bool combo_rom_try_launch_single_matching_disk(menu_t *menu) {
+    path_t *disk_root = path_init(menu->storage_prefix, "/N64 - N64DD");
+    if (!disk_root || !directory_exists(path_get(disk_root))) {
+        path_free(disk_root);
+        return false;
+    }
+
+    char resolved_disk_path[ROM_CONFIG_PATH_LENGTH] = {0};
+    int match_count = 0;
+    bool scanned = combo_rom_find_single_compatible_disk_recursive(
+        menu,
+        disk_root,
+        resolved_disk_path,
+        sizeof(resolved_disk_path),
+        &match_count
+    );
+    path_free(disk_root);
+
+    if (!scanned || match_count != 1) {
+        return false;
+    }
+
+    rom_config_setting_set_default_disk_path(menu->load.rom_path, &menu->load.rom_info, strip_fs_prefix(resolved_disk_path));
+    return combo_rom_try_launch_with_default_disk(menu);
+}
+
 static void launch_with_64dd_disk(menu_t *menu, void *arg) {
     (void)arg;
 
@@ -837,7 +905,8 @@ static void launch_with_64dd_disk(menu_t *menu, void *arg) {
         return;
     }
 
-    if (!combo_rom_try_launch_with_default_disk(menu)) {
+    if (!combo_rom_try_launch_with_default_disk(menu) &&
+        !combo_rom_try_launch_single_matching_disk(menu)) {
         combo_rom_open_disk_picker(menu, BROWSER_PICKER_64DD_DISK_LAUNCH);
     }
 }
