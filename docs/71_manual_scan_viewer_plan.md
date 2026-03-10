@@ -1,6 +1,8 @@
-## Manual Scan Viewer Plan
+## Manual Viewer Notes
 
-### Goal
+This file started as the design plan for manual support. Parts of that original plan are now implemented, while other sections remain historical ideas only. The notes below call out what is current versus what is still speculative.
+
+### Current goal
 Show full manual scans directly in the menu as browsable page images, with the emphasis on artifact quality and page-turning feel rather than ebook-style text rendering.
 
 The key design choice is:
@@ -10,16 +12,14 @@ The key design choice is:
 
 That keeps the console-side feature small and predictable while still letting us harvest manuals from EPUB, CBZ, PDF, or loose scans on a PC.
 
-### Why This Fits The Current Menu
-Current viewer support is already close to a minimal v1:
-- `src/menu/views/text_viewer.c` handles small text sidecars and can present context/articles.
-- `src/menu/views/image_viewer.c` already displays a decoded image fullscreen.
-- `src/menu/views/browser.c` already routes special file types into dedicated viewers.
-- `src/menu/rom_info.c` already resolves ROM-specific metadata directories and `description.txt` sidecars.
+### Current status
+This feature is implemented in the current customized build:
+- ROM details expose `Open Manual` when a manual package is present.
+- The viewer uses `manifest.ini` plus page assets under a per-game `manual/` directory.
+- Page assets can use native `.png.nimg` replacements for faster loads.
+- Optional higher-resolution zoom assets can live in a separate `zoom/` directory.
 
-The missing piece is not file discovery. It is a dedicated manual package and a page-oriented image viewer.
-
-### Runtime Format: `manual/`
+### Runtime format: `manual/`
 For each game metadata directory, add an optional `manual/` folder.
 
 Example:
@@ -27,55 +27,29 @@ Example:
 
 Suggested contents:
 - `manifest.ini`
-- `cover.png`
 - `pages/0001.png`
 - `pages/0002.png`
 - `pages/0003.png`
-- `thumbs/0001.png`
-- `thumbs/0002.png`
+- optional native replacements such as `pages/0001.png.nimg`
+- optional zoom assets such as `zoom/0001.png` or `zoom/0001.png.nimg`
 
 Manifest fields:
 - `title=` display title
 - `source=` origin note (`Archive.org EPUB`, `scan`, `PDF`, etc.)
 - `page_count=` total number of pages
-- `has_cover=` `0/1`
-- `page_width=` native page width after conversion
-- `page_height=` native page height after conversion
+- `start_page=` optional 1-based default page
 - `pages_dir=` defaults to `pages`
 - `zoom_dir=` defaults to `zoom` when present
 - `max_zoom=` defaults to `3`
-- `fit_mode=` `contain` for v1
-- `zoom_levels=` optional, for v2 tiled zoom
 
-KISS rule:
-- v1 uses pre-rendered page PNGs only.
-- v2 can add tiles or alternate resolutions, but the package structure should not need to change dramatically.
+Current runtime behavior:
+- the viewer always opens the stable `manual/manifest.ini` path
+- `pages/` is required
+- `zoom/` is optional
+- if a `.png.nimg` replacement exists for a page, the native image is used first
 
-### Beta Format: `manual/tiled/`
-The stable path stays:
-- `manual/manifest.ini`
-- `manual/pages/*.png`
-
-The beta path is separate so it cannot break the stable viewer:
-- `manual/tiled/manifest.ini`
-- `manual/tiled/preview/0001.png`
-- `manual/tiled/pages/0001/r000_c000.png`
-
-Current beta viewer behavior:
-- ROM options expose `View Manual (Tiled Beta)`
-- zoom level `1x` uses `preview/`
-- zoomed views use `pages/<page>/rXXX_cXXX.png` tiles
-- tile size is currently expected to stay well below the RDP `1024` coordinate limit
-- newer beta packages can expose multiple tile levels, for example:
-  - `manual/tiled/levels/1/...`
-  - `manual/tiled/levels/2/...`
-- the viewer picks a tile level based on zoom, so higher zoom can switch to a denser tile set instead of stretching one level
-- newer beta packages can also pack each level into:
-  - `manual/tiled/levels/1.bundle.bin`
-  - `manual/tiled/levels/1.index.tsv`
-- this reduces filesystem overhead versus thousands of loose tile PNG files
-- current beta packages can store bundle payloads as native `RGBA16` tiles instead of PNG chunks
-- that removes per-tile PNG decode from the zoom path and is the preferred beta format
+### Historical tiled-beta ideas
+The older `manual/tiled/` and bundled-tile ideas in this document are not the current mainline UI. They remain here as future-facing notes only.
 
 ### Ingest Pipeline
 Create an offline converter on PC that normalizes source manuals into the `manual/` package.
@@ -89,7 +63,8 @@ Accepted inputs:
 Useful tooling in this repo:
 - `tools/sc64/manuals_extract_epub_images.py` for image-based EPUBs
 - `tools/sc64/manuals_extract_pdf_pages.py` for PDF rasterization via `pdftoppm` or `mutool`
-- `tools/sc64/manuals_build_tiled_beta_batch.py` for bulk building `manual/tiled/` packages from `reports/manuals/matched.tsv`
+- `tools/sc64/manuals_batch_import.py` for matching PDFs to metadata and building page-based `manual/` packages
+- `tools/sc64/manual_pages_native.py` for converting manual page PNGs to `.png.nimg`
 
 Pipeline:
 1. unpack source
@@ -125,18 +100,16 @@ Add a dedicated manual viewer rather than stretching the current one-shot image 
 Suggested controls:
 - `A`: open manual / advance page when in quick-read mode
 - `B`: back out
-- `L/R`: previous/next page
-- `C-left/C-right`: jump 5 pages
-- `C-up`: manual overview / thumbnails later
+- `C-left/C-right`: previous/next page
+- `L/R`: zoom out/in
 - `Start`: toggle UI chrome
-- `Z`: zoom mode later
-- stick / D-pad: pan in zoom mode later
+- stick / D-pad: pan when zoomed
 
-V1 display behavior:
-- load one page at a time
-- fit page to screen with black or theme-aware bars
-- show page number overlay briefly on page turn
-- remember last page per manual
+Current display behavior:
+- loads one page at a time
+- fits the page to screen
+- supports optional higher-resolution zoom assets
+- keeps page UI minimal and page-turn focused
 
 V2 display behavior:
 - add pan/zoom only after paging is fast and stable
@@ -144,16 +117,12 @@ V2 display behavior:
 - require explicit memory budgeting and cache eviction
 
 ### Recommended Implementation Phases
-#### Phase 1: Manual presence + launch
-- detect `manual/manifest.ini` under ROM metadata directory
-- add `Open Manual` action in ROM details/context menu when present
-
-#### Phase 2: Paged scan viewer
-- new `MENU_MODE_MANUAL_VIEWER`
-- next/prev page
-- last-page persistence
+#### Completed baseline
+- detect `manual/manifest.ini` under the ROM metadata directory
+- `Open Manual` action in ROM details
+- page-based scan viewer
 - one decoded page in memory
-- optional prefetch of next page if cheap
+- optional prefetch of the next page
 
 #### Phase 3: Thumbnails and overview
 - generate `thumbs/*.png`

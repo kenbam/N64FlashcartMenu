@@ -13,6 +13,7 @@
 - [Emulators](./18_emulators.md)
 - [Game Art Images](./19_gamepak_boxart.md)
 - [Autoloading N64 ROMs](./22_autoload_roms.md)
+- [Manual Viewer Notes](./71_manual_scan_viewer_plan.md)
 - [Sounds](./40_sound.md)
 
 ### Menus

@@ -1,7 +1,7 @@
 [Return to the index](./00_index.md)
 ## Menu Enhancements (Playlists, UI, Audio, Stats)
 
-This page documents the major menu enhancements added on the `ben/m3u-support` branch, with a focus on playlist-based organization, menu customization, and game tracking.
+This page documents the major menu enhancements in the current customized build, with a focus on playlist-based organization, menu customization, and game tracking.
 
 ### M3U Playlist Support
 - The File Browser can open `.m3u` playlists containing ROM paths.
@@ -114,12 +114,14 @@ short-desc=Arcade kart racer with battle arenas and four-player split-screen.
 - ROM details include improved metadata display (description, publisher/rating coverage when available in metadata).
 - Boxart fallback logic improves art coverage across regions / metadata entries.
 - ROM details also show save backend and save file health information.
+- Native manual packages can be launched from ROM details via `Open Manual`.
 
 ### Backgrounds, Themes, and Text Overlay
 - Theme presets can be selected in Menu Settings.
 - Background image can be changed from Menu Settings (without removing the SD card).
 - Text panel overlay can be enabled and its opacity adjusted to improve readability over bright or detailed backgrounds.
 - Playlist background overrides now use a cache-first path after the first load (decoded background surfaces are cached under `sd:/menu/cache/` for faster re-open).
+- Background overrides can point to either a normal image path (for example `.png`) or a direct native `.nimg` replacement.
 
 ### Menu Background Music (BGM)
 - Menu BGM autoplay is supported.
@@ -143,15 +145,15 @@ short-desc=Arcade kart racer with battle arenas and four-player split-screen.
 - Selected row text shimmer (theme-colored rainbow cycle) can be toggled in Menu Settings.
 
 ### Asset Tooling (Backgrounds / Music / WAV64)
-The branch includes a helper script to speed up background/music prep:
+The customized build includes a helper script to speed up background/music prep:
 
 - `tools/sc64/menu_assets.sh bg <input> <output.png>`
   - converts and crops to `640x480` PNG for menu backgrounds
-- `tools/sc64/menu_assets.sh bg-native <input> <output.nimg>`
-  - converts and crops to a `640x480` native `RGBA16` sidecar for opt-in faster background loads
+- `tools/sc64/menu_assets.sh bg-native <input> <output.png.nimg>`
+  - converts and crops to a `640x480` native `RGBA16` replacement/sidecar for faster background loads
 - `tools/sc64/menu_assets.sh screensaver <input> <output.png>`
   - resizes/pads logos to `<=180x96`
-- `tools/sc64/menu_assets.sh screensaver-native <input> <output.nimg>`
+- `tools/sc64/menu_assets.sh screensaver-native <input> <output.png.nimg>`
   - converts screensaver logos to an opt-in native `RGBA16` sidecar
 - `tools/sc64/menu_assets.sh music-mp3 <input> <output.mp3> [bitrate_kbps]`
   - re-encodes menu-safe MP3 (`32 kHz`, stereo)
@@ -167,8 +169,11 @@ Tool requirements:
 - `audioconv64` (from libdragon toolchain)
 
 ### Screensaver
-- Idle DVD-logo screensaver is available.
-- Screensaver logo can be selected from `sd:/menu/screensavers/`.
+- Three screensaver types are currently available:
+  - `DVD Logo`
+  - `3D Pipes`
+  - `Living Gradient`
+- Screensaver logo can be selected from `sd:/menu/screensavers/` for the DVD mode.
 - Smooth mode is available to improve motion.
 - Per-edge screensaver margins can be tuned to account for display/scaler visible-area cropping:
   - Left / Right / Top / Bottom margins

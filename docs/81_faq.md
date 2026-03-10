@@ -25,4 +25,4 @@ Filenames are expected to be written in ASCII, with Western Europe characters fu
 > An SD formatted to EXFAT with 128 kiB cluster size may improve load speeds.
 
 > [!WARNING]
-> On the first load of a ROM, the menu may need to create a save file. This may lead to a one time only increase in ROM load speed.
+> On the first load of a ROM, the menu may need to create a save file. This can cause a one-time increase in ROM load time.

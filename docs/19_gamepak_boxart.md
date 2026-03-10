@@ -49,6 +49,8 @@ Optional native sidecars can live beside any of these art files:
 
 When present, the menu uses the `.nimg` sidecar first and falls back to the PNG.
 
+The `.png` file itself is not strictly required if the matching `.png.nimg` file exists. In other words, a native replacement such as `boxart_front.png.nimg` can be used on its own.
+
 **Warning**: Excluding the region ID may show a box art of the wrong region.
 
 #### Itterating through game art images

@@ -53,9 +53,9 @@ Experimental (beta):
 * Controller Pak backup and restore (including individual notes).
 * Game art image switching.
 
-## Enhanced features in this branch (personal/custom)
-Important: this branch is a personal setup.  
-It is tuned for one user/workflow and includes experimental changes that are not aimed at broad compatibility.
+## Enhanced features in this customized build
+Important: this repo currently includes a personal/custom setup.  
+It is tuned for one user workflow and includes experimental changes that are not aimed at broad compatibility.
 
 ### Stable quality-of-life additions
 Playlist support (M3U):
@@ -90,9 +90,10 @@ ROM details + metadata:
 * Expanded year key parsing (`year`, `release-year`, `release-date`, etc).
 * Supports richer metadata keys such as `developer`, `genre`, `series`, `players`, and `modes`.
 * Metadata-to-ROM matching and coverage audits/backfills for large sets.
+* Native manual viewer with per-game manifests, page packages, and optional higher-resolution zoom assets.
 
 ### Playtime + SC64 firmware integration
-This is a major custom feature set in this branch.
+This is a major custom feature set in this customized build.
 
 Playtime tracking:
 * Tracks `last played`, `total playtime`, and recent sessions.
@@ -121,8 +122,8 @@ Themes and UI polish:
 * Improved text/background contrast controls (text panel + alpha).
 
 Screensaver:
-* DVD-style bouncing logo mode.
-* Selectable logo assets.
+* Three selectable modes: `DVD Logo`, `3D Pipes`, and `Living Gradient`.
+* Selectable logo assets for the DVD mode.
 * Motion/collision tuning improvements.
 * Idle behavior integration with menu runtime settings.
 
@@ -151,7 +152,7 @@ Additional branch-level additions:
 * See `docs/66_bug_tracker_personal.md` for known issues and personal tracking notes.
 * See `docs/68_personal_next_steps_firmware_update.md` for SC64 firmware update workflow notes.
 * Key commits for this customization wave include:
-  `ben/m3u-support`, `5c5a2c20`, `3b28ea5f`, `99374aca`, `4472ea81`, `cef0a124`, `05f136e0`.
+  `5c5a2c20`, `3b28ea5f`, `99374aca`, `fb5f83cb`, `994f784b`, `a78e44ae`, `5be77748`.
 
 
 ## Aims

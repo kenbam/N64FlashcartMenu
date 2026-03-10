@@ -14,6 +14,14 @@ Background images can optionally include a native sidecar next to the PNG:
 
 If the `.nimg` file exists, the menu uses it first for background preview and playlist background overrides. If it does not exist, the menu falls back to the PNG path.
 
+The current runtime also accepts a direct native path for playlist/background overrides:
+
+- `MyBackground.png.nimg`
+
+So both of these are valid workflows:
+- keep `MyBackground.png` and add `MyBackground.png.nimg`
+- point an override directly at `MyBackground.png.nimg`
+
 Generate the sidecar with:
 
 - `tools/sc64/menu_assets.sh bg-native <input> <output.png.nimg>`
