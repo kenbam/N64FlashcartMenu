@@ -1,11 +1,14 @@
 #include <sys/stat.h>
 #include "../sound.h"
+#include "utils/fs.h"
 
 #include "views.h"
 
 static struct stat st;
 
 static file_info_t info;
+static char *info_display_name = NULL;
+static menu_mode_t info_back_mode = MENU_MODE_BROWSER;
 
 static void process (menu_t *menu) {
     if (info.is_controller_pak_dump && menu->actions.enter) {
@@ -16,7 +19,7 @@ static void process (menu_t *menu) {
         menu->next_mode = MENU_MODE_CONTROLLER_PAK_DUMP_NOTE_INFO;
     } else if (menu->actions.back) {
         sound_play_effect(SFX_EXIT);
-        menu->next_mode = MENU_MODE_BROWSER;
+        menu->next_mode = info_back_mode;
     }
 }
 
@@ -27,7 +30,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
     ui_components_layout_draw();
 
-    ui_components_file_info_draw(menu->browser.entry->name, &info);
+    ui_components_file_info_draw(info_display_name ? info_display_name : menu->browser.entry->name, &info);
 
     if (info.is_controller_pak_dump) {
         ui_components_actions_bar_text_draw(STL_DEFAULT,
@@ -54,8 +57,16 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_file_info_init (menu_t *menu) {
+    free(info_display_name);
+    info_display_name = NULL;
+    info_back_mode = MENU_MODE_BROWSER;
+
     path_t *path = NULL;
-    if (menu->browser.entry && menu->browser.entry->path) {
+    if (menu->load.rom_path && path_has_value(menu->load.rom_path)) {
+        path = path_clone(menu->load.rom_path);
+        info_display_name = strdup(file_basename((char *)path_get(path)));
+        info_back_mode = menu->load.back_mode;
+    } else if (menu->browser.entry && menu->browser.entry->path) {
         path = path_create(menu->browser.entry->path);
     } else {
         path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
