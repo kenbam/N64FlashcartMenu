@@ -750,6 +750,12 @@ static void open_manual (menu_t *menu, void *arg) {
 
     manual_prepare_launch(menu, manual_directory);
 }
+
+static void load_rom_only(menu_t *menu, void *arg) {
+    (void)arg;
+    menu->load_pending.rom_file = true;
+}
+
 static void launch_with_64dd_disk(menu_t *menu, void *arg) {
     (void)arg;
     combo_disk_flow_launch_required(menu);
@@ -766,6 +772,7 @@ static void clear_default_64dd_disk(menu_t *menu, void *arg) {
 }
 
 static component_context_menu_t set_64dd_disk_context_menu = { .list = {
+    { .text = "Load ROM Only", .action = load_rom_only },
     { .text = "Launch with 64DD Disk...", .action = launch_with_64dd_disk },
     { .text = "Set Default 64DD Disk...", .action = set_default_64dd_disk },
     { .text = "Clear Default 64DD Disk", .action = clear_default_64dd_disk },
