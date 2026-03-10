@@ -359,6 +359,13 @@ void playtime_save (playtime_db_t *db) {
 
     mini_save_safe(ini, MINI_FLAGS_SKIP_EMPTY_GROUPS);
     mini_free(ini);
+    db->dirty = false;
+}
+
+void playtime_save_if_dirty (playtime_db_t *db) {
+    if (db && db->dirty) {
+        playtime_save(db);
+    }
 }
 
 void playtime_finalize_active (playtime_db_t *db, time_t now) {

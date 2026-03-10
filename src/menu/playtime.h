@@ -36,11 +36,13 @@ typedef struct {
 typedef struct {
     playtime_entry_t *entries;
     uint32_t count;
+    bool dirty;
 } playtime_db_t;
 
 void playtime_init(char *path);
 void playtime_load(playtime_db_t *db);
 void playtime_save(playtime_db_t *db);
+void playtime_save_if_dirty(playtime_db_t *db);
 void playtime_finalize_active(playtime_db_t *db, time_t now);
 void playtime_start_session(playtime_db_t *db, const char *path, time_t now);
 playtime_entry_t *playtime_get(playtime_db_t *db, const char *path);

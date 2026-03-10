@@ -1233,9 +1233,14 @@ static bool playlist_grid_get_boxart_meta_by_index_cached_only(menu_t *menu, int
     return true;
 }
 
-// Pre-read all game codes and pre-resolve boxart directories at playlist load
-// time so grid browsing needs zero SD I/O.
-static void playlist_grid_prewarm_meta(menu_t *menu) {
+// Incremental prewarm: reads a few entries per frame to avoid blocking on
+// playlist load.  Call _start once, then _tick every frame.
+static int prewarm_next_index = -1;
+static int prewarm_total = 0;
+
+static void playlist_grid_prewarm_start(menu_t *menu) {
+    prewarm_next_index = -1;
+    prewarm_total = 0;
     if (!menu || !menu->browser.playlist || menu->browser.entries <= 0) {
         return;
     }
@@ -1243,9 +1248,19 @@ static void playlist_grid_prewarm_meta(menu_t *menu) {
     if (!playlist_grid_meta_index) {
         return;
     }
+    prewarm_next_index = 0;
+    prewarm_total = menu->browser.entries;
+}
+
+#define PREWARM_PER_FRAME 2
+
+static void playlist_grid_prewarm_tick(menu_t *menu) {
+    if (prewarm_next_index < 0 || prewarm_next_index >= prewarm_total) {
+        return;
+    }
     char gc[4], title[21];
-    for (int i = 0; i < menu->browser.entries; i++) {
-        if (playlist_grid_get_boxart_meta_by_index(menu, i, gc, title)) {
+    for (int i = 0; i < PREWARM_PER_FRAME && prewarm_next_index < prewarm_total; i++, prewarm_next_index++) {
+        if (playlist_grid_get_boxart_meta_by_index(menu, prewarm_next_index, gc, title)) {
             ui_components_boxart_prewarm_dir(menu->storage_prefix, gc, title);
         }
     }
@@ -1603,7 +1618,7 @@ static bool path_is_favorite(menu_t *menu, const char *path) {
     }
 
     char game_id[ROM_STABLE_ID_LENGTH] = {0};
-    rom_info_get_stable_id_for_path(path, game_id, sizeof(game_id));
+    rom_info_get_stable_id_for_path_cached(path, game_id, sizeof(game_id));
 
     for (int i = 0; i < FAVORITES_COUNT; i++) {
         bookkeeping_item_t *item = &menu->bookkeeping.favorite_items[i];
@@ -3348,7 +3363,7 @@ static bool load_playlist (menu_t *menu) {
         playlist_active_store(path_get(menu->browser.directory), content_hash, true, &props);
         playlist_perf_commit(menu, cache_source ? cache_source : "cache", elapsed_ms(open_start_us), 0, 0, 0, menu->browser.entries);
         if (props.grid_view) {
-            playlist_grid_prewarm_meta(menu);
+            playlist_grid_prewarm_start(menu);
         }
         browser_apply_playlist_overrides(menu, &props);
         char *playlist_context_path = playlist_find_context_text_path(menu->browser.directory);
@@ -3485,7 +3500,7 @@ static bool load_playlist (menu_t *menu) {
     }
 
     if (props.grid_view) {
-        playlist_grid_prewarm_meta(menu);
+        playlist_grid_prewarm_start(menu);
     }
     browser_apply_playlist_overrides(menu, &props);
     path_free(playlist_dir);
@@ -4303,4 +4318,5 @@ void view_browser_display (menu_t *menu, surface_t *display) {
     draw(menu, display);
     browser_apply_playlist_overrides_deferred(menu);
     playlist_recent_prewarm_tick(menu);
+    playlist_grid_prewarm_tick(menu);
 }

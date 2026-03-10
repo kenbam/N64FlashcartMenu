@@ -106,7 +106,7 @@ static bool resolve_playtime_entry_path(menu_t *menu, playtime_entry_t *entry) {
         if (!entry->path || strcmp(entry->path, resolved_path) != 0) {
             free(entry->path);
             entry->path = strdup(resolved_path);
-            playtime_save(&menu->playtime);
+            menu->playtime.dirty = true;
         }
         return true;
     }
@@ -120,7 +120,7 @@ static bool resolve_playtime_entry_path(menu_t *menu, playtime_entry_t *entry) {
 
     free(entry->path);
     entry->path = strdup(resolved_path);
-    playtime_save(&menu->playtime);
+    menu->playtime.dirty = true;
     return (entry->path != NULL);
 }
 
@@ -620,6 +620,7 @@ void view_playtime_display(menu_t *menu, surface_t *display) {
     draw(menu, display);
 
     if (menu->next_mode != MENU_MODE_PLAYTIME) {
+        playtime_save_if_dirty(&menu->playtime);
         playtime_list_free();
     }
 }
