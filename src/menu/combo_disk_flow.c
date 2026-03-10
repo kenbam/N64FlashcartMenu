@@ -23,6 +23,25 @@ static bool combo_disk_flow_find_single_compatible_recursive(
     int *match_count
 );
 
+static path_t *combo_disk_flow_create_preferred_root(menu_t *menu) {
+    if (!menu) {
+        return NULL;
+    }
+    return path_init(menu->storage_prefix, "/N64 - N64DD");
+}
+
+static path_t *combo_disk_flow_create_browser_root(menu_t *menu) {
+    path_t *preferred_root = combo_disk_flow_create_preferred_root(menu);
+    if (preferred_root &&
+        directory_exists(path_get(preferred_root)) &&
+        disk_pairing_directory_has_match_recursive(&menu->load.rom_info, preferred_root)) {
+        return preferred_root;
+    }
+
+    path_free(preferred_root);
+    return path_init(menu->storage_prefix, "/");
+}
+
 static bool combo_disk_flow_resolve_default(menu_t *menu, char *resolved_path, size_t resolved_len) {
     if (!combo_disk_flow_is_applicable(menu)) {
         return false;
@@ -42,33 +61,48 @@ static bool combo_disk_flow_scan_matches(
     size_t resolved_len,
     int *match_count
 ) {
-    path_t *disk_root = path_init(menu->storage_prefix, "/N64 - N64DD");
-    if (!disk_root || !directory_exists(path_get(disk_root))) {
-        path_free(disk_root);
-        if (resolved_path && resolved_len > 0) {
-            resolved_path[0] = '\0';
+    if (resolved_path && resolved_len > 0) {
+        resolved_path[0] = '\0';
+    }
+    *match_count = 0;
+
+    path_t *preferred_root = combo_disk_flow_create_preferred_root(menu);
+    if (preferred_root && directory_exists(path_get(preferred_root))) {
+        bool scanned = combo_disk_flow_find_single_compatible_recursive(
+            menu,
+            preferred_root,
+            resolved_path,
+            resolved_len,
+            match_count
+        );
+        path_free(preferred_root);
+        if (!scanned) {
+            return false;
         }
-        *match_count = 0;
-        return true;
+        if (*match_count > 0) {
+            return true;
+        }
+    } else {
+        path_free(preferred_root);
     }
 
+    path_t *fallback_root = path_init(menu->storage_prefix, "/");
+    if (!fallback_root) {
+        return false;
+    }
     bool scanned = combo_disk_flow_find_single_compatible_recursive(
         menu,
-        disk_root,
+        fallback_root,
         resolved_path,
         resolved_len,
         match_count
     );
-    path_free(disk_root);
+    path_free(fallback_root);
     return scanned;
 }
 
 static void combo_disk_flow_open_picker(menu_t *menu, browser_picker_t picker) {
-    path_t *disk_root = path_init(menu->storage_prefix, "/N64 - N64DD");
-    if (!disk_root || !directory_exists(path_get(disk_root))) {
-        path_free(disk_root);
-        disk_root = path_init(menu->storage_prefix, "/");
-    }
+    path_t *disk_root = combo_disk_flow_create_browser_root(menu);
     if (!disk_root) {
         menu_show_error(menu, "Couldn't open 64DD disk browser");
         return;
