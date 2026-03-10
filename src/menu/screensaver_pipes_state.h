@@ -26,6 +26,7 @@ typedef struct {
     uint8_t active_color_index;
     uint8_t straight_run_remaining;
     uint32_t frame_tick;
+    uint16_t traversed_cells;
     int segment_count;
     screensaver_pipe_segment_t segments[SCREENSAVER_PIPES_MAX_SEGMENTS];
 } screensaver_pipes_state_t;

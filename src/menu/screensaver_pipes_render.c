@@ -5,9 +5,9 @@
 
 #include "screensaver_pipes_render.h"
 
-#define SCREENSAVER_PIPES_CELL_SPACING   (1.0f)
-#define SCREENSAVER_PIPES_CAMERA_DISTANCE (7.9f)
-#define SCREENSAVER_PIPES_FOCAL_LENGTH   (212.0f)
+#define SCREENSAVER_PIPES_CELL_SPACING   (1.15f)
+#define SCREENSAVER_PIPES_CAMERA_DISTANCE (7.35f)
+#define SCREENSAVER_PIPES_FOCAL_LENGTH   (228.0f)
 #define SCREENSAVER_PIPES_RADIUS         (0.17f)
 #define SCREENSAVER_PIPES_TUBE_SIDES     (6)
 #define SCREENSAVER_PIPES_JOINT_SIDES    (6)
@@ -39,15 +39,37 @@ typedef struct {
     color_t color[4];
 } screensaver_pipe_face_t;
 
-static const color_t screensaver_palette[] = {
-    RGBA32(0xFF, 0xFF, 0xFF, 0xFF),
-    RGBA32(0xFF, 0x5E, 0x5E, 0xFF),
-    RGBA32(0x55, 0xE8, 0xFF, 0xFF),
-    RGBA32(0xFF, 0xD3, 0x55, 0xFF),
-    RGBA32(0x7B, 0xFF, 0x83, 0xFF),
-    RGBA32(0xFF, 0x7B, 0xF1, 0xFF),
-    RGBA32(0x65, 0x8D, 0xFF, 0xFF),
-    RGBA32(0xFF, 0x9C, 0x47, 0xFF),
+static const color_t screensaver_palettes[][8] = {
+    {
+        RGBA32(0xFF, 0xFF, 0xFF, 0xFF),
+        RGBA32(0xFF, 0x63, 0x63, 0xFF),
+        RGBA32(0x4F, 0xE8, 0xFF, 0xFF),
+        RGBA32(0xFF, 0xD3, 0x57, 0xFF),
+        RGBA32(0x78, 0xFF, 0x86, 0xFF),
+        RGBA32(0xFF, 0x7E, 0xF6, 0xFF),
+        RGBA32(0x69, 0x91, 0xFF, 0xFF),
+        RGBA32(0xFF, 0xA1, 0x44, 0xFF),
+    },
+    {
+        RGBA32(0xFF, 0xF4, 0xDA, 0xFF),
+        RGBA32(0xFF, 0x8B, 0x4A, 0xFF),
+        RGBA32(0x3D, 0xD6, 0xC6, 0xFF),
+        RGBA32(0xF7, 0xC9, 0x3B, 0xFF),
+        RGBA32(0x8E, 0xE6, 0x4C, 0xFF),
+        RGBA32(0xF4, 0x6A, 0xB6, 0xFF),
+        RGBA32(0x4E, 0x7E, 0xFF, 0xFF),
+        RGBA32(0xFF, 0x6F, 0x2E, 0xFF),
+    },
+    {
+        RGBA32(0xE5, 0xFF, 0xFF, 0xFF),
+        RGBA32(0xFF, 0x52, 0x8C, 0xFF),
+        RGBA32(0x58, 0xF6, 0xFF, 0xFF),
+        RGBA32(0xE9, 0xFF, 0x61, 0xFF),
+        RGBA32(0x4D, 0xFF, 0xB8, 0xFF),
+        RGBA32(0xC9, 0x77, 0xFF, 0xFF),
+        RGBA32(0x4B, 0xA3, 0xFF, 0xFF),
+        RGBA32(0xFF, 0xB0, 0x4F, 0xFF),
+    },
 };
 
 static inline float screensaver_clampf(float value, float min_value, float max_value) {
@@ -62,10 +84,6 @@ static inline uint8_t screensaver_u8_clamp(int value) {
     return (uint8_t)value;
 }
 
-static color_t screensaver_get_palette_color(uint8_t color_index) {
-    return screensaver_palette[color_index % (sizeof(screensaver_palette) / sizeof(screensaver_palette[0]))];
-}
-
 static color_t screensaver_color_scale(color_t color, float scale) {
     if (scale < 0.0f) scale = 0.0f;
     return RGBA32(
@@ -74,6 +92,34 @@ static color_t screensaver_color_scale(color_t color, float scale) {
         screensaver_u8_clamp((int)((float)color.b * scale)),
         0xFF
     );
+}
+
+static color_t screensaver_color_lerp(color_t a, color_t b, float t) {
+    return RGBA32(
+        screensaver_u8_clamp((int)((float)a.r + (((float)b.r - (float)a.r) * t))),
+        screensaver_u8_clamp((int)((float)a.g + (((float)b.g - (float)a.g) * t))),
+        screensaver_u8_clamp((int)((float)a.b + (((float)b.b - (float)a.b) * t))),
+        0xFF
+    );
+}
+
+static color_t screensaver_get_palette_color(const screensaver_pipes_state_t *state, uint8_t color_index) {
+    float palette_time = state ? ((float)state->frame_tick * 0.0045f) : 0.0f;
+    int palette_count = (int)(sizeof(screensaver_palettes) / sizeof(screensaver_palettes[0]));
+    int palette_index = ((int)floorf(palette_time)) % palette_count;
+    int next_palette_index = (palette_index + 1) % palette_count;
+    float blend = palette_time - floorf(palette_time);
+    blend = blend * blend * (3.0f - (2.0f * blend));
+
+    int color_slot = color_index % 8;
+    color_t base = screensaver_color_lerp(
+        screensaver_palettes[palette_index][color_slot],
+        screensaver_palettes[next_palette_index][color_slot],
+        blend
+    );
+
+    float pulse = 0.92f + (0.16f * sinf((palette_time * 5.2f) + ((float)color_slot * 0.8f)));
+    return screensaver_color_scale(base, pulse);
 }
 
 static screensaver_vec3_t vec3_add(screensaver_vec3_t a, screensaver_vec3_t b) {
@@ -125,10 +171,10 @@ static screensaver_vec3_t grid_to_world(float x, float y, float z) {
 static void get_camera_angles(const screensaver_pipes_state_t *state, float *yaw, float *pitch) {
     float t = state ? ((float)state->frame_tick * 0.011f) : 0.0f;
     if (yaw) {
-        *yaw = 0.92f + (sinf(t * 0.47f) * 0.36f);
+        *yaw = 0.88f + (sinf(t * 0.41f) * 0.46f);
     }
     if (pitch) {
-        *pitch = 0.58f + (sinf((t * 0.29f) + 1.1f) * 0.16f);
+        *pitch = 0.53f + (sinf((t * 0.27f) + 1.1f) * 0.21f);
     }
 }
 
@@ -223,13 +269,36 @@ static bool pipes_segment_dirs_match(const screensaver_pipe_segment_t *a, const 
     return adx == bdx && ady == bdy && adz == bdz;
 }
 
+static bool pipes_segment_matches_active_dir(const screensaver_pipes_state_t *state, const screensaver_pipe_segment_t *segment) {
+    if (!state || !segment || state->dir < 0 || state->reset_delay_s > 0.0f) {
+        return false;
+    }
+
+    if (segment->bx != state->head_x || segment->by != state->head_y || segment->bz != state->head_z) {
+        return false;
+    }
+
+    int seg_dx = segment->bx - segment->ax;
+    int seg_dy = segment->by - segment->ay;
+    int seg_dz = segment->bz - segment->az;
+    switch (state->dir) {
+        case 0: return seg_dx > 0 && seg_dy == 0 && seg_dz == 0;
+        case 1: return seg_dx < 0 && seg_dy == 0 && seg_dz == 0;
+        case 2: return seg_dy > 0 && seg_dx == 0 && seg_dz == 0;
+        case 3: return seg_dy < 0 && seg_dx == 0 && seg_dz == 0;
+        case 4: return seg_dz > 0 && seg_dx == 0 && seg_dy == 0;
+        case 5: return seg_dz < 0 && seg_dx == 0 && seg_dy == 0;
+        default: return false;
+    }
+}
+
 static bool pipes_should_draw_joint(const screensaver_pipes_state_t *state, int segment_index) {
     if (!state || segment_index < 0 || segment_index >= state->segment_count) {
         return false;
     }
 
     if (segment_index + 1 >= state->segment_count) {
-        return true;
+        return !pipes_segment_matches_active_dir(state, &state->segments[segment_index]);
     }
 
     const screensaver_pipe_segment_t *segment = &state->segments[segment_index];
@@ -297,7 +366,7 @@ static void draw_pipe_segment(
     screensaver_vec3_t basis_u = vec3_normalize(vec3_cross(dir, ref));
     screensaver_vec3_t basis_v = vec3_normalize(vec3_cross(dir, basis_u));
     screensaver_vec3_t light_dir = vec3_normalize((screensaver_vec3_t){-0.55f, 0.28f, -0.78f});
-    color_t base_color = screensaver_get_palette_color(color_index);
+    color_t base_color = screensaver_get_palette_color(state, color_index);
 
     screensaver_pipe_face_t faces[SCREENSAVER_PIPES_TUBE_SIDES] = {0};
     int face_count = 0;

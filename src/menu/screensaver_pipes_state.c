@@ -8,6 +8,7 @@
 #define SCREENSAVER_PIPES_GRID_HEIGHT (5)
 #define SCREENSAVER_PIPES_GRID_DEPTH  (7)
 #define SCREENSAVER_PIPES_GROWTH_RATE (3.80f)
+#define SCREENSAVER_PIPES_MAX_CELLS   (80)
 #define SCREENSAVER_PIPES_RESET_DELAY (1.20f)
 
 typedef enum {
@@ -48,7 +49,17 @@ static int pipes_rand_int(screensaver_pipes_state_t *state, int limit) {
 }
 
 static uint8_t pipes_pick_run_length(screensaver_pipes_state_t *state) {
-    return (uint8_t)(2 + pipes_rand_int(state, 5));
+    int roll = pipes_rand_int(state, 100);
+    if (roll < 28) {
+        return (uint8_t)(1 + pipes_rand_int(state, 2));
+    }
+    if (roll < 68) {
+        return (uint8_t)(3 + pipes_rand_int(state, 3));
+    }
+    if (roll < 90) {
+        return (uint8_t)(6 + pipes_rand_int(state, 3));
+    }
+    return (uint8_t)(9 + pipes_rand_int(state, 3));
 }
 
 static bool pipes_coord_valid(int x, int y, int z) {
@@ -57,18 +68,100 @@ static bool pipes_coord_valid(int x, int y, int z) {
         z >= 0 && z < SCREENSAVER_PIPES_GRID_DEPTH;
 }
 
+static int pipes_sign(int value) {
+    if (value > 0) return 1;
+    if (value < 0) return -1;
+    return 0;
+}
+
 static bool pipes_edge_occupied(const screensaver_pipes_state_t *state, int ax, int ay, int az, int bx, int by, int bz) {
     for (int i = 0; i < state->segment_count; i++) {
         const screensaver_pipe_segment_t *segment = &state->segments[i];
-        bool same_forward = segment->ax == ax && segment->ay == ay && segment->az == az &&
-            segment->bx == bx && segment->by == by && segment->bz == bz;
-        bool same_reverse = segment->ax == bx && segment->ay == by && segment->az == bz &&
-            segment->bx == ax && segment->by == ay && segment->bz == az;
-        if (same_forward || same_reverse) {
-            return true;
+        if (ay == by && az == bz && segment->ay == segment->by && segment->az == segment->bz &&
+            segment->ay == ay && segment->az == az) {
+            int edge_min = ax < bx ? ax : bx;
+            int edge_max = ax > bx ? ax : bx;
+            int seg_min = segment->ax < segment->bx ? segment->ax : segment->bx;
+            int seg_max = segment->ax > segment->bx ? segment->ax : segment->bx;
+            if (edge_min >= seg_min && edge_max <= seg_max) {
+                return true;
+            }
+        }
+
+        if (ax == bx && az == bz && segment->ax == segment->bx && segment->az == segment->bz &&
+            segment->ax == ax && segment->az == az) {
+            int edge_min = ay < by ? ay : by;
+            int edge_max = ay > by ? ay : by;
+            int seg_min = segment->ay < segment->by ? segment->ay : segment->by;
+            int seg_max = segment->ay > segment->by ? segment->ay : segment->by;
+            if (edge_min >= seg_min && edge_max <= seg_max) {
+                return true;
+            }
+        }
+
+        if (ax == bx && ay == by && segment->ax == segment->bx && segment->ay == segment->by &&
+            segment->ax == ax && segment->ay == ay) {
+            int edge_min = az < bz ? az : bz;
+            int edge_max = az > bz ? az : bz;
+            int seg_min = segment->az < segment->bz ? segment->az : segment->bz;
+            int seg_max = segment->az > segment->bz ? segment->az : segment->bz;
+            if (edge_min >= seg_min && edge_max <= seg_max) {
+                return true;
+            }
         }
     }
     return false;
+}
+
+static bool pipes_node_occupied(const screensaver_pipes_state_t *state, int x, int y, int z) {
+    for (int i = 0; i < state->segment_count; i++) {
+        const screensaver_pipe_segment_t *segment = &state->segments[i];
+        if (segment->ay == segment->by && segment->az == segment->bz &&
+            y == segment->ay && z == segment->az) {
+            int seg_min = segment->ax < segment->bx ? segment->ax : segment->bx;
+            int seg_max = segment->ax > segment->bx ? segment->ax : segment->bx;
+            if (x >= seg_min && x <= seg_max) {
+                return true;
+            }
+        }
+
+        if (segment->ax == segment->bx && segment->az == segment->bz &&
+            x == segment->ax && z == segment->az) {
+            int seg_min = segment->ay < segment->by ? segment->ay : segment->by;
+            int seg_max = segment->ay > segment->by ? segment->ay : segment->by;
+            if (y >= seg_min && y <= seg_max) {
+                return true;
+            }
+        }
+
+        if (segment->ax == segment->bx && segment->ay == segment->by &&
+            x == segment->ax && y == segment->ay) {
+            int seg_min = segment->az < segment->bz ? segment->az : segment->bz;
+            int seg_max = segment->az > segment->bz ? segment->az : segment->bz;
+            if (z >= seg_min && z <= seg_max) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool pipes_can_extend_segment(const screensaver_pipe_segment_t *segment, int ax, int ay, int az, int bx, int by, int bz, uint8_t color_index) {
+    if (!segment || segment->color_index != color_index) {
+        return false;
+    }
+
+    if (segment->bx != ax || segment->by != ay || segment->bz != az) {
+        return false;
+    }
+
+    int seg_dx = pipes_sign(segment->bx - segment->ax);
+    int seg_dy = pipes_sign(segment->by - segment->ay);
+    int seg_dz = pipes_sign(segment->bz - segment->az);
+    int edge_dx = pipes_sign(bx - ax);
+    int edge_dy = pipes_sign(by - ay);
+    int edge_dz = pipes_sign(bz - az);
+    return seg_dx == edge_dx && seg_dy == edge_dy && seg_dz == edge_dz;
 }
 
 static int pipes_free_edge_count(const screensaver_pipes_state_t *state, int x, int y, int z) {
@@ -95,6 +188,9 @@ static bool pipes_pick_start(screensaver_pipes_state_t *state, int *out_x, int *
         int x = index % SCREENSAVER_PIPES_GRID_WIDTH;
         int y = (index / SCREENSAVER_PIPES_GRID_WIDTH) % SCREENSAVER_PIPES_GRID_HEIGHT;
         int z = index / (SCREENSAVER_PIPES_GRID_WIDTH * SCREENSAVER_PIPES_GRID_HEIGHT);
+        if (pipes_node_occupied(state, x, y, z)) {
+            continue;
+        }
         if (pipes_free_edge_count(state, x, y, z) <= 0) {
             continue;
         }
@@ -116,6 +212,9 @@ static int pipes_collect_dirs(const screensaver_pipes_state_t *state, int x, int
         int ny = y + pipe_dy[dir];
         int nz = z + pipe_dz[dir];
         if (!pipes_coord_valid(nx, ny, nz)) {
+            continue;
+        }
+        if (pipes_node_occupied(state, nx, ny, nz)) {
             continue;
         }
         if (pipes_edge_occupied(state, x, y, z, nx, ny, nz)) {
@@ -194,30 +293,47 @@ static void pipes_advance(screensaver_pipes_state_t *state) {
     int by = ay + pipe_dy[state->dir];
     int bz = az + pipe_dz[state->dir];
 
-    if (!pipes_coord_valid(bx, by, bz) || pipes_edge_occupied(state, ax, ay, az, bx, by, bz)) {
+    if (!pipes_coord_valid(bx, by, bz) || pipes_node_occupied(state, bx, by, bz) || pipes_edge_occupied(state, ax, ay, az, bx, by, bz)) {
         if (!pipes_start_pipe(state)) {
             pipes_schedule_reset(state);
         }
         return;
     }
 
-    if (state->segment_count >= SCREENSAVER_PIPES_MAX_SEGMENTS) {
-        pipes_schedule_reset(state);
-        return;
+    screensaver_pipe_segment_t *segment = NULL;
+    if (state->segment_count > 0) {
+        screensaver_pipe_segment_t *last_segment = &state->segments[state->segment_count - 1];
+        if (pipes_can_extend_segment(last_segment, ax, ay, az, bx, by, bz, state->active_color_index)) {
+            segment = last_segment;
+        }
     }
 
-    screensaver_pipe_segment_t *segment = &state->segments[state->segment_count++];
-    segment->color_index = state->active_color_index;
-    segment->ax = ax;
-    segment->ay = ay;
-    segment->az = az;
+    if (!segment) {
+        if (state->segment_count >= SCREENSAVER_PIPES_MAX_SEGMENTS) {
+            pipes_schedule_reset(state);
+            return;
+        }
+
+        segment = &state->segments[state->segment_count++];
+        segment->color_index = state->active_color_index;
+        segment->ax = ax;
+        segment->ay = ay;
+        segment->az = az;
+    }
+
     segment->bx = bx;
     segment->by = by;
     segment->bz = bz;
+    state->traversed_cells++;
 
     state->head_x = bx;
     state->head_y = by;
     state->head_z = bz;
+
+    if (state->traversed_cells >= SCREENSAVER_PIPES_MAX_CELLS) {
+        pipes_schedule_reset(state);
+        return;
+    }
 
     int prev_dir = state->dir;
     if (state->straight_run_remaining > 0) {
@@ -251,6 +367,7 @@ void screensaver_pipes_init_state(screensaver_pipes_state_t *state) {
     state->active_color_index = 0;
     state->straight_run_remaining = 0;
     state->frame_tick = 0;
+    state->traversed_cells = 0;
     state->segment_count = 0;
 }
 
@@ -262,6 +379,7 @@ void screensaver_pipes_reset(screensaver_pipes_state_t *state) {
     state->reset_delay_s = 0.0f;
     state->dir = -1;
     state->straight_run_remaining = 0;
+    state->traversed_cells = 0;
 }
 
 void screensaver_pipes_activate(screensaver_pipes_state_t *state) {
@@ -271,6 +389,7 @@ void screensaver_pipes_activate(screensaver_pipes_state_t *state) {
     state->segment_progress = 0.0f;
     state->reset_delay_s = 0.0f;
     state->frame_tick = 0;
+    state->traversed_cells = 0;
     state->segment_count = 0;
     state->straight_run_remaining = 0;
     pipes_start_pipe(state);
