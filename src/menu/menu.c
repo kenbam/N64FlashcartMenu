@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
-#include <math.h>
 
 #include <libdragon.h>
 
@@ -19,9 +18,9 @@
 #include "menu_state.h"
 #include "menu.h"
 #include "mp3_player.h"
-#include "native_image.h"
 #include "playtime.h"
 #include "png_decoder.h"
+#include "screensaver.h"
 #include "settings.h"
 #include "sound.h"
 #include "usb_comm.h"
@@ -38,22 +37,11 @@
 #define MENU_BGM_MP3_FILE_FALLBACK  "/menu/music/bgm.mp3"
 #define MENU_BGM_WAV64_FILE         "/menu/music/menu.wav64"
 #define MENU_BGM_WAV64_FILE_FALLBACK "/menu/music/bgm.wav64"
-#define SCREENSAVER_NATIVE_SIDECAR  ".nimg"
-
 #define MENU_CACHE_DIRECTORY        "cache"
 #define BACKGROUND_CACHE_FILE       "background.data"
 #define BACKGROUND_IMAGES_DIRECTORY "backgrounds"
 
 #define FPS_LIMIT                   (30.0f)
-#define SCREENSAVER_IDLE_SECONDS    (30)
-#define SCREENSAVER_LOGO_WIDTH      (96)
-#define SCREENSAVER_LOGO_HEIGHT     (28)
-#define SCREENSAVER_LOGO_FILE       "/menu/DVD_video_logo.png"
-#define SCREENSAVER_LOGO_FILE_ALT   "/menu/screensavers/DVD_video_logo.png"
-#define SCREENSAVER_LOGO_FILE_DEFAULT "/menu/screensavers/dvd-logo.png"
-#define SCREENSAVER_LOGO_MAX_WIDTH  (180)
-#define SCREENSAVER_LOGO_MAX_HEIGHT (96)
-#define SCREENSAVER_DEBUG_BOUNDS    (0)
 
 static menu_t *menu;
 
@@ -86,443 +74,7 @@ typedef struct {
     void *inner_ctx;
 } menu_bgm_wav64_meter_wrap_t;
 static menu_bgm_wav64_meter_wrap_t menu_bgm_wav64_wrap;
-static int screensaver_fps_mode_applied = -1;
-static struct {
-    bool active;
-    int idle_frames;
-    float prev_x;
-    float prev_y;
-    float x;
-    float y;
-    float vx;
-    float vy;
-    float accumulator_s;
-    uint64_t last_ticks_us;
-    uint8_t color_index;
-} screensaver = {
-    .active = false,
-    .idle_frames = 0,
-    .prev_x = 64.0f,
-    .prev_y = 64.0f,
-    .x = 64.0f,
-    .y = 64.0f,
-    .vx = 60.0f,
-    .vy = 60.0f,
-    .accumulator_s = 0.0f,
-    .last_ticks_us = 0,
-    .color_index = 0,
-};
-
-static const color_t screensaver_palette[] = {
-    RGBA32(0xFF, 0xFF, 0xFF, 0xFF),
-    RGBA32(0xFF, 0x5E, 0x5E, 0xFF),
-    RGBA32(0x55, 0xE8, 0xFF, 0xFF),
-    RGBA32(0xFF, 0xD3, 0x55, 0xFF),
-    RGBA32(0x7B, 0xFF, 0x83, 0xFF),
-    RGBA32(0xFF, 0x7B, 0xF1, 0xFF),
-};
-
-static surface_t *screensaver_logo_image = NULL;
-static bool screensaver_logo_loading = false;
 static void menu_bgm_deinit (void);
-static void screensaver_logo_reload(menu_t *menu);
-static void screensaver_logo_try_load(menu_t *menu);
-
-static void screensaver_logo_callback(png_err_t err, surface_t *decoded_image, void *callback_data) {
-    (void)callback_data;
-    screensaver_logo_loading = false;
-    if (err == PNG_OK) {
-        screensaver_logo_image = decoded_image;
-    } else if (decoded_image) {
-        surface_free(decoded_image);
-        free(decoded_image);
-    }
-}
-
-static void screensaver_logo_free (void) {
-    if (screensaver_logo_loading) {
-        png_decoder_abort();
-        screensaver_logo_loading = false;
-    }
-    if (screensaver_logo_image) {
-        surface_free(screensaver_logo_image);
-        free(screensaver_logo_image);
-        screensaver_logo_image = NULL;
-    }
-}
-
-static void screensaver_logo_try_load_path(menu_t *menu, const char *logo_file) {
-    if (screensaver_logo_loading || screensaver_logo_image || png_decoder_is_busy()) {
-        return;
-    }
-    if (!logo_file || logo_file[0] == '\0') {
-        return;
-    }
-
-    path_t *logo_path = path_init(menu->storage_prefix, (char *)logo_file);
-    if (file_exists(path_get(logo_path))) {
-        screensaver_logo_image = native_image_load_sidecar_rgba16(path_get(logo_path), SCREENSAVER_NATIVE_SIDECAR, 1024, 1024);
-        if (screensaver_logo_image) {
-            path_free(logo_path);
-            return;
-        }
-        // Use a larger decode target for compatibility with logo PNGs that fail
-        // when decoded directly to a very small target size.
-        png_err_t png_err = png_decoder_start(path_get(logo_path), 1024, 1024, screensaver_logo_callback, NULL);
-        if (png_err == PNG_OK) {
-            screensaver_logo_loading = true;
-        }
-    }
-    path_free(logo_path);
-}
-
-static bool screensaver_logo_search_done = false;
-
-static void screensaver_logo_try_load(menu_t *menu) {
-    if (!menu || screensaver_logo_loading || screensaver_logo_image || screensaver_logo_search_done) {
-        return;
-    }
-
-    if (menu->settings.screensaver_logo_file && menu->settings.screensaver_logo_file[0] != '\0') {
-        screensaver_logo_try_load_path(menu, menu->settings.screensaver_logo_file);
-    }
-    if (!screensaver_logo_loading && !screensaver_logo_image) {
-        screensaver_logo_try_load_path(menu, SCREENSAVER_LOGO_FILE_DEFAULT);
-    }
-    if (!screensaver_logo_loading && !screensaver_logo_image) {
-        screensaver_logo_try_load_path(menu, SCREENSAVER_LOGO_FILE_ALT);
-    }
-    if (!screensaver_logo_loading && !screensaver_logo_image) {
-        screensaver_logo_try_load_path(menu, SCREENSAVER_LOGO_FILE);
-    }
-
-    // If nothing started loading, no logo files exist — stop retrying.
-    if (!screensaver_logo_loading) {
-        screensaver_logo_search_done = true;
-    }
-}
-
-static void screensaver_logo_reload(menu_t *menu) {
-    uint64_t start_us = get_ticks_us();
-    screensaver_logo_free();
-    screensaver_logo_search_done = false;
-    screensaver_logo_try_load(menu);
-    browser_playlist_perf_note_screensaver_logo_reload((uint32_t)((get_ticks_us() - start_us) / 1000ULL));
-}
-
-static void screensaver_get_logo_size(int *width, int *height) {
-    if (screensaver_logo_image) {
-        *width = screensaver_logo_image->width;
-        *height = screensaver_logo_image->height;
-        return;
-    }
-    *width = SCREENSAVER_LOGO_WIDTH;
-    *height = SCREENSAVER_LOGO_HEIGHT;
-}
-
-static void screensaver_get_logo_dimensions(int *logo_width, int *logo_height) {
-    screensaver_get_logo_size(logo_width, logo_height);
-    int screen_w = display_get_width();
-    int screen_h = display_get_height();
-    if (*logo_width > screen_w) {
-        *logo_width = screen_w;
-    }
-    if (*logo_height > screen_h) {
-        *logo_height = screen_h;
-    }
-}
-
-static bool menu_has_any_input (menu_t *menu) {
-    return menu->actions.go_up ||
-        menu->actions.go_down ||
-        menu->actions.go_left ||
-        menu->actions.go_right ||
-        menu->actions.go_fast ||
-        menu->actions.enter ||
-        menu->actions.back ||
-        menu->actions.options ||
-        menu->actions.settings ||
-        menu->actions.lz_context;
-}
-
-static bool screensaver_mode_allowed (menu_mode_t mode) {
-    switch (mode) {
-        case MENU_MODE_BROWSER:
-        case MENU_MODE_HISTORY:
-        case MENU_MODE_FAVORITE:
-        case MENU_MODE_PLAYTIME:
-        case MENU_MODE_SETTINGS_EDITOR:
-        case MENU_MODE_SYSTEM_INFO:
-        case MENU_MODE_FLASHCART:
-        case MENU_MODE_CREDITS:
-        case MENU_MODE_CONTROLLER_PAKFS:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static void screensaver_cycle_color (void) {
-    uint8_t count = (uint8_t)(sizeof(screensaver_palette) / sizeof(screensaver_palette[0]));
-    screensaver.color_index = (screensaver.color_index + 1) % count;
-}
-
-static bool screensaver_simulate_step (int logo_width, int logo_height, int min_x_px, int max_x_px, int min_y_px, int max_y_px, float dt) {
-    float min_x = (float)min_x_px;
-    float min_y = (float)min_y_px;
-    float max_x = (float)max_x_px;
-    float max_y = (float)max_y_px;
-    if (max_x < min_x) max_x = min_x;
-    if (max_y < min_y) max_y = min_y;
-
-    float next_x = screensaver.x + (screensaver.vx * dt);
-    float next_y = screensaver.y + (screensaver.vy * dt);
-    bool bounced_x = false;
-    bool bounced_y = false;
-
-    // Simple directional edge checks:
-    // moving right -> compare right edge, moving left -> compare left edge.
-    if (screensaver.vx > 0.0f && next_x >= max_x) {
-        next_x = max_x;
-        screensaver.vx = -fabsf(screensaver.vx);
-        bounced_x = true;
-    } else if (screensaver.vx < 0.0f && next_x <= min_x) {
-        next_x = min_x;
-        screensaver.vx = fabsf(screensaver.vx);
-        bounced_x = true;
-    }
-
-    // moving down -> compare bottom edge, moving up -> compare top edge.
-    if (screensaver.vy > 0.0f && next_y >= max_y) {
-        next_y = max_y;
-        screensaver.vy = -fabsf(screensaver.vy);
-        bounced_y = true;
-    } else if (screensaver.vy < 0.0f && next_y <= min_y) {
-        next_y = min_y;
-        screensaver.vy = fabsf(screensaver.vy);
-        bounced_y = true;
-    }
-
-    if (next_x < min_x) next_x = min_x;
-    if (next_x > max_x) next_x = max_x;
-    if (next_y < min_y) next_y = min_y;
-    if (next_y > max_y) next_y = max_y;
-
-    if (bounced_x || bounced_y) {
-        screensaver_cycle_color();
-    }
-
-    screensaver.prev_x = screensaver.x;
-    screensaver.prev_y = screensaver.y;
-    screensaver.x = next_x;
-    screensaver.y = next_y;
-
-    return bounced_x || bounced_y;
-}
-
-static void screensaver_apply_fps_limit(menu_t *menu) {
-    int desired_mode = 0; // normal
-    if (menu && screensaver.active && menu->settings.screensaver_smooth_mode) {
-        desired_mode = 1; // smooth screensaver
-    }
-    if (desired_mode == screensaver_fps_mode_applied) {
-        return;
-    }
-
-    screensaver_fps_mode_applied = desired_mode;
-    display_set_fps_limit(desired_mode ? 60.0f : FPS_LIMIT);
-}
-
-static void screensaver_reset (menu_t *menu) {
-    bool was_active = screensaver.active;
-    screensaver.active = false;
-    screensaver.idle_frames = 0;
-    screensaver.accumulator_s = 0.0f;
-    screensaver.last_ticks_us = 0;
-    if (was_active) {
-        screensaver_apply_fps_limit(menu);
-    }
-}
-
-static void screensaver_activate (menu_t *menu) {
-    int logo_width, logo_height;
-    screensaver_get_logo_dimensions(&logo_width, &logo_height);
-    int screen_w = display_get_width();
-    int screen_h = display_get_height();
-    int left = menu ? menu->settings.screensaver_margin_left : 0;
-    int right = menu ? menu->settings.screensaver_margin_right : 0;
-    int top = menu ? menu->settings.screensaver_margin_top : 0;
-    int bottom = menu ? menu->settings.screensaver_margin_bottom : 0;
-    int min_x = left;
-    int min_y = top;
-    int max_x = screen_w - right - logo_width;
-    int max_y = screen_h - bottom - logo_height;
-    if (max_x < min_x) max_x = min_x;
-    if (max_y < min_y) max_y = min_y;
-
-    screensaver.active = true;
-    screensaver.idle_frames = 0;
-    screensaver.x = (min_x + max_x) / 2.0f;
-    screensaver.y = (min_y + max_y) / 2.0f;
-    screensaver.prev_x = screensaver.x;
-    screensaver.prev_y = screensaver.y;
-    screensaver.vx = screensaver.vx < 0 ? -60.0f : 60.0f;
-    screensaver.vy = screensaver.vy < 0 ? -60.0f : 60.0f;
-    screensaver.accumulator_s = 0.0f;
-    screensaver.last_ticks_us = get_ticks_us();
-    screensaver_apply_fps_limit(menu);
-}
-
-static void screensaver_update_state (menu_t *menu) {
-    if (!screensaver_mode_allowed(menu->mode) || (menu->next_mode != menu->mode)) {
-        screensaver_reset(menu);
-        return;
-    }
-
-    if (menu_has_any_input(menu)) {
-        screensaver_reset(menu);
-        return;
-    }
-
-    if (!screensaver.active) {
-        screensaver.idle_frames++;
-        if (screensaver.idle_frames >= (SCREENSAVER_IDLE_SECONDS * (int)FPS_LIMIT)) {
-            screensaver_activate(menu);
-        }
-    }
-}
-
-static void screensaver_draw (surface_t *display) {
-    int logo_width, logo_height;
-    screensaver_get_logo_dimensions(&logo_width, &logo_height);
-
-    rdpq_attach_clear(display, NULL);
-
-    uint64_t now_us = get_ticks_us();
-    bool smooth_mode = screensaver.active && menu && menu->settings.screensaver_smooth_mode;
-    float target_dt = smooth_mode ? (1.0f / 60.0f) : (1.0f / FPS_LIMIT);
-    float dt = target_dt;
-    if (screensaver.last_ticks_us != 0 && now_us > screensaver.last_ticks_us) {
-        uint64_t delta_us = now_us - screensaver.last_ticks_us;
-        if (delta_us > 100000) delta_us = 100000;
-        float measured_dt = (float)delta_us / 1000000.0f;
-        // Reduce visible jitter from timer noise by snapping to the target frame time
-        // when the measured delta is close enough.
-        if (measured_dt > (target_dt * 0.75f) && measured_dt < (target_dt * 1.25f)) {
-            dt = target_dt;
-        } else {
-            dt = measured_dt;
-        }
-    }
-    screensaver.last_ticks_us = now_us;
-
-    int screen_w = display_get_width();
-    int screen_h = display_get_height();
-    int margin_left = menu ? menu->settings.screensaver_margin_left : 0;
-    int margin_right = menu ? menu->settings.screensaver_margin_right : 0;
-    int margin_top = menu ? menu->settings.screensaver_margin_top : 0;
-    int margin_bottom = menu ? menu->settings.screensaver_margin_bottom : 0;
-    int min_x = margin_left;
-    int min_y = margin_top;
-    int max_x_px = screen_w - margin_right - logo_width;
-    int max_y_px = screen_h - margin_bottom - logo_height;
-    if (max_x_px < min_x) max_x_px = min_x;
-    if (max_y_px < min_y) max_y_px = min_y;
-    float sim_dt = smooth_mode ? (1.0f / 120.0f) : (1.0f / 60.0f);
-    screensaver.accumulator_s += dt;
-    if (screensaver.accumulator_s > 0.25f) {
-        screensaver.accumulator_s = 0.25f;
-    }
-    int sim_steps = 0;
-    bool bounced_this_frame = false;
-    while (screensaver.accumulator_s >= sim_dt && sim_steps < 16) {
-        if (screensaver_simulate_step(logo_width, logo_height, min_x, max_x_px, min_y, max_y_px, sim_dt)) {
-            bounced_this_frame = true;
-        }
-        screensaver.accumulator_s -= sim_dt;
-        sim_steps++;
-    }
-    if (sim_steps == 0) {
-        screensaver.prev_x = screensaver.x;
-        screensaver.prev_y = screensaver.y;
-    }
-
-    float alpha = screensaver.accumulator_s / sim_dt;
-    if (alpha < 0.0f) alpha = 0.0f;
-    if (alpha > 1.0f) alpha = 1.0f;
-    if (bounced_this_frame) {
-        // Interpolating across a reflection can visually pass through the wall.
-        alpha = 1.0f;
-    }
-    float render_x_f = screensaver.prev_x + (screensaver.x - screensaver.prev_x) * alpha;
-    float render_y_f = screensaver.prev_y + (screensaver.y - screensaver.prev_y) * alpha;
-
-    int draw_x = (int)floorf(render_x_f);
-    int draw_y = (int)floorf(render_y_f);
-    if (draw_x < min_x) draw_x = min_x;
-    if (draw_y < min_y) draw_y = min_y;
-    if (draw_x > max_x_px) draw_x = max_x_px;
-    if (draw_y > max_y_px) draw_y = max_y_px;
-
-    if (screensaver_logo_image) {
-        rdpq_mode_push();
-            // Use copy mode for exact 1:1 blit footprint (no filtering expansion).
-            rdpq_set_mode_copy(false);
-            rdpq_set_scissor(0, 0, screen_w, screen_h);
-            rdpq_tex_blit(screensaver_logo_image, draw_x, draw_y, &(rdpq_blitparms_t){
-                .width = logo_width,
-                .height = logo_height,
-                .filtering = false,
-            });
-            rdpq_set_scissor(0, 0, screen_w, screen_h);
-        rdpq_mode_pop();
-    } else {
-        rdpq_set_scissor(0, 0, screen_w, screen_h);
-        ui_components_box_draw(
-            draw_x,
-            draw_y,
-            draw_x + SCREENSAVER_LOGO_WIDTH,
-            draw_y + SCREENSAVER_LOGO_HEIGHT,
-            RGBA32(0x00, 0x00, 0x00, 0xFF)
-        );
-        ui_components_border_draw(
-            draw_x,
-            draw_y,
-            draw_x + SCREENSAVER_LOGO_WIDTH,
-            draw_y + SCREENSAVER_LOGO_HEIGHT
-        );
-        rdpq_text_print(
-            &(rdpq_textparms_t){
-                .style_id = STL_DEFAULT,
-                .width = SCREENSAVER_LOGO_WIDTH,
-                .height = SCREENSAVER_LOGO_HEIGHT,
-                .align = ALIGN_CENTER,
-                .valign = VALIGN_CENTER,
-            },
-            FNT_DEFAULT,
-            draw_x,
-            draw_y,
-            "DVD"
-        );
-        rdpq_set_scissor(0, 0, screen_w, screen_h);
-    }
-
-#if SCREENSAVER_DEBUG_BOUNDS
-    // Framebuffer edge (green) and collision/draw rect (red) to compare visible crop vs logic.
-    ui_components_border_draw(0, 0, screen_w, screen_h);
-    ui_components_box_draw(0, 0, screen_w, 1, RGBA32(0x40, 0xFF, 0x40, 0xFF));
-    ui_components_box_draw(0, screen_h - 1, screen_w, screen_h, RGBA32(0x40, 0xFF, 0x40, 0xFF));
-    ui_components_box_draw(0, 0, 1, screen_h, RGBA32(0x40, 0xFF, 0x40, 0xFF));
-    ui_components_box_draw(screen_w - 1, 0, screen_w, screen_h, RGBA32(0x40, 0xFF, 0x40, 0xFF));
-
-    ui_components_box_draw(draw_x, draw_y, draw_x + logo_width, draw_y + 1, RGBA32(0xFF, 0x40, 0x40, 0xFF));
-    ui_components_box_draw(draw_x, draw_y + logo_height - 1, draw_x + logo_width, draw_y + logo_height, RGBA32(0xFF, 0x40, 0x40, 0xFF));
-    ui_components_box_draw(draw_x, draw_y, draw_x + 1, draw_y + logo_height, RGBA32(0xFF, 0x40, 0x40, 0xFF));
-    ui_components_box_draw(draw_x + logo_width - 1, draw_y, draw_x + logo_width, draw_y + logo_height, RGBA32(0xFF, 0x40, 0x40, 0xFF));
-#endif
-
-    rdpq_detach_show();
-}
 
 static bool path_has_ext_ci(const char *path, const char *ext) {
     if (!path || !ext) {
@@ -1039,7 +591,7 @@ static void menu_deinit (menu_t *menu) {
     playtime_save(&menu->playtime);
     playtime_free(&menu->playtime);
 
-    screensaver_logo_free();
+    screensaver_deinit();
 
     path_free(menu->load.disk_slots.primary.disk_path);
     path_free(menu->load.rom_path);
@@ -1129,8 +681,8 @@ void menu_run (boot_params_t *boot_params) {
             screensaver_update_state(menu);
             screensaver_apply_fps_limit(menu);
 
-            if (screensaver.active) {
-                screensaver_draw(display);
+            if (screensaver_is_active()) {
+                screensaver_draw(menu, display);
                 time(&menu->current_time);
                 menu_bgm_poll(menu);
                 sound_poll();

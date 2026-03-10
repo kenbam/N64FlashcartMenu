@@ -195,7 +195,11 @@ static bool manual_start_page_load (menu_t *menu) {
 
     menu->manual.image = native_image_load_sidecar_rgba16(page_path, MANUAL_NATIVE_SIDECAR, MANUAL_MAX_PAGE_WIDTH, MANUAL_MAX_PAGE_HEIGHT);
     if (!menu->manual.image) {
-        menu_show_error(menu, "Manual native page image is missing");
+        native_image_error_t native_err = native_image_get_last_error();
+        char errbuf[96];
+        snprintf(errbuf, sizeof(errbuf), "Manual page load failed: %s", native_image_error_string(native_err));
+        debugf("manual: native load failed for %s: %s\n", page_path, native_image_error_string(native_err));
+        menu_show_error(menu, errbuf);
         return false;
     }
 

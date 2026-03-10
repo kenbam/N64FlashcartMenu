@@ -9,6 +9,10 @@
 
 #include <stdint.h>
 
+typedef enum {
+    SCREENSAVER_STYLE_DVD = 0,
+    SCREENSAVER_STYLE_PIPES = 1,
+} screensaver_style_t;
 
 /** @brief Settings Structure */
 typedef struct {
@@ -64,6 +68,9 @@ typedef struct {
     bool bgm_enabled;
     /** @brief Absolute SD path to selected menu music file (empty = auto default) */
     char *bgm_file;
+
+    /** @brief Screensaver style (0=DVD logo, 1=3D pipes) */
+    int screensaver_style;
 
     /** @brief Absolute SD path to selected screensaver logo PNG (empty = auto default) */
     char *screensaver_logo_file;

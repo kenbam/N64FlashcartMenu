@@ -98,6 +98,11 @@ static void set_screensaver_logo_file_auto (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_screensaver_style_type (menu_t *menu, void *arg) {
+    menu->settings.screensaver_style = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
 static void set_screensaver_smooth_mode_type (menu_t *menu, void *arg) {
     menu->settings.screensaver_smooth_mode = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -313,6 +318,18 @@ static component_context_menu_t set_screensaver_logo_file_context_menu = {
     .list = {
         {.text = "Auto (DVD logo)", .action = set_screensaver_logo_file_auto },
         {.text = "Pick from /menu/screensavers", .action = open_screensaver_logo_picker },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_screensaver_style_current_selection (menu_t *menu) {
+    return menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES ? 1 : 0;
+}
+
+static component_context_menu_t set_screensaver_style_context_menu = {
+    .get_default_selection = get_screensaver_style_current_selection,
+    .list = {
+        {.text = "DVD Logo", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_DVD) },
+        {.text = "3D Pipes", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_PIPES) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -594,6 +611,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Sound Effects", .submenu = &set_soundfx_enabled_type_context_menu },
     { .text = "Background Music", .submenu = &set_bgm_enabled_type_context_menu },
     { .text = "Menu Music File", .submenu = &set_menu_music_file_context_menu },
+    { .text = "Screensaver Type", .submenu = &set_screensaver_style_context_menu },
     { .text = "Screensaver Logo", .submenu = &set_screensaver_logo_file_context_menu },
     { .text = "Screensaver Smooth", .submenu = &set_screensaver_smooth_mode_context_menu },
     { .text = "Screensaver Margin Left", .submenu = &set_screensaver_margin_left_context_menu },
@@ -663,6 +681,7 @@ static void draw (menu_t *menu, surface_t *d) {
     if (menu->settings.screensaver_logo_file && menu->settings.screensaver_logo_file[0] != '\0') {
         screensaver_logo_label = file_basename(menu->settings.screensaver_logo_file);
     }
+    const char *screensaver_style_label = menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES ? "3D Pipes" : "DVD Logo";
     const char *screensaver_smooth_label = menu->settings.screensaver_smooth_mode ? "On (60)" : "Off (30)";
     const char *visualizer_style_label = "Bars";
     switch (menu->settings.background_visualizer_style) {
@@ -701,6 +720,7 @@ ui_components_main_text_draw(
         "     Sound Effects     : %s\n"
         "     Background Music  : %s\n"
         "     Menu Music File   : %s\n"
+        "     Screensaver Type  : %s\n"
         "     Screensaver Logo  : %s\n"
         "     Screensaver Smooth: %s\n"
         "     Saver Margin L/R  : %d / %d\n"
@@ -737,6 +757,7 @@ ui_components_main_text_draw(
         format_switch(menu->settings.soundfx_enabled),
         format_switch(menu->settings.bgm_enabled),
         bgm_file_label,
+        screensaver_style_label,
         screensaver_logo_label,
         screensaver_smooth_label,
         (int)menu->settings.screensaver_margin_left,

@@ -25,6 +25,7 @@ static settings_t init = {
     .text_panel_alpha = 112,
     .soundfx_enabled = false,
     .bgm_file = "",
+    .screensaver_style = SCREENSAVER_STYLE_DVD,
     .screensaver_logo_file = "",
     .screensaver_smooth_mode = false,
     .screensaver_margin_left = 2,
@@ -92,6 +93,10 @@ void settings_load (settings_t *settings) {
     settings->soundfx_enabled = mini_get_bool(ini, "menu", "soundfx_enabled", init.soundfx_enabled);
     settings->bgm_file = strdup(mini_get_string(ini, "menu", "bgm_file", init.bgm_file));
     if (!settings->bgm_file) settings->bgm_file = strdup(init.bgm_file);
+    settings->screensaver_style = mini_get_int(ini, "menu", "screensaver_style", init.screensaver_style);
+    if (settings->screensaver_style < SCREENSAVER_STYLE_DVD || settings->screensaver_style > SCREENSAVER_STYLE_PIPES) {
+        settings->screensaver_style = init.screensaver_style;
+    }
     settings->screensaver_logo_file = strdup(mini_get_string(ini, "menu", "screensaver_logo_file", init.screensaver_logo_file));
     if (!settings->screensaver_logo_file) settings->screensaver_logo_file = strdup(init.screensaver_logo_file);
     settings->screensaver_smooth_mode = mini_get_bool(ini, "menu", "screensaver_smooth_mode", init.screensaver_smooth_mode);
@@ -168,6 +173,7 @@ void settings_save (settings_t *settings) {
     mini_set_int(ini, "menu", "text_panel_alpha", settings->text_panel_alpha);
     mini_set_bool(ini, "menu", "soundfx_enabled", settings->soundfx_enabled);
     mini_set_string(ini, "menu", "bgm_file", settings->bgm_file ? settings->bgm_file : "");
+    mini_set_int(ini, "menu", "screensaver_style", settings->screensaver_style);
     mini_set_string(ini, "menu", "screensaver_logo_file", settings->screensaver_logo_file ? settings->screensaver_logo_file : "");
     mini_set_bool(ini, "menu", "screensaver_smooth_mode", settings->screensaver_smooth_mode);
     mini_set_int(ini, "menu", "screensaver_margin_left", settings->screensaver_margin_left);
