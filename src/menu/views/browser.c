@@ -919,6 +919,8 @@ static void browser_close_picker(menu_t *menu, menu_mode_t next_mode);
 static bool browser_try_pick_menu_music_file(menu_t *menu);
 static bool browser_try_pick_screensaver_logo_file(menu_t *menu);
 static bool browser_try_pick_64dd_disk_file(menu_t *menu);
+static bool browser_picker_is_64dd_disk(menu_t *menu);
+static bool browser_64dd_picker_entry_visible(menu_t *menu, path_t *directory, dir_t *info);
 static void browser_restore_playlist_overrides(menu_t *menu);
 static void browser_apply_playlist_overrides(menu_t *menu, const playlist_props_t *props);
 static void browser_apply_playlist_overrides_deferred(menu_t *menu);
@@ -1574,6 +1576,35 @@ static bool browser_try_pick_64dd_disk_file(menu_t *menu) {
     menu->load_pending.disk_file = true;
     browser_close_picker(menu, MENU_MODE_LOAD_DISK);
     return true;
+}
+
+static bool browser_picker_is_64dd_disk(menu_t *menu) {
+    return menu &&
+        (menu->browser.picker == BROWSER_PICKER_64DD_DISK_LAUNCH ||
+         menu->browser.picker == BROWSER_PICKER_64DD_DISK_DEFAULT);
+}
+
+static bool browser_64dd_picker_entry_visible(menu_t *menu, path_t *directory, dir_t *info) {
+    if (!browser_picker_is_64dd_disk(menu) || !directory || !info) {
+        return true;
+    }
+    if (info->d_type == DT_DIR) {
+        return true;
+    }
+    if (!file_has_extensions(info->d_name, disk_extensions)) {
+        return false;
+    }
+
+    path_t *candidate = path_clone_push(directory, info->d_name);
+    if (!candidate) {
+        return false;
+    }
+
+    disk_info_t disk_info;
+    bool visible = (disk_info_load(candidate, &disk_info) == DISK_OK) &&
+        disk_pairing_disk_matches_rom(&menu->load.rom_info, &disk_info);
+    path_free(candidate);
+    return visible;
 }
 
 static int compare_entry_reverse (const void *pa, const void *pb) {
@@ -3713,6 +3744,10 @@ static bool load_directory (menu_t *menu) {
             }
             // Hide metadata/config sidecars from normal browsing.
             if (info.d_type != DT_DIR && string_ends_with_ignore_case(info.d_name, ".ini")) {
+                result = dir_findnext(path_get(path), &info);
+                continue;
+            }
+            if (!browser_64dd_picker_entry_visible(menu, path, &info)) {
                 result = dir_findnext(path_get(path), &info);
                 continue;
             }
