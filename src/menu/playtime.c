@@ -231,7 +231,7 @@ playtime_entry_t *playtime_get_if_cached (playtime_db_t *db, const char *path) {
 }
 
 void playtime_load (playtime_db_t *db) {
-    if (!db) {
+    if (!db || !playtime_path) {
         return;
     }
 
@@ -311,7 +311,7 @@ void playtime_load (playtime_db_t *db) {
 }
 
 void playtime_save (playtime_db_t *db) {
-    if (!db) {
+    if (!db || !playtime_path) {
         return;
     }
 

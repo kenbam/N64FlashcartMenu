@@ -77,6 +77,9 @@ void bookkeeping_ini_load_list(bookkeeping_item_t *list, uint16_t count, mini_t 
  * @param history Pointer to the bookkeeping structure.
  */
 void bookkeeping_load (bookkeeping_t *history) {
+    if (!history_path) {
+        return;
+    }
     if (!file_exists(history_path)) {
         bookkeeping_save(&init);
     }
@@ -121,6 +124,9 @@ static void bookkeeping_ini_save_list(bookkeeping_item_t *list, uint16_t count, 
  * @param history Pointer to the bookkeeping structure.
  */
 void bookkeeping_save (bookkeeping_t *history) {
+    if (!history_path) {
+        return;
+    }
     mini_t *bookkeeping_ini = mini_create(history_path);
 
     bookkeeping_ini_save_list(history->history_items, HISTORY_COUNT, bookkeeping_ini, "history");

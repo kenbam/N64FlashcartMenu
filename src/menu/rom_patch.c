@@ -84,15 +84,20 @@ static bool copy_file(const char *src, const char *dst) {
         return false;
     }
 
-    uint8_t buf[16 * 1024];
+    uint8_t *buf = malloc(16 * 1024);
+    if (!buf) {
+        fclose(out);
+        fclose(in);
+        return false;
+    }
     bool ok = true;
     while (1) {
-        size_t r = fread(buf, 1, sizeof(buf), in);
+        size_t r = fread(buf, 1, 16 * 1024, in);
         if (r > 0 && fwrite(buf, 1, r, out) != r) {
             ok = false;
             break;
         }
-        if (r < sizeof(buf)) {
+        if (r < 16 * 1024) {
             if (ferror(in)) {
                 ok = false;
             }
@@ -100,6 +105,7 @@ static bool copy_file(const char *src, const char *dst) {
         }
     }
 
+    free(buf);
     if (fclose(out) != 0) {
         ok = false;
     }

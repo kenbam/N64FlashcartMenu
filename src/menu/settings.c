@@ -59,6 +59,9 @@ void settings_init (char *path) {
 }
 
 void settings_load (settings_t *settings) {
+    if (!settings_path) {
+        return;
+    }
     if (!file_exists(settings_path)) {
         settings_save(&init);
     }
@@ -144,6 +147,9 @@ void settings_load (settings_t *settings) {
 }
 
 void settings_save (settings_t *settings) {
+    if (!settings_path) {
+        return;
+    }
     mini_t *ini = mini_create(settings_path);
 
     mini_set_int(ini, "menu", "schema_revision", settings->schema_revision);
@@ -195,5 +201,8 @@ void settings_save (settings_t *settings) {
 }
 
 void settings_reset_to_defaults() {
+    if (!settings_path) {
+        return;
+    }
     remove(settings_path);
 }
