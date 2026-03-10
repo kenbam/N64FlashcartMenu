@@ -1,7 +1,7 @@
 #include "../bookkeeping.h"
 #include "../cart_load.h"
+#include "../combo_disk_flow.h"
 #include "../datel_codes.h"
-#include "../disk_pairing.h"
 #include "../playtime.h"
 #include "../rom_info.h"
 #include "../sound.h"
@@ -50,7 +50,6 @@ static char cached_recent_sessions_buf[512];
 static char cached_save_health_buf[128];
 static char cached_save_modified_buf[64];
 static bool cached_has_manual = false;
-static const char *combo_disk_extensions[] = { "ndd", NULL };
 
 static bool resolve_metadata_directory_for_rom (path_t *path, const char game_code[4], char *resolved, size_t resolved_size) {
     if ((path == NULL) || (game_code == NULL)) {
@@ -751,186 +750,19 @@ static void open_manual (menu_t *menu, void *arg) {
 
     manual_prepare_launch(menu, manual_directory);
 }
-
-static bool combo_rom_resolve_default_disk(menu_t *menu, char *resolved_path, size_t resolved_len) {
-    if (!menu || !disk_pairing_rom_is_combo(&menu->load.rom_info)) {
-        return false;
-    }
-
-    return disk_pairing_resolve_configured_path(
-        menu->storage_prefix,
-        menu->load.rom_info.settings.default_disk_path,
-        resolved_path,
-        resolved_len
-    );
-}
-
-static void combo_rom_open_disk_picker(menu_t *menu, browser_picker_t picker) {
-    path_t *disk_root = path_init(menu->storage_prefix, "/N64 - N64DD");
-    if (!disk_root || !directory_exists(path_get(disk_root))) {
-        path_free(disk_root);
-        disk_root = path_init(menu->storage_prefix, "/");
-    }
-    if (!disk_root) {
-        menu_show_error(menu, "Couldn't open 64DD disk browser");
-        return;
-    }
-
-    if (menu->browser.directory) {
-        path_free(menu->browser.directory);
-    }
-    menu->browser.directory = disk_root;
-    menu->browser.valid = false;
-    menu->browser.reload = false;
-    menu->browser.picker = picker;
-    if (menu->browser.picker_root) {
-        path_free(menu->browser.picker_root);
-    }
-    menu->browser.picker_root = path_clone(disk_root);
-    menu->browser.picker_return_mode = MENU_MODE_LOAD_ROM;
-
-    if (menu->browser.select_file) {
-        path_free(menu->browser.select_file);
-        menu->browser.select_file = NULL;
-    }
-
-    char resolved_disk_path[ROM_CONFIG_PATH_LENGTH];
-    if (combo_rom_resolve_default_disk(menu, resolved_disk_path, sizeof(resolved_disk_path))) {
-        menu->browser.select_file = path_create(resolved_disk_path);
-    }
-
-    menu->next_mode = MENU_MODE_BROWSER;
-}
-
-static bool combo_rom_try_launch_with_default_disk(menu_t *menu) {
-    char resolved_disk_path[ROM_CONFIG_PATH_LENGTH];
-
-    if (!combo_rom_resolve_default_disk(menu, resolved_disk_path, sizeof(resolved_disk_path))) {
-        return false;
-    }
-
-    path_t *disk_path = path_create(resolved_disk_path);
-    if (!disk_path) {
-        return false;
-    }
-
-    disk_info_t disk_info;
-    disk_err_t err = disk_info_load(disk_path, &disk_info);
-    if (err != DISK_OK || !disk_pairing_disk_matches_rom(&menu->load.rom_info, &disk_info)) {
-        path_free(disk_path);
-        return false;
-    }
-
-    path_free(menu->load.disk_slots.primary.disk_path);
-    menu->load.disk_slots.primary.disk_path = disk_path;
-    menu->load.combined_disk_rom = true;
-    menu->load.back_mode = MENU_MODE_LOAD_ROM;
-    menu->load_pending.disk_file = true;
-    menu->next_mode = MENU_MODE_LOAD_DISK;
-    return true;
-}
-
-static bool combo_rom_find_single_compatible_disk_recursive(menu_t *menu, path_t *directory, char *resolved_path, size_t resolved_len, int *match_count) {
-    dir_t info;
-    int result = dir_findfirst(path_get(directory), &info);
-    if (result < -1) {
-        return false;
-    }
-
-    while (result == 0) {
-        path_t *candidate = path_clone_push(directory, info.d_name);
-        if (!candidate) {
-            return false;
-        }
-
-        if (info.d_type == DT_DIR) {
-            if (!combo_rom_find_single_compatible_disk_recursive(menu, candidate, resolved_path, resolved_len, match_count)) {
-                path_free(candidate);
-                return false;
-            }
-        } else if (file_has_extensions(info.d_name, combo_disk_extensions)) {
-            disk_info_t disk_info;
-            if (disk_info_load(candidate, &disk_info) == DISK_OK &&
-                disk_pairing_disk_matches_rom(&menu->load.rom_info, &disk_info)) {
-                if (*match_count == 0) {
-                    snprintf(resolved_path, resolved_len, "%s", path_get(candidate));
-                }
-                (*match_count)++;
-            }
-        }
-
-        path_free(candidate);
-
-        if (*match_count > 1) {
-            break;
-        }
-
-        result = dir_findnext(path_get(directory), &info);
-    }
-
-    return result >= -1;
-}
-
-static bool combo_rom_try_launch_single_matching_disk(menu_t *menu) {
-    path_t *disk_root = path_init(menu->storage_prefix, "/N64 - N64DD");
-    if (!disk_root || !directory_exists(path_get(disk_root))) {
-        path_free(disk_root);
-        return false;
-    }
-
-    char resolved_disk_path[ROM_CONFIG_PATH_LENGTH] = {0};
-    int match_count = 0;
-    bool scanned = combo_rom_find_single_compatible_disk_recursive(
-        menu,
-        disk_root,
-        resolved_disk_path,
-        sizeof(resolved_disk_path),
-        &match_count
-    );
-    path_free(disk_root);
-
-    if (!scanned || match_count != 1) {
-        return false;
-    }
-
-    rom_config_setting_set_default_disk_path(menu->load.rom_path, &menu->load.rom_info, strip_fs_prefix(resolved_disk_path));
-    return combo_rom_try_launch_with_default_disk(menu);
-}
-
 static void launch_with_64dd_disk(menu_t *menu, void *arg) {
     (void)arg;
-
-    if (!disk_pairing_rom_is_combo(&menu->load.rom_info)) {
-        menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
-        return;
-    }
-
-    if (!combo_rom_try_launch_with_default_disk(menu) &&
-        !combo_rom_try_launch_single_matching_disk(menu)) {
-        combo_rom_open_disk_picker(menu, BROWSER_PICKER_64DD_DISK_LAUNCH);
-    }
+    combo_disk_flow_launch(menu);
 }
 
 static void set_default_64dd_disk(menu_t *menu, void *arg) {
     (void)arg;
-
-    if (!disk_pairing_rom_is_combo(&menu->load.rom_info)) {
-        menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
-        return;
-    }
-
-    combo_rom_open_disk_picker(menu, BROWSER_PICKER_64DD_DISK_DEFAULT);
+    combo_disk_flow_set_default(menu);
 }
 
 static void clear_default_64dd_disk(menu_t *menu, void *arg) {
     (void)arg;
-
-    if (!disk_pairing_rom_is_combo(&menu->load.rom_info)) {
-        menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
-        return;
-    }
-
-    rom_config_setting_set_default_disk_path(menu->load.rom_path, &menu->load.rom_info, "");
+    combo_disk_flow_clear_default(menu);
 }
 
 static component_context_menu_t set_64dd_disk_context_menu = { .list = {
@@ -1154,7 +986,7 @@ static void process (menu_t *menu) {
     }
 
     if (menu->actions.enter) {
-        if (disk_pairing_rom_is_combo(&menu->load.rom_info)) {
+        if (combo_disk_flow_is_applicable(menu)) {
             launch_with_64dd_disk(menu, NULL);
         } else {
             menu->load_pending.rom_file = true;
@@ -1381,7 +1213,7 @@ static void draw (menu_t *menu, surface_t *d) {
             "%s\n"
             "B: Back\n"
             ,
-            disk_pairing_rom_is_combo(&menu->load.rom_info) ? "A: Launch with 64DD Disk" : "A: Load and run ROM"
+            combo_disk_flow_is_applicable(menu) ? "A: Launch with 64DD Disk" : "A: Load and run ROM"
         );
 
         ui_components_actions_bar_text_draw(
