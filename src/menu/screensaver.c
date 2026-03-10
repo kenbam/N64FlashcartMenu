@@ -4,6 +4,7 @@
 
 #include "screensaver.h"
 #include "screensaver_dvd.h"
+#include "screensaver_gradient.h"
 #include "screensaver_pipes_render.h"
 #include "screensaver_pipes_state.h"
 
@@ -15,6 +16,7 @@ typedef struct {
     int idle_frames;
     uint64_t last_ticks_us;
     screensaver_dvd_state_t dvd;
+    screensaver_gradient_state_t gradient;
     screensaver_pipes_state_t pipes;
 } screensaver_state_t;
 
@@ -56,8 +58,14 @@ static bool screensaver_mode_allowed(menu_mode_t mode) {
 }
 
 static screensaver_style_t screensaver_get_style(const menu_t *menu) {
-    if (menu && menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES) {
+    if (!menu) {
+        return SCREENSAVER_STYLE_DVD;
+    }
+    if (menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES) {
         return SCREENSAVER_STYLE_PIPES;
+    }
+    if (menu->settings.screensaver_style == SCREENSAVER_STYLE_GRADIENT) {
+        return SCREENSAVER_STYLE_GRADIENT;
     }
     return SCREENSAVER_STYLE_DVD;
 }
@@ -68,6 +76,7 @@ static void screensaver_reset(menu_t *menu) {
     screensaver.idle_frames = 0;
     screensaver.last_ticks_us = 0;
     screensaver_dvd_reset(&screensaver.dvd);
+    screensaver_gradient_reset(&screensaver.gradient);
     screensaver_pipes_reset(&screensaver.pipes);
     if (was_active) {
         screensaver_apply_fps_limit(menu);
@@ -78,10 +87,17 @@ static void screensaver_activate(menu_t *menu) {
     screensaver.active = true;
     screensaver.idle_frames = 0;
     screensaver.last_ticks_us = get_ticks_us();
-    if (screensaver_get_style(menu) == SCREENSAVER_STYLE_PIPES) {
-        screensaver_pipes_activate(&screensaver.pipes);
-    } else {
-        screensaver_dvd_activate(menu, &screensaver.dvd);
+    switch (screensaver_get_style(menu)) {
+        case SCREENSAVER_STYLE_PIPES:
+            screensaver_pipes_activate(&screensaver.pipes);
+            break;
+        case SCREENSAVER_STYLE_GRADIENT:
+            screensaver_gradient_activate(&screensaver.gradient);
+            break;
+        case SCREENSAVER_STYLE_DVD:
+        default:
+            screensaver_dvd_activate(menu, &screensaver.dvd);
+            break;
     }
 }
 
@@ -149,11 +165,19 @@ void screensaver_draw(menu_t *menu, surface_t *display) {
     }
     screensaver.last_ticks_us = now_us;
 
-    if (screensaver_get_style(menu) == SCREENSAVER_STYLE_PIPES) {
-        screensaver_pipes_step(&screensaver.pipes, dt);
-        screensaver_pipes_draw(display, &screensaver.pipes);
-    } else {
-        screensaver_dvd_draw(menu, &screensaver.dvd, display, dt);
+    switch (screensaver_get_style(menu)) {
+        case SCREENSAVER_STYLE_PIPES:
+            screensaver_pipes_step(&screensaver.pipes, dt);
+            screensaver_pipes_draw(display, &screensaver.pipes);
+            break;
+        case SCREENSAVER_STYLE_GRADIENT:
+            screensaver_gradient_step(&screensaver.gradient, dt);
+            screensaver_gradient_draw(display, &screensaver.gradient);
+            break;
+        case SCREENSAVER_STYLE_DVD:
+        default:
+            screensaver_dvd_draw(menu, &screensaver.dvd, display, dt);
+            break;
     }
 
     rdpq_detach_show();
@@ -161,5 +185,6 @@ void screensaver_draw(menu_t *menu, surface_t *display) {
 
 void screensaver_deinit(void) {
     screensaver_dvd_deinit(&screensaver.dvd);
+    screensaver_gradient_reset(&screensaver.gradient);
     screensaver_pipes_reset(&screensaver.pipes);
 }

@@ -12,6 +12,7 @@
 typedef enum {
     SCREENSAVER_STYLE_DVD = 0,
     SCREENSAVER_STYLE_PIPES = 1,
+    SCREENSAVER_STYLE_GRADIENT = 2,
 } screensaver_style_t;
 
 /** @brief Settings Structure */
@@ -69,7 +70,7 @@ typedef struct {
     /** @brief Absolute SD path to selected menu music file (empty = auto default) */
     char *bgm_file;
 
-    /** @brief Screensaver style (0=DVD logo, 1=3D pipes) */
+    /** @brief Screensaver style (0=DVD logo, 1=3D pipes, 2=Living Gradient) */
     int screensaver_style;
 
     /** @brief Absolute SD path to selected screensaver logo PNG (empty = auto default) */

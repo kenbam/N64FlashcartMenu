@@ -61,6 +61,7 @@ SRCS = \
 	menu/rom_info.c \
 	menu/screensaver.c \
 	menu/screensaver_dvd.c \
+	menu/screensaver_gradient.c \
 	menu/screensaver_pipes_render.c \
 	menu/screensaver_pipes_state.c \
 	menu/settings.c \

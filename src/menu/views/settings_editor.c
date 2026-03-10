@@ -322,7 +322,15 @@ static component_context_menu_t set_screensaver_logo_file_context_menu = {
 }};
 
 static int get_screensaver_style_current_selection (menu_t *menu) {
-    return menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES ? 1 : 0;
+    switch (menu->settings.screensaver_style) {
+        case SCREENSAVER_STYLE_PIPES:
+            return 1;
+        case SCREENSAVER_STYLE_GRADIENT:
+            return 2;
+        case SCREENSAVER_STYLE_DVD:
+        default:
+            return 0;
+    }
 }
 
 static component_context_menu_t set_screensaver_style_context_menu = {
@@ -330,6 +338,7 @@ static component_context_menu_t set_screensaver_style_context_menu = {
     .list = {
         {.text = "DVD Logo", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_DVD) },
         {.text = "3D Pipes", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_PIPES) },
+        {.text = "Living Gradient", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_GRADIENT) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -681,7 +690,17 @@ static void draw (menu_t *menu, surface_t *d) {
     if (menu->settings.screensaver_logo_file && menu->settings.screensaver_logo_file[0] != '\0') {
         screensaver_logo_label = file_basename(menu->settings.screensaver_logo_file);
     }
-    const char *screensaver_style_label = menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES ? "3D Pipes" : "DVD Logo";
+    const char *screensaver_style_label = "DVD Logo";
+    switch (menu->settings.screensaver_style) {
+        case SCREENSAVER_STYLE_PIPES:
+            screensaver_style_label = "3D Pipes";
+            break;
+        case SCREENSAVER_STYLE_GRADIENT:
+            screensaver_style_label = "Living Gradient";
+            break;
+        default:
+            break;
+    }
     const char *screensaver_smooth_label = menu->settings.screensaver_smooth_mode ? "On (60)" : "Off (30)";
     const char *visualizer_style_label = "Bars";
     switch (menu->settings.background_visualizer_style) {
