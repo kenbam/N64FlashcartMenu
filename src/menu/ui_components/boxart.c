@@ -298,8 +298,17 @@ static void boxart_thumb_cache_save_disk(const char *cache_path, surface_t *imag
         return; // Conservative SD behavior: write once on cache miss only.
     }
 
-    FILE *f = fopen(cache_path, "wb");
+    size_t path_len = strlen(cache_path);
+    char *tmp_path = malloc(path_len + 5);
+    if (!tmp_path) {
+        return;
+    }
+    memcpy(tmp_path, cache_path, path_len);
+    memcpy(tmp_path + path_len, ".tmp", 5);
+
+    FILE *f = fopen(tmp_path, "wb");
     if (!f) {
+        free(tmp_path);
         return;
     }
 
@@ -309,9 +318,19 @@ static void boxart_thumb_cache_save_disk(const char *cache_path, surface_t *imag
         .height = image->height,
         .size = (uint32_t)(image->height * image->stride),
     };
-    fwrite(&meta, sizeof(meta), 1, f);
-    fwrite(image->buffer, meta.size, 1, f);
-    fclose(f);
+    bool ok = (fwrite(&meta, sizeof(meta), 1, f) == 1) &&
+              (fwrite(image->buffer, meta.size, 1, f) == 1);
+
+    if (fclose(f) != 0) {
+        ok = false;
+    }
+
+    if (ok) {
+        file_rename(tmp_path, cache_path);
+    } else {
+        remove(tmp_path);
+    }
+    free(tmp_path);
 }
 
 static void boxart_load_context_free(boxart_load_context_t *ctx) {

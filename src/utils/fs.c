@@ -263,7 +263,8 @@ int mini_save_safe(void *opaque, int flags) {
     ini->path = orig_path;
 
     if (result != MINI_OK) {
-        /* .tmp write failed — fall back to direct write */
+        /* .tmp write failed — remove partial file, fall back to direct write */
+        f_unlink(strip_fs_prefix(tmp_path));
         free(tmp_path);
         return mini_save(ini, flags);
     }

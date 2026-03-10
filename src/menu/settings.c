@@ -72,6 +72,7 @@ void settings_load (settings_t *settings) {
     settings->force_progressive_scan = mini_get_bool(ini, "menu", "force_progressive_scan", init.force_progressive_scan);
     settings->show_protected_entries = mini_get_bool(ini, "menu", "show_protected_entries", init.show_protected_entries);
     settings->default_directory = strdup(mini_get_string(ini, "menu", "default_directory", init.default_directory));
+    if (!settings->default_directory) settings->default_directory = strdup(init.default_directory);
     settings->use_saves_folder = mini_get_bool(ini, "menu", "use_saves_folder", init.use_saves_folder);
     settings->show_saves_folder = mini_get_bool(ini, "menu", "show_saves_folder", init.show_saves_folder);
     settings->browser_sort_mode = mini_get_int(ini, "menu", "browser_sort_mode", init.browser_sort_mode);
@@ -87,7 +88,9 @@ void settings_load (settings_t *settings) {
     settings->text_panel_alpha = (uint8_t)text_panel_alpha;
     settings->soundfx_enabled = mini_get_bool(ini, "menu", "soundfx_enabled", init.soundfx_enabled);
     settings->bgm_file = strdup(mini_get_string(ini, "menu", "bgm_file", init.bgm_file));
+    if (!settings->bgm_file) settings->bgm_file = strdup(init.bgm_file);
     settings->screensaver_logo_file = strdup(mini_get_string(ini, "menu", "screensaver_logo_file", init.screensaver_logo_file));
+    if (!settings->screensaver_logo_file) settings->screensaver_logo_file = strdup(init.screensaver_logo_file);
     settings->screensaver_smooth_mode = mini_get_bool(ini, "menu", "screensaver_smooth_mode", init.screensaver_smooth_mode);
     int margin_left = mini_get_int(ini, "menu", "screensaver_margin_left", init.screensaver_margin_left);
     int margin_right = mini_get_int(ini, "menu", "screensaver_margin_right", init.screensaver_margin_right);
@@ -109,7 +112,9 @@ void settings_load (settings_t *settings) {
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     settings->rom_autoload_enabled = mini_get_bool(ini, "menu", "autoload_rom_enabled", init.rom_autoload_enabled);
     settings->rom_autoload_path = strdup(mini_get_string(ini, "autoload", "rom_path", init.rom_autoload_path));
+    if (!settings->rom_autoload_path) settings->rom_autoload_path = strdup(init.rom_autoload_path);
     settings->rom_autoload_filename = strdup(mini_get_string(ini, "autoload", "rom_filename", init.rom_autoload_filename));
+    if (!settings->rom_autoload_filename) settings->rom_autoload_filename = strdup(init.rom_autoload_filename);
     settings->loading_progress_bar_enabled = mini_get_bool(ini, "menu", "loading_progress_bar_enabled", init.loading_progress_bar_enabled);
 #else
     settings->rom_fast_reboot_enabled = mini_get_bool(ini, "menu", "reboot_rom_enabled", init.rom_fast_reboot_enabled);
