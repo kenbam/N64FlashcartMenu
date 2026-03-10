@@ -54,10 +54,10 @@ typedef struct {
     /** @brief Alpha for text panel (0-255) */
     uint8_t text_panel_alpha;
 
-    /** @brief Hide rom file extensions */    
+    /** @brief Show rom file extensions in browser */
     bool show_browser_file_extensions;
 
-    /** @brief Hide rom tags */  
+    /** @brief Show rom tags in browser */
     bool show_browser_rom_tags;
 
     /** @brief Enable Background music */

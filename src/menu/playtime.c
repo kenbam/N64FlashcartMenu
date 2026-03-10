@@ -140,6 +140,9 @@ void playtime_free (playtime_db_t *db) {
 }
 
 static void playtime_add_entry(playtime_db_t *db, const char *path, const char *game_id) {
+    if (db->count >= 4096) {
+        return;
+    }
     playtime_entry_t *new_entries = realloc(db->entries, (db->count + 1) * sizeof(playtime_entry_t));
     if (!new_entries) {
         return;

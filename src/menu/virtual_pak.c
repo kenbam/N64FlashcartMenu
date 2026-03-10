@@ -131,24 +131,49 @@ static bool virtual_pak_dump_controller_to_file(int controller, const char *out_
         return false;
     }
 
-    FILE *f = fopen(out_path, "wb");
+    size_t path_len = strlen(out_path);
+    char *tmp_path = malloc(path_len + 5);
+    if (!tmp_path) {
+        return false;
+    }
+    memcpy(tmp_path, out_path, path_len);
+    memcpy(tmp_path + path_len, ".tmp", 5);
+
+    FILE *f = fopen(tmp_path, "wb");
     if (!f) {
+        free(tmp_path);
         return false;
     }
 
-    uint8_t bankbuf[VIRTUAL_PAK_BANK_SIZE];
+    uint8_t *bankbuf = malloc(VIRTUAL_PAK_BANK_SIZE);
+    if (!bankbuf) {
+        fclose(f);
+        free(tmp_path);
+        return false;
+    }
+
     bool ok = true;
     for (int bank = 0; bank < banks; bank++) {
-        int rd = cpak_read((joypad_port_t)controller, (uint8_t)bank, 0, bankbuf, sizeof(bankbuf));
-        if (rd != 0 || fwrite(bankbuf, 1, sizeof(bankbuf), f) != sizeof(bankbuf)) {
+        int rd = cpak_read((joypad_port_t)controller, (uint8_t)bank, 0, bankbuf, VIRTUAL_PAK_BANK_SIZE);
+        if (rd != 0 || fwrite(bankbuf, 1, VIRTUAL_PAK_BANK_SIZE, f) != VIRTUAL_PAK_BANK_SIZE) {
             ok = false;
             break;
         }
     }
 
+    free(bankbuf);
+
     if (fclose(f)) {
         ok = false;
     }
+
+    if (ok) {
+        ok = file_rename(tmp_path, out_path);
+    }
+    if (!ok) {
+        remove(tmp_path);
+    }
+    free(tmp_path);
     return ok;
 }
 
@@ -188,21 +213,27 @@ static bool virtual_pak_restore_file_to_controller(int controller, const char *p
         return false;
     }
 
-    uint8_t bankbuf[VIRTUAL_PAK_BANK_SIZE];
+    uint8_t *bankbuf = malloc(VIRTUAL_PAK_BANK_SIZE);
+    if (!bankbuf) {
+        fclose(f);
+        return false;
+    }
+
     bool ok = true;
     for (int bank = 0; bank < total_banks; bank++) {
-        size_t bytes_read = fread(bankbuf, 1, sizeof(bankbuf), f);
-        if (bytes_read != sizeof(bankbuf)) {
+        size_t bytes_read = fread(bankbuf, 1, VIRTUAL_PAK_BANK_SIZE, f);
+        if (bytes_read != VIRTUAL_PAK_BANK_SIZE) {
             ok = false;
             break;
         }
-        int written = cpak_write((joypad_port_t)controller, (uint8_t)bank, 0, bankbuf, sizeof(bankbuf));
+        int written = cpak_write((joypad_port_t)controller, (uint8_t)bank, 0, bankbuf, VIRTUAL_PAK_BANK_SIZE);
         if (written != 0) {
             ok = false;
             break;
         }
     }
 
+    free(bankbuf);
     fclose(f);
     return ok;
 }

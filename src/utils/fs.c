@@ -82,7 +82,7 @@ int64_t file_get_size(char *path) {
  *
  * @param path The path to the file.
  * @param size The size of the file to create in bytes.
- * @return true if the file was successfully created, false otherwise.
+ * @return true on error, false on success.
  */
 bool file_allocate(char *path, size_t size) {
     FILE *f;
@@ -110,7 +110,7 @@ bool file_allocate(char *path, size_t size) {
  *
  * @param path The path to the file.
  * @param value The value to fill the file with (byte).
- * @return true if the file was successfully filled, false otherwise.
+ * @return true on error, false on success.
  */
 bool file_fill(char *path, uint8_t value) {
     FILE *f;

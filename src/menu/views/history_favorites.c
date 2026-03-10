@@ -306,8 +306,8 @@ static void process(menu_t *menu) {
                 menu->load.rom_path = path_create(entry->path);
                 menu->load.load_history_id = -1;
                 menu->load.load_favorite_id = -1;
-                menu->load.back_mode = MENU_MODE_HISTORY;
-                menu->next_mode = MENU_MODE_LOAD_ROM;
+                menu->load.back_mode = MENU_MODE_PLAYTIME;
+                menu->next_mode = MENU_MODE_FILE_INFO;
                 sound_play_effect(SFX_ENTER);
             } else {
                 menu_show_error(menu, "Couldn't locate ROM");
