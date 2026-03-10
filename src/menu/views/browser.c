@@ -1570,6 +1570,7 @@ static bool browser_try_pick_64dd_disk_file(menu_t *menu) {
     path_free(menu->load.disk_slots.primary.disk_path);
     menu->load.disk_slots.primary.disk_path = disk_path;
     menu->load.combined_disk_rom = true;
+    menu->load.back_mode = MENU_MODE_LOAD_ROM;
     menu->load_pending.disk_file = true;
     browser_close_picker(menu, MENU_MODE_LOAD_DISK);
     return true;

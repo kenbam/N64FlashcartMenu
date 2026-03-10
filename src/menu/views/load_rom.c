@@ -1,6 +1,7 @@
 #include "../bookkeeping.h"
 #include "../cart_load.h"
 #include "../datel_codes.h"
+#include "../disk_pairing.h"
 #include "../playtime.h"
 #include "../rom_info.h"
 #include "../sound.h"
@@ -750,6 +751,126 @@ static void open_manual (menu_t *menu, void *arg) {
     manual_prepare_launch(menu, manual_directory);
 }
 
+static bool combo_rom_resolve_default_disk(menu_t *menu, char *resolved_path, size_t resolved_len) {
+    if (!menu || !disk_pairing_rom_is_combo(&menu->load.rom_info)) {
+        return false;
+    }
+
+    return disk_pairing_resolve_configured_path(
+        menu->storage_prefix,
+        menu->load.rom_info.settings.default_disk_path,
+        resolved_path,
+        resolved_len
+    );
+}
+
+static void combo_rom_open_disk_picker(menu_t *menu, browser_picker_t picker) {
+    path_t *disk_root = path_init(menu->storage_prefix, "/N64 - N64DD");
+    if (!disk_root || !directory_exists(path_get(disk_root))) {
+        path_free(disk_root);
+        disk_root = path_init(menu->storage_prefix, "/");
+    }
+    if (!disk_root) {
+        menu_show_error(menu, "Couldn't open 64DD disk browser");
+        return;
+    }
+
+    if (menu->browser.directory) {
+        path_free(menu->browser.directory);
+    }
+    menu->browser.directory = disk_root;
+    menu->browser.valid = false;
+    menu->browser.reload = false;
+    menu->browser.picker = picker;
+    if (menu->browser.picker_root) {
+        path_free(menu->browser.picker_root);
+    }
+    menu->browser.picker_root = path_clone(disk_root);
+    menu->browser.picker_return_mode = MENU_MODE_LOAD_ROM;
+
+    if (menu->browser.select_file) {
+        path_free(menu->browser.select_file);
+        menu->browser.select_file = NULL;
+    }
+
+    char resolved_disk_path[ROM_CONFIG_PATH_LENGTH];
+    if (combo_rom_resolve_default_disk(menu, resolved_disk_path, sizeof(resolved_disk_path))) {
+        menu->browser.select_file = path_create(resolved_disk_path);
+    }
+
+    menu->next_mode = MENU_MODE_BROWSER;
+}
+
+static bool combo_rom_try_launch_with_default_disk(menu_t *menu) {
+    char resolved_disk_path[ROM_CONFIG_PATH_LENGTH];
+
+    if (!combo_rom_resolve_default_disk(menu, resolved_disk_path, sizeof(resolved_disk_path))) {
+        return false;
+    }
+
+    path_t *disk_path = path_create(resolved_disk_path);
+    if (!disk_path) {
+        return false;
+    }
+
+    disk_info_t disk_info;
+    disk_err_t err = disk_info_load(disk_path, &disk_info);
+    if (err != DISK_OK || !disk_pairing_disk_matches_rom(&menu->load.rom_info, &disk_info)) {
+        path_free(disk_path);
+        return false;
+    }
+
+    path_free(menu->load.disk_slots.primary.disk_path);
+    menu->load.disk_slots.primary.disk_path = disk_path;
+    menu->load.combined_disk_rom = true;
+    menu->load.back_mode = MENU_MODE_LOAD_ROM;
+    menu->load_pending.disk_file = true;
+    menu->next_mode = MENU_MODE_LOAD_DISK;
+    return true;
+}
+
+static void launch_with_64dd_disk(menu_t *menu, void *arg) {
+    (void)arg;
+
+    if (!disk_pairing_rom_is_combo(&menu->load.rom_info)) {
+        menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
+        return;
+    }
+
+    if (!combo_rom_try_launch_with_default_disk(menu)) {
+        combo_rom_open_disk_picker(menu, BROWSER_PICKER_64DD_DISK_LAUNCH);
+    }
+}
+
+static void set_default_64dd_disk(menu_t *menu, void *arg) {
+    (void)arg;
+
+    if (!disk_pairing_rom_is_combo(&menu->load.rom_info)) {
+        menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
+        return;
+    }
+
+    combo_rom_open_disk_picker(menu, BROWSER_PICKER_64DD_DISK_DEFAULT);
+}
+
+static void clear_default_64dd_disk(menu_t *menu, void *arg) {
+    (void)arg;
+
+    if (!disk_pairing_rom_is_combo(&menu->load.rom_info)) {
+        menu_show_error(menu, "This ROM doesn't use a companion 64DD disk");
+        return;
+    }
+
+    rom_config_setting_set_default_disk_path(menu->load.rom_path, &menu->load.rom_info, "");
+}
+
+static component_context_menu_t set_64dd_disk_context_menu = { .list = {
+    { .text = "Launch with 64DD Disk...", .action = launch_with_64dd_disk },
+    { .text = "Set Default 64DD Disk...", .action = set_default_64dd_disk },
+    { .text = "Clear Default 64DD Disk", .action = clear_default_64dd_disk },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static component_context_menu_t options_context_menu = { .list = {
     { .text = "Set CIC Type", .submenu = &set_cic_type_context_menu },
     { .text = "Set Save Type", .submenu = &set_save_type_context_menu },
@@ -760,6 +881,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Use Cheats", .submenu = &set_cheat_options_menu },
     { .text = "Virtual Controller Pak", .submenu = &set_virtual_pak_options_menu },
     { .text = "Datel Code Editor", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_DATEL_CODE_EDITOR) },
+    { .text = "64DD Disk", .submenu = &set_64dd_disk_context_menu },
     { .text = "Open Manual", .action = open_manual },
 #ifdef FEATURE_PATCHER_GUI_ENABLED
     { .text = "Use Patches", .submenu = &set_patcher_options_menu },
@@ -963,7 +1085,11 @@ static void process (menu_t *menu) {
     }
 
     if (menu->actions.enter) {
-        menu->load_pending.rom_file = true;
+        if (disk_pairing_rom_is_combo(&menu->load.rom_info)) {
+            launch_with_64dd_disk(menu, NULL);
+        } else {
+            menu->load_pending.rom_file = true;
+        }
     } else if (menu->actions.back) {
         sound_play_effect(SFX_EXIT);
         menu->next_mode = menu->load.back_mode ? menu->load.back_mode : MENU_MODE_BROWSER;
@@ -1183,8 +1309,10 @@ static void draw (menu_t *menu, surface_t *d) {
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_LEFT, VALIGN_TOP,
-            "A: Load and run ROM\n"
+            "%s\n"
             "B: Back\n"
+            ,
+            disk_pairing_rom_is_combo(&menu->load.rom_info) ? "A: Launch with 64DD Disk" : "A: Load and run ROM"
         );
 
         ui_components_actions_bar_text_draw(
