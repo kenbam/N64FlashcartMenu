@@ -62,6 +62,7 @@ SRCS = \
 	menu/rom_patch.c \
 	menu/rom_info.c \
 	menu/screensaver.c \
+	menu/screensaver_attract.c \
 	menu/screensaver_dvd.c \
 	menu/screensaver_gradient.c \
 	menu/screensaver_pipes_render.c \
@@ -112,6 +113,9 @@ SOUNDS = \
 	enter.wav \
 	error.wav \
 	settings.wav
+
+IMAGES = \
+	attract_a_button.png
 
 OBJS = $(addprefix $(BUILD_DIR)/, $(addsuffix .o,$(basename $(SRCS))))
 MINIZ_OBJS = $(filter $(BUILD_DIR)/libs/miniz/%.o,$(OBJS))

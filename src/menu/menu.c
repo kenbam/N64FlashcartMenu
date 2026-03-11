@@ -597,6 +597,7 @@ static void menu_deinit (menu_t *menu) {
     path_free(menu->load.rom_path);
     free(menu->runtime_bgm_override_file);
     view_browser_deinit(menu);
+    path_free(menu->browser.picker_root);
     path_free(menu->browser.directory);
     free(menu);
 

@@ -78,6 +78,11 @@ static void open_menu_music_picker (menu_t *menu, void *arg) {
     menu->browser.valid = false;
     menu->browser.reload = false;
     menu->browser.picker = BROWSER_PICKER_MENU_BGM;
+    if (menu->browser.picker_root) {
+        path_free(menu->browser.picker_root);
+    }
+    menu->browser.picker_root = path_clone(music_dir);
+    menu->browser.picker_return_mode = MENU_MODE_SETTINGS_EDITOR;
 
     if (menu->browser.select_file) {
         path_free(menu->browser.select_file);
@@ -141,6 +146,11 @@ static void open_screensaver_logo_picker (menu_t *menu, void *arg) {
     menu->browser.valid = false;
     menu->browser.reload = false;
     menu->browser.picker = BROWSER_PICKER_SCREENSAVER_LOGO;
+    if (menu->browser.picker_root) {
+        path_free(menu->browser.picker_root);
+    }
+    menu->browser.picker_root = path_clone(logos_dir);
+    menu->browser.picker_return_mode = MENU_MODE_SETTINGS_EDITOR;
 
     if (menu->browser.select_file) {
         path_free(menu->browser.select_file);
@@ -327,6 +337,10 @@ static int get_screensaver_style_current_selection (menu_t *menu) {
             return 1;
         case SCREENSAVER_STYLE_GRADIENT:
             return 2;
+        case SCREENSAVER_STYLE_ATTRACT:
+            return 3;
+        case SCREENSAVER_STYLE_RANDOM:
+            return 4;
         case SCREENSAVER_STYLE_DVD:
         default:
             return 0;
@@ -339,6 +353,8 @@ static component_context_menu_t set_screensaver_style_context_menu = {
         {.text = "DVD Logo", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_DVD) },
         {.text = "3D Pipes", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_PIPES) },
         {.text = "Living Gradient", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_GRADIENT) },
+        {.text = "Attract Mode", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_ATTRACT) },
+        {.text = "Random", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_RANDOM) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -697,6 +713,12 @@ static void draw (menu_t *menu, surface_t *d) {
             break;
         case SCREENSAVER_STYLE_GRADIENT:
             screensaver_style_label = "Living Gradient";
+            break;
+        case SCREENSAVER_STYLE_ATTRACT:
+            screensaver_style_label = "Attract Mode";
+            break;
+        case SCREENSAVER_STYLE_RANDOM:
+            screensaver_style_label = "Random";
             break;
         default:
             break;
