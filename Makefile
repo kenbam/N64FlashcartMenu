@@ -47,7 +47,9 @@ SRCS = \
 	menu/actions.c \
 	menu/bookkeeping.c \
 	menu/cart_load.c \
+	menu/combo_disk_flow.c \
 	menu/datel_codes.c \
+	menu/disk_pairing.c \
 	menu/disk_info.c \
 	menu/fonts.c \
 	menu/hdmi.c \
