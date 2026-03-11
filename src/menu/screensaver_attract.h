@@ -22,6 +22,8 @@ typedef struct {
     component_boxart_t *boxart;
     sprite_t *prompt_icon;
     bool prompt_icon_attempted;
+    uint8_t transition_style;
+    bool transition_reverse;
 } screensaver_attract_state_t;
 
 void screensaver_attract_init_state(screensaver_attract_state_t *state);

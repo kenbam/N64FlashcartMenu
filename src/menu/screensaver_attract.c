@@ -12,10 +12,16 @@
 #include "utils/fs.h"
 
 #define SCREENSAVER_ATTRACT_SAMPLE_MAX       (256)
-#define SCREENSAVER_ATTRACT_ROTATE_SECONDS   (14.0f)
+#define SCREENSAVER_ATTRACT_ROTATE_SECONDS   (30.0f)
 #define SCREENSAVER_ATTRACT_SCAN_DIRS_FRAME  (2)
+#define SCREENSAVER_ATTRACT_TRANSITION_S     (0.55f)
 #define SCREENSAVER_ATTRACT_SCROLL_HOLD_S    (1.4f)
 #define SCREENSAVER_ATTRACT_SCROLL_PX_PER_S  (18.0f)
+
+enum {
+    ATTRACT_TRANSITION_WIPE = 0,
+    ATTRACT_TRANSITION_CHECKERBOARD = 1,
+};
 
 static const char *attract_rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
 static const char *attract_prompt_icon_paths[] = {
@@ -97,6 +103,155 @@ static float attract_description_scroll_offset(float featured_time_s, float scro
     }
 
     return 0.0f;
+}
+
+static float attract_transition_progress(float featured_time_s) {
+    if (featured_time_s < SCREENSAVER_ATTRACT_TRANSITION_S) {
+        return 1.0f - (featured_time_s / SCREENSAVER_ATTRACT_TRANSITION_S);
+    }
+
+    float fade_out_start = SCREENSAVER_ATTRACT_ROTATE_SECONDS - SCREENSAVER_ATTRACT_TRANSITION_S;
+    if (featured_time_s > fade_out_start) {
+        float t = (featured_time_s - fade_out_start) / SCREENSAVER_ATTRACT_TRANSITION_S;
+        if (t > 1.0f) {
+            t = 1.0f;
+        }
+        return t;
+    }
+
+    return 0.0f;
+}
+
+static void attract_draw_transition_wipe(const screensaver_attract_state_t *state) {
+    if (!state) {
+        return;
+    }
+
+    float progress = attract_transition_progress(state->featured_time_s);
+    if (progress <= 0.0f) {
+        return;
+    }
+
+    const int bands = 7;
+    const int height = VISIBLE_AREA_Y1 - VISIBLE_AREA_Y0;
+    const int width = VISIBLE_AREA_X1 - VISIBLE_AREA_X0;
+    const int band_height = (height + bands - 1) / bands;
+
+    for (int i = 0; i < bands; i++) {
+        float band_offset = ((float)i / (float)(bands - 1)) * 0.22f;
+        float band_progress = progress + band_offset;
+        if (band_progress > 1.0f) {
+            band_progress = 1.0f;
+        }
+
+        int cover = (int)((float)width * band_progress);
+        if (cover <= 0) {
+            continue;
+        }
+
+        int y0 = VISIBLE_AREA_Y0 + i * band_height;
+        int y1 = y0 + band_height + 1;
+        if (y1 > VISIBLE_AREA_Y1) {
+            y1 = VISIBLE_AREA_Y1;
+        }
+
+        if (state->transition_reverse) {
+            ui_components_box_draw(
+                VISIBLE_AREA_X1 - cover,
+                y0,
+                VISIBLE_AREA_X1,
+                y1,
+                RGBA32(0x00, 0x00, 0x00, 0xFF)
+            );
+        } else {
+            ui_components_box_draw(
+                VISIBLE_AREA_X0,
+                y0,
+                VISIBLE_AREA_X0 + cover,
+                y1,
+                RGBA32(0x00, 0x00, 0x00, 0xFF)
+            );
+        }
+    }
+}
+
+static void attract_draw_transition_checkerboard(const screensaver_attract_state_t *state) {
+    if (!state) {
+        return;
+    }
+
+    float progress = attract_transition_progress(state->featured_time_s);
+    if (progress <= 0.0f) {
+        return;
+    }
+
+    const int cols = 10;
+    const int rows = 8;
+    const int width = VISIBLE_AREA_X1 - VISIBLE_AREA_X0;
+    const int height = VISIBLE_AREA_Y1 - VISIBLE_AREA_Y0;
+    const int tile_w = (width + cols - 1) / cols;
+    const int tile_h = (height + rows - 1) / rows;
+    const int phases = cols + rows - 1;
+
+    for (int row = 0; row < rows; row++) {
+        for (int col = 0; col < cols; col++) {
+            int phase = state->transition_reverse ? ((cols - 1 - col) + row) : (col + row);
+            float cell_start = (float)phase / (float)phases;
+            float cell_end = (float)(phase + 1) / (float)phases;
+
+            if (progress <= cell_start) {
+                continue;
+            }
+
+            float local = (progress - cell_start) / (cell_end - cell_start);
+            if (local > 1.0f) {
+                local = 1.0f;
+            }
+
+            int x0 = VISIBLE_AREA_X0 + col * tile_w;
+            int y0 = VISIBLE_AREA_Y0 + row * tile_h;
+            int x1 = x0 + tile_w;
+            int y1 = y0 + tile_h;
+            if (x1 > VISIBLE_AREA_X1) {
+                x1 = VISIBLE_AREA_X1;
+            }
+            if (y1 > VISIBLE_AREA_Y1) {
+                y1 = VISIBLE_AREA_Y1;
+            }
+
+            int cx = (x0 + x1) / 2;
+            int cy = (y0 + y1) / 2;
+            int half_w = (int)(((x1 - x0) * local) * 0.5f);
+            int half_h = (int)(((y1 - y0) * local) * 0.5f);
+            if (half_w <= 0 || half_h <= 0) {
+                continue;
+            }
+
+            ui_components_box_draw(
+                cx - half_w,
+                cy - half_h,
+                cx + half_w,
+                cy + half_h,
+                RGBA32(0x00, 0x00, 0x00, 0xFF)
+            );
+        }
+    }
+}
+
+static void attract_draw_transition(const screensaver_attract_state_t *state) {
+    if (!state) {
+        return;
+    }
+
+    switch (state->transition_style) {
+        case ATTRACT_TRANSITION_CHECKERBOARD:
+            attract_draw_transition_checkerboard(state);
+            break;
+        case ATTRACT_TRANSITION_WIPE:
+        default:
+            attract_draw_transition_wipe(state);
+            break;
+    }
 }
 
 static void attract_format_last_played(char *out, size_t out_len, int64_t ts) {
@@ -446,12 +601,10 @@ static bool attract_load_feature(menu_t *menu, screensaver_attract_state_t *stat
         rom_info.title,
         IMAGE_BOXART_FRONT
     );
-    if (!boxart || !boxart->image) {
-        ui_components_boxart_free(boxart);
-        return false;
-    }
 
     attract_clear_feature(state);
+    state->transition_style = (uint8_t)(attract_rng_next(state) & 1u);
+    state->transition_reverse = (attract_rng_next(state) & 1u) != 0;
     state->current_rom_info = rom_info;
     state->current_index = index;
     state->boxart = boxart;
@@ -801,11 +954,12 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
         &(rdpq_textparms_t){
             .style_id = STL_DEFAULT,
             .width = 240,
-            .height = 20,
+            .height = 28,
+            .valign = VALIGN_CENTER,
         },
         FNT_DEFAULT,
         icon_x + 38,
-        icon_y + 2,
+        icon_y,
         "Open Game"
     );
     rdpq_text_print(
@@ -816,7 +970,7 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
         },
         FNT_DEFAULT,
         icon_x + 38,
-        icon_y + 18,
+        icon_y + 19,
         "Any other input exits"
     );
     if (state->prompt_icon) {
@@ -848,4 +1002,6 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
     }
 
     attract_draw_boxart(state);
+
+    attract_draw_transition(state);
 }
