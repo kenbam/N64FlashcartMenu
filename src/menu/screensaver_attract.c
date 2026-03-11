@@ -14,6 +14,8 @@
 #define SCREENSAVER_ATTRACT_SAMPLE_MAX       (256)
 #define SCREENSAVER_ATTRACT_ROTATE_SECONDS   (14.0f)
 #define SCREENSAVER_ATTRACT_SCAN_DIRS_FRAME  (2)
+#define SCREENSAVER_ATTRACT_SCROLL_HOLD_S    (1.4f)
+#define SCREENSAVER_ATTRACT_SCROLL_PX_PER_S  (18.0f)
 
 static const char *attract_rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
 static const char *attract_prompt_icon_paths[] = {
@@ -60,6 +62,41 @@ static const char *attract_publisher(const screensaver_attract_state_t *state) {
         return state->current_rom_info.metadata.developer;
     }
     return "Unknown";
+}
+
+static float attract_description_scroll_offset(float featured_time_s, float scrollable_height) {
+    if (scrollable_height <= 0.0f) {
+        return 0.0f;
+    }
+
+    float travel_time = scrollable_height / SCREENSAVER_ATTRACT_SCROLL_PX_PER_S;
+    if (travel_time < 0.01f) {
+        return 0.0f;
+    }
+
+    float cycle_duration = (SCREENSAVER_ATTRACT_SCROLL_HOLD_S * 2.0f) + (travel_time * 2.0f);
+    float t = fmodf(featured_time_s, cycle_duration);
+
+    if (t < SCREENSAVER_ATTRACT_SCROLL_HOLD_S) {
+        return 0.0f;
+    }
+    t -= SCREENSAVER_ATTRACT_SCROLL_HOLD_S;
+
+    if (t < travel_time) {
+        return scrollable_height * (t / travel_time);
+    }
+    t -= travel_time;
+
+    if (t < SCREENSAVER_ATTRACT_SCROLL_HOLD_S) {
+        return scrollable_height;
+    }
+    t -= SCREENSAVER_ATTRACT_SCROLL_HOLD_S;
+
+    if (t < travel_time) {
+        return scrollable_height * (1.0f - (t / travel_time));
+    }
+
+    return 0.0f;
 }
 
 static void attract_format_last_played(char *out, size_t out_len, int64_t ts) {
@@ -740,7 +777,7 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
             .width = text_width,
             .height = 10000,
             .wrap = WRAP_WORD,
-            .line_spacing = TEXT_LINE_SPACING_ADJUST,
+            .line_spacing = TEXT_LINE_SPACING_ADJUST - 1,
         },
         FNT_DEFAULT,
         NULL
@@ -750,7 +787,11 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
     rdpq_paragraph_t *layout = rdpq_paragraph_builder_end();
 
     rdpq_set_scissor(base_x, clip_y0, base_x + text_width, clip_y1);
-    rdpq_paragraph_render(layout, base_x, base_y);
+    int visible_height = clip_y1 - clip_y0;
+    float total_height = layout->bbox.y1 - layout->bbox.y0;
+    float scrollable_height = total_height - (float)visible_height;
+    float scroll_offset = attract_description_scroll_offset(state->featured_time_s, scrollable_height);
+    rdpq_paragraph_render(layout, base_x, base_y - layout->bbox.y0 - scroll_offset);
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
     rdpq_paragraph_free(layout);
 
