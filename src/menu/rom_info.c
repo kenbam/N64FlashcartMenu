@@ -1232,6 +1232,7 @@ static void extract_rom_info (match_t *match, rom_header_t *rom_header, rom_info
     rom_info->settings.cheats_enabled = false;
     rom_info->settings.patches_enabled = false;
     rom_info->settings.patch_profile[0] = '\0';
+    rom_info->settings.default_disk_path[0] = '\0';
     rom_info->settings.virtual_pak_enabled = false;
     rom_info->settings.virtual_pak_slot = 1;
 }
@@ -1256,6 +1257,12 @@ static void load_rom_config_from_file (path_t *path, rom_info_t *rom_info) {
             sizeof(rom_info->settings.patch_profile),
             "%s",
             mini_get_string(rom_config_ini, NULL, "patch_profile", "")
+        );
+        snprintf(
+            rom_info->settings.default_disk_path,
+            sizeof(rom_info->settings.default_disk_path),
+            "%s",
+            mini_get_string(rom_config_ini, NULL, "default_disk_path", "")
         );
         rom_info->settings.virtual_pak_enabled = mini_get_bool(rom_config_ini, NULL, "virtual_pak_enabled", rom_info->settings.virtual_pak_enabled);
         int virtual_pak_slot = mini_get_int(rom_config_ini, NULL, "virtual_pak_slot", rom_info->settings.virtual_pak_slot);
@@ -1669,6 +1676,16 @@ rom_err_t rom_config_setting_set_virtual_pak_slot(path_t *path, rom_info_t *rom_
     }
     rom_info->settings.virtual_pak_slot = slot;
     return save_rom_config_setting_to_file(path, NULL, "virtual_pak_slot", slot, 1);
+}
+
+rom_err_t rom_config_setting_set_default_disk_path(path_t *path, rom_info_t *rom_info, const char *disk_path) {
+    snprintf(
+        rom_info->settings.default_disk_path,
+        sizeof(rom_info->settings.default_disk_path),
+        "%s",
+        disk_path ? disk_path : ""
+    );
+    return save_rom_config_string_setting_to_file(path, NULL, "default_disk_path", rom_info->settings.default_disk_path, "");
 }
 
 #ifdef FEATURE_PATCHER_GUI_ENABLED

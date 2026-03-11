@@ -21,6 +21,7 @@
 #define ROM_METADATA_SHORT_DESC_LENGTH  256
 #define ROM_METADATA_LONG_DESC_LENGTH   1536
 #define ROM_STABLE_ID_LENGTH            32
+#define ROM_CONFIG_PATH_LENGTH          320
 
 /** @brief ROM error enumeration. */
 typedef enum {
@@ -183,6 +184,7 @@ typedef struct {
         bool cheats_enabled;        /**< Cheats enabled */
         bool patches_enabled;       /**< Patches enabled */
         char patch_profile[96];     /**< Selected patch manifest filename (e.g. default.ini) */
+        char default_disk_path[ROM_CONFIG_PATH_LENGTH]; /**< Preferred 64DD combo disk path */
         bool virtual_pak_enabled;   /**< Use a virtual controller pak for this ROM */
         uint8_t virtual_pak_slot;   /**< Virtual controller pak slot (1-based) */
     } settings;                     /**< The ROM settings */
@@ -357,6 +359,16 @@ rom_err_t rom_config_setting_set_virtual_pak_enabled(path_t *path, rom_info_t *r
  * @return rom_err_t Error code
  */
 rom_err_t rom_config_setting_set_virtual_pak_slot(path_t *path, rom_info_t *rom_info, uint8_t slot);
+
+/**
+ * @brief Persist the preferred 64DD combo disk path for a ROM.
+ *
+ * @param path ROM path
+ * @param rom_info Loaded ROM info to update
+ * @param disk_path Disk path rooted at storage (empty string clears the setting)
+ * @return rom_err_t Error code
+ */
+rom_err_t rom_config_setting_set_default_disk_path(path_t *path, rom_info_t *rom_info, const char *disk_path);
 
 /**
  * @brief Get the TV type for the ROM.

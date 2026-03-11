@@ -230,12 +230,17 @@ static bool load_rom(menu_t* menu, path_t* rom_path) {
 }
 
 void view_load_disk_init (menu_t *menu) {
-    if (menu->load.disk_slots.primary.disk_path) {
+    bool use_preselected_disk = menu->load.disk_slots.primary.disk_path && path_has_value(menu->load.disk_slots.primary.disk_path);
+    bool preserve_pending_disk_launch = use_preselected_disk && menu->load_pending.disk_file;
+
+    if (menu->load.disk_slots.primary.disk_path && !use_preselected_disk) {
         path_free(menu->load.disk_slots.primary.disk_path);
         menu->load.disk_slots.primary.disk_path = NULL;
     }
 
-    menu->load_pending.disk_file = false;
+    if (!preserve_pending_disk_launch) {
+        menu->load_pending.disk_file = false;
+    }
 
     if(menu->load.load_history_id != -1 || menu->load.load_favorite_id != -1) {
         bookkeeping_item_t* items;
@@ -273,7 +278,7 @@ void view_load_disk_init (menu_t *menu) {
         if(!load_rom(menu, items[item_id].secondary_path)) {
             return;  // load_rom handles its own error messages
         }
-    } else {
+    } else if (!use_preselected_disk) {
         // Existing browser path logic
         if (menu->browser.entry && menu->browser.entry->path) {
             menu->load.disk_slots.primary.disk_path = path_create(menu->browser.entry->path);

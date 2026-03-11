@@ -1,5 +1,6 @@
 #include "../bookkeeping.h"
 #include "../cart_load.h"
+#include "../combo_disk_flow.h"
 #include "../datel_codes.h"
 #include "../playtime.h"
 #include "../rom_info.h"
@@ -750,6 +751,34 @@ static void open_manual (menu_t *menu, void *arg) {
     manual_prepare_launch(menu, manual_directory);
 }
 
+static void load_rom_only(menu_t *menu, void *arg) {
+    (void)arg;
+    menu->load_pending.rom_file = true;
+}
+
+static void launch_with_64dd_disk(menu_t *menu, void *arg) {
+    (void)arg;
+    combo_disk_flow_launch_required(menu);
+}
+
+static void set_default_64dd_disk(menu_t *menu, void *arg) {
+    (void)arg;
+    combo_disk_flow_set_default(menu);
+}
+
+static void clear_default_64dd_disk(menu_t *menu, void *arg) {
+    (void)arg;
+    combo_disk_flow_clear_default(menu);
+}
+
+static component_context_menu_t set_64dd_disk_context_menu = { .list = {
+    { .text = "Load ROM Only", .action = load_rom_only },
+    { .text = "Launch with 64DD Disk...", .action = launch_with_64dd_disk },
+    { .text = "Set Default 64DD Disk...", .action = set_default_64dd_disk },
+    { .text = "Clear Default 64DD Disk", .action = clear_default_64dd_disk },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static component_context_menu_t options_context_menu = { .list = {
     { .text = "Set CIC Type", .submenu = &set_cic_type_context_menu },
     { .text = "Set Save Type", .submenu = &set_save_type_context_menu },
@@ -760,6 +789,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Use Cheats", .submenu = &set_cheat_options_menu },
     { .text = "Virtual Controller Pak", .submenu = &set_virtual_pak_options_menu },
     { .text = "Datel Code Editor", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_DATEL_CODE_EDITOR) },
+    { .text = "64DD Disk", .submenu = &set_64dd_disk_context_menu },
     { .text = "Open Manual", .action = open_manual },
 #ifdef FEATURE_PATCHER_GUI_ENABLED
     { .text = "Use Patches", .submenu = &set_patcher_options_menu },
@@ -963,7 +993,13 @@ static void process (menu_t *menu) {
     }
 
     if (menu->actions.enter) {
-        menu->load_pending.rom_file = true;
+        if (combo_disk_flow_is_applicable(menu)) {
+            if (combo_disk_flow_launch(menu) == COMBO_DISK_FLOW_NO_MATCH) {
+                menu->load_pending.rom_file = true;
+            }
+        } else {
+            menu->load_pending.rom_file = true;
+        }
     } else if (menu->actions.back) {
         sound_play_effect(SFX_EXIT);
         menu->next_mode = menu->load.back_mode ? menu->load.back_mode : MENU_MODE_BROWSER;
@@ -1183,8 +1219,10 @@ static void draw (menu_t *menu, surface_t *d) {
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_LEFT, VALIGN_TOP,
-            "A: Load and run ROM\n"
+            "%s\n"
             "B: Back\n"
+            ,
+            combo_disk_flow_is_applicable(menu) ? "A: Load ROM / 64DD" : "A: Load and run ROM"
         );
 
         ui_components_actions_bar_text_draw(

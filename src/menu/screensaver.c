@@ -3,6 +3,7 @@
 #include <libdragon.h>
 
 #include "screensaver.h"
+#include "screensaver_attract.h"
 #include "screensaver_dvd.h"
 #include "screensaver_gradient.h"
 #include "screensaver_pipes_render.h"
@@ -15,6 +16,8 @@ typedef struct {
     bool active;
     int idle_frames;
     uint64_t last_ticks_us;
+    screensaver_style_t active_style;
+    screensaver_attract_state_t attract;
     screensaver_dvd_state_t dvd;
     screensaver_gradient_state_t gradient;
     screensaver_pipes_state_t pipes;
@@ -25,7 +28,22 @@ static screensaver_state_t screensaver = {
     .active = false,
     .idle_frames = 0,
     .last_ticks_us = 0,
+    .active_style = SCREENSAVER_STYLE_DVD,
 };
+
+static screensaver_style_t screensaver_pick_random_style(void) {
+    switch ((get_ticks_us() / 1000ULL) % 4ULL) {
+        case 1:
+            return SCREENSAVER_STYLE_PIPES;
+        case 2:
+            return SCREENSAVER_STYLE_GRADIENT;
+        case 3:
+            return SCREENSAVER_STYLE_ATTRACT;
+        case 0:
+        default:
+            return SCREENSAVER_STYLE_DVD;
+    }
+}
 
 static bool menu_has_any_input(menu_t *menu) {
     return menu->actions.go_up ||
@@ -61,11 +79,17 @@ static screensaver_style_t screensaver_get_style(const menu_t *menu) {
     if (!menu) {
         return SCREENSAVER_STYLE_DVD;
     }
+    if (menu->settings.screensaver_style == SCREENSAVER_STYLE_RANDOM) {
+        return screensaver.active ? screensaver.active_style : screensaver_pick_random_style();
+    }
     if (menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES) {
         return SCREENSAVER_STYLE_PIPES;
     }
     if (menu->settings.screensaver_style == SCREENSAVER_STYLE_GRADIENT) {
         return SCREENSAVER_STYLE_GRADIENT;
+    }
+    if (menu->settings.screensaver_style == SCREENSAVER_STYLE_ATTRACT) {
+        return SCREENSAVER_STYLE_ATTRACT;
     }
     return SCREENSAVER_STYLE_DVD;
 }
@@ -75,6 +99,8 @@ static void screensaver_reset(menu_t *menu) {
     screensaver.active = false;
     screensaver.idle_frames = 0;
     screensaver.last_ticks_us = 0;
+    screensaver.active_style = SCREENSAVER_STYLE_DVD;
+    screensaver_attract_reset(&screensaver.attract);
     screensaver_dvd_reset(&screensaver.dvd);
     screensaver_gradient_reset(&screensaver.gradient);
     screensaver_pipes_reset(&screensaver.pipes);
@@ -84,15 +110,20 @@ static void screensaver_reset(menu_t *menu) {
 }
 
 static void screensaver_activate(menu_t *menu) {
+    screensaver_style_t style = screensaver_get_style(menu);
     screensaver.active = true;
     screensaver.idle_frames = 0;
     screensaver.last_ticks_us = get_ticks_us();
-    switch (screensaver_get_style(menu)) {
+    screensaver.active_style = style;
+    switch (style) {
         case SCREENSAVER_STYLE_PIPES:
             screensaver_pipes_activate(&screensaver.pipes);
             break;
         case SCREENSAVER_STYLE_GRADIENT:
             screensaver_gradient_activate(&screensaver.gradient);
+            break;
+        case SCREENSAVER_STYLE_ATTRACT:
+            screensaver_attract_activate(menu, &screensaver.attract);
             break;
         case SCREENSAVER_STYLE_DVD:
         default:
@@ -111,6 +142,14 @@ void screensaver_logo_reload(menu_t *menu) {
 
 void screensaver_update_state(menu_t *menu) {
     if (!screensaver_mode_allowed(menu->mode) || (menu->next_mode != menu->mode)) {
+        screensaver_reset(menu);
+        return;
+    }
+
+    if (screensaver.active &&
+        screensaver_get_style(menu) == SCREENSAVER_STYLE_ATTRACT &&
+        menu->actions.enter) {
+        screensaver_attract_open_current(menu, &screensaver.attract);
         screensaver_reset(menu);
         return;
     }
@@ -174,6 +213,10 @@ void screensaver_draw(menu_t *menu, surface_t *display) {
             screensaver_gradient_step(&screensaver.gradient, dt);
             screensaver_gradient_draw(display, &screensaver.gradient);
             break;
+        case SCREENSAVER_STYLE_ATTRACT:
+            screensaver_attract_step(menu, &screensaver.attract, dt);
+            screensaver_attract_draw(menu, display, &screensaver.attract);
+            break;
         case SCREENSAVER_STYLE_DVD:
         default:
             screensaver_dvd_draw(menu, &screensaver.dvd, display, dt);
@@ -184,6 +227,7 @@ void screensaver_draw(menu_t *menu, surface_t *display) {
 }
 
 void screensaver_deinit(void) {
+    screensaver_attract_deinit(&screensaver.attract);
     screensaver_dvd_deinit(&screensaver.dvd);
     screensaver_gradient_reset(&screensaver.gradient);
     screensaver_pipes_reset(&screensaver.pipes);

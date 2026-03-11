@@ -12,6 +12,7 @@
 #include <libdragon.h>
 
 #include "../cart_load.h"
+#include "../disk_pairing.h"
 #include "../fonts.h"
 #include "../png_decoder.h"
 #include "../rom_info.h"
@@ -912,10 +913,14 @@ static bool browser_entry_is_game(const entry_t *entry);
 static char *browser_entry_path(menu_t *menu, int index);
 static bool path_is_favorite(menu_t *menu, const char *path);
 static int browser_pick_random_index(menu_t *menu);
-static bool browser_is_menu_music_picker_root(menu_t *menu);
+static bool browser_picker_is_active(menu_t *menu);
+static bool browser_is_picker_root(menu_t *menu);
+static void browser_close_picker(menu_t *menu, menu_mode_t next_mode);
 static bool browser_try_pick_menu_music_file(menu_t *menu);
-static bool browser_is_screensaver_logo_picker_root(menu_t *menu);
 static bool browser_try_pick_screensaver_logo_file(menu_t *menu);
+static bool browser_try_pick_64dd_disk_file(menu_t *menu);
+static bool browser_picker_is_64dd_disk(menu_t *menu);
+static bool browser_64dd_picker_entry_visible(menu_t *menu, path_t *directory, dir_t *info);
 static void browser_restore_playlist_overrides(menu_t *menu);
 static void browser_apply_playlist_overrides(menu_t *menu, const playlist_props_t *props);
 static void browser_apply_playlist_overrides_deferred(menu_t *menu);
@@ -1423,11 +1428,29 @@ static int compare_entry (const void *pa, const void *pb) {
     return strcasecmp((const char *) (a->name), (const char *) (b->name));
 }
 
-static bool browser_is_menu_music_picker_root(menu_t *menu) {
-    if (!menu || menu->browser.picker != BROWSER_PICKER_MENU_BGM || !menu->browser.directory) {
+static bool browser_picker_is_active(menu_t *menu) {
+    return menu && menu->browser.picker != BROWSER_PICKER_NONE;
+}
+
+static bool browser_is_picker_root(menu_t *menu) {
+    if (!browser_picker_is_active(menu) || !menu->browser.directory || !menu->browser.picker_root) {
         return false;
     }
-    return strcmp(strip_fs_prefix(path_get(menu->browser.directory)), "/menu/music") == 0;
+    return path_are_match(menu->browser.directory, menu->browser.picker_root);
+}
+
+static void browser_close_picker(menu_t *menu, menu_mode_t next_mode) {
+    if (!menu) {
+        return;
+    }
+
+    menu->browser.picker = BROWSER_PICKER_NONE;
+    menu->browser.picker_return_mode = MENU_MODE_BROWSER;
+    if (menu->browser.picker_root) {
+        path_free(menu->browser.picker_root);
+        menu->browser.picker_root = NULL;
+    }
+    menu->next_mode = next_mode;
 }
 
 static bool browser_try_pick_menu_music_file(menu_t *menu) {
@@ -1454,16 +1477,8 @@ static bool browser_try_pick_menu_music_file(menu_t *menu) {
     free(entry_path);
     menu->bgm_reload_requested = true;
     settings_save(&menu->settings);
-    menu->browser.picker = BROWSER_PICKER_NONE;
-    menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+    browser_close_picker(menu, MENU_MODE_SETTINGS_EDITOR);
     return true;
-}
-
-static bool browser_is_screensaver_logo_picker_root(menu_t *menu) {
-    if (!menu || menu->browser.picker != BROWSER_PICKER_SCREENSAVER_LOGO || !menu->browser.directory) {
-        return false;
-    }
-    return strcmp(strip_fs_prefix(path_get(menu->browser.directory)), "/menu/screensavers") == 0;
 }
 
 static bool browser_try_pick_screensaver_logo_file(menu_t *menu) {
@@ -1490,9 +1505,103 @@ static bool browser_try_pick_screensaver_logo_file(menu_t *menu) {
     free(entry_path);
     menu->screensaver_logo_reload_requested = true;
     settings_save(&menu->settings);
-    menu->browser.picker = BROWSER_PICKER_NONE;
-    menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+    browser_close_picker(menu, MENU_MODE_SETTINGS_EDITOR);
     return true;
+}
+
+static bool browser_try_pick_64dd_disk_file(menu_t *menu) {
+    if (!menu || !menu->browser.entry) {
+        return false;
+    }
+    if (menu->browser.picker != BROWSER_PICKER_64DD_DISK_LAUNCH &&
+        menu->browser.picker != BROWSER_PICKER_64DD_DISK_DEFAULT) {
+        return false;
+    }
+
+    if (menu->browser.entry->type != ENTRY_TYPE_DISK) {
+        if (menu->browser.entry->type != ENTRY_TYPE_DIR) {
+            menu_show_error(menu, "Select a 64DD disk file");
+        }
+        return false;
+    }
+    if (!menu->load.rom_path || !path_has_value(menu->load.rom_path)) {
+        menu_show_error(menu, "Couldn't locate ROM for 64DD pairing");
+        return true;
+    }
+
+    char *entry_path = browser_entry_path(menu, menu->browser.selected);
+    if (!entry_path) {
+        menu_show_error(menu, "Failed to resolve file path");
+        return true;
+    }
+
+    path_t *disk_path = path_create(entry_path);
+    free(entry_path);
+    if (!disk_path) {
+        menu_show_error(menu, "Failed to allocate disk path");
+        return true;
+    }
+
+    disk_info_t disk_info;
+    disk_err_t err = disk_info_load(disk_path, &disk_info);
+    if (err != DISK_OK) {
+        path_free(disk_path);
+        menu_show_error(menu, err == DISK_ERR_INVALID ? "Invalid 64DD disk file" : "Couldn't open 64DD disk file");
+        return true;
+    }
+
+    if (!disk_pairing_region_matches_rom(&menu->load.rom_info, &disk_info)) {
+        path_free(disk_path);
+        menu_show_error(menu, "Disk region doesn't match this ROM");
+        return true;
+    }
+    if (!disk_pairing_disk_id_matches_rom_game_code(menu->load.rom_info.game_code, disk_info.id)) {
+        path_free(disk_path);
+        menu_show_error(menu, "Disk isn't compatible with this ROM");
+        return true;
+    }
+
+    rom_config_setting_set_default_disk_path(menu->load.rom_path, &menu->load.rom_info, strip_fs_prefix(path_get(disk_path)));
+
+    if (menu->browser.picker == BROWSER_PICKER_64DD_DISK_DEFAULT) {
+        path_free(disk_path);
+        browser_close_picker(menu, MENU_MODE_LOAD_ROM);
+        return true;
+    }
+
+    path_free(menu->load.disk_slots.primary.disk_path);
+    menu->load.disk_slots.primary.disk_path = disk_path;
+    menu->load.combined_disk_rom = true;
+    menu->load.back_mode = MENU_MODE_LOAD_ROM;
+    menu->load_pending.disk_file = true;
+    browser_close_picker(menu, MENU_MODE_LOAD_DISK);
+    return true;
+}
+
+static bool browser_picker_is_64dd_disk(menu_t *menu) {
+    return menu &&
+        (menu->browser.picker == BROWSER_PICKER_64DD_DISK_LAUNCH ||
+         menu->browser.picker == BROWSER_PICKER_64DD_DISK_DEFAULT);
+}
+
+static bool browser_64dd_picker_entry_visible(menu_t *menu, path_t *directory, dir_t *info) {
+    if (!browser_picker_is_64dd_disk(menu) || !directory || !info) {
+        return true;
+    }
+
+    path_t *candidate = path_clone_push(directory, info->d_name);
+    if (!candidate) {
+        return false;
+    }
+
+    bool visible;
+    if (info->d_type == DT_DIR) {
+        visible = disk_pairing_directory_has_match_recursive(&menu->load.rom_info, candidate);
+    } else {
+        visible = disk_pairing_path_matches_rom(&menu->load.rom_info, candidate);
+    }
+    path_free(candidate);
+    return visible;
 }
 
 static int compare_entry_reverse (const void *pa, const void *pb) {
@@ -3635,6 +3744,10 @@ static bool load_directory (menu_t *menu) {
                 result = dir_findnext(path_get(path), &info);
                 continue;
             }
+            if (!browser_64dd_picker_entry_visible(menu, path, &info)) {
+                result = dir_findnext(path_get(path), &info);
+                continue;
+            }
 
             if (!browser_reserve_entry_capacity(menu, &directory_capacity, 1)) {
                 path_free(path);
@@ -4085,8 +4198,7 @@ static void process (menu_t *menu) {
     // Fail-safe: in empty directories/playlists, allow A or B to go up one level.
     if (menu->browser.entries == 0 &&
         (menu->actions.enter || menu->actions.back) &&
-        !browser_is_menu_music_picker_root(menu) &&
-        !browser_is_screensaver_logo_picker_root(menu) &&
+        !browser_is_picker_root(menu) &&
         !path_is_root(menu->browser.directory)) {
         if (pop_directory(menu)) {
             menu->browser.valid = false;
@@ -4102,6 +4214,9 @@ static void process (menu_t *menu) {
             return;
         }
         if (browser_try_pick_screensaver_logo_file(menu)) {
+            return;
+        }
+        if (browser_try_pick_64dd_disk_file(menu)) {
             return;
         }
         switch (menu->browser.entry->type) {
@@ -4158,13 +4273,8 @@ static void process (menu_t *menu) {
                 menu->next_mode = MENU_MODE_FILE_INFO;
                 break;
         }
-    } else if (menu->actions.back && browser_is_menu_music_picker_root(menu)) {
-        menu->browser.picker = BROWSER_PICKER_NONE;
-        menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
-        sound_play_effect(SFX_EXIT);
-    } else if (menu->actions.back && browser_is_screensaver_logo_picker_root(menu)) {
-        menu->browser.picker = BROWSER_PICKER_NONE;
-        menu->next_mode = MENU_MODE_SETTINGS_EDITOR;
+    } else if (menu->actions.back && browser_is_picker_root(menu)) {
+        browser_close_picker(menu, menu->browser.picker_return_mode ? menu->browser.picker_return_mode : MENU_MODE_BROWSER);
         sound_play_effect(SFX_EXIT);
     } else if (menu->actions.back && !path_is_root(menu->browser.directory)) {
         if (pop_directory(menu)) {
@@ -4213,7 +4323,9 @@ static void draw (menu_t *menu, surface_t *d) {
         switch (menu->browser.entry->type) {
             case ENTRY_TYPE_DIR: action = "A: Enter"; break;
             case ENTRY_TYPE_ROM: action = "A: Load"; break;
-            case ENTRY_TYPE_DISK: action = "A: Load"; break;
+            case ENTRY_TYPE_DISK:
+                action = (menu->browser.picker == BROWSER_PICKER_64DD_DISK_LAUNCH || menu->browser.picker == BROWSER_PICKER_64DD_DISK_DEFAULT) ? "A: Select" : "A: Load";
+                break;
             case ENTRY_TYPE_IMAGE: action = menu->browser.picker == BROWSER_PICKER_SCREENSAVER_LOGO ? "A: Select" : "A: Show"; break;
             case ENTRY_TYPE_TEXT: action = "A: View"; break;
             case ENTRY_TYPE_MUSIC: action = menu->browser.picker == BROWSER_PICKER_MENU_BGM ? "A: Select" : "A: Play"; break;
