@@ -319,7 +319,7 @@ static component_context_menu_t set_bgm_enabled_type_context_menu = {
 
 static component_context_menu_t set_menu_music_file_context_menu = {
     .list = {
-        {.text = "Auto (menu.mp3/bgm.mp3)", .action = set_menu_music_file_auto },
+        {.text = "Auto (menu.wav64/menu.mp3/bgm.wav64/bgm.mp3)", .action = set_menu_music_file_auto },
         {.text = "Pick from /menu/music", .action = open_menu_music_picker },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
