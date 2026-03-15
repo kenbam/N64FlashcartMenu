@@ -27,7 +27,13 @@ const char * const CPAK_MOUNT_ARRAY[4] = {
  */
 bool has_cpak(int controller) {
     joypad_accessory_type_t val = joypad_get_accessory_type(controller);
-    return val == JOYPAD_ACCESSORY_TYPE_CONTROLLER_PAK;
+    if (val == JOYPAD_ACCESSORY_TYPE_CONTROLLER_PAK) {
+        return true;
+    }
+
+    /* Some controller/accessory combinations report the type unreliably.
+     * Fall back to a direct mempak bank probe before declaring it absent. */
+    return cpak_probe_banks(controller) > 0;
 }
 
 /**

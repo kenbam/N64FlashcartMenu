@@ -17,6 +17,7 @@
 #include "../png_decoder.h"
 #include "../rom_info.h"
 #include "../ui_components/constants.h"
+#include "../virtual_pak.h"
 #include "utils/fs.h"
 #include "utils/hash.h"
 #include "views.h"
@@ -52,6 +53,12 @@ static const char *hidden_root_paths[] = {
     "/.metadata_never_index",
     NULL,
 };
+
+static bool browser_virtual_pak_recovery_active = false;
+static bool browser_virtual_pak_recovery_failed = false;
+static int browser_virtual_pak_recovery_retry_cooldown = 0;
+static bool browser_virtual_pak_recovery_snoozed = false;
+static char browser_virtual_pak_recovery_message[128];
 
 /*
  * ========================================================================
@@ -4386,11 +4393,25 @@ static void draw (menu_t *menu, surface_t *d) {
 
     playlist_toast_draw();
 
+    if (browser_virtual_pak_recovery_active) {
+        if (browser_virtual_pak_recovery_failed) {
+            ui_components_messagebox_draw(browser_virtual_pak_recovery_message);
+        } else {
+            ui_components_loader_draw(0.0f, "Recovering virtual Pak...");
+        }
+    }
+
     rdpq_detach_show();
 }
 
 void view_browser_init (menu_t *menu) {
     playlist_recent_init(menu);
+    browser_virtual_pak_recovery_active = virtual_pak_has_pending_sync();
+    browser_virtual_pak_recovery_failed = false;
+    browser_virtual_pak_recovery_retry_cooldown = 0;
+    browser_virtual_pak_recovery_snoozed = false;
+    snprintf(browser_virtual_pak_recovery_message, sizeof(browser_virtual_pak_recovery_message),
+        "Recovering virtual Pak...\n\nKeep the same physical Controller Pak inserted in controller 1.");
 
     if (!menu->browser.valid) {
         ui_components_context_menu_init(&entry_context_menu);
@@ -4425,6 +4446,45 @@ void view_browser_init (menu_t *menu) {
 }
 
 void view_browser_display (menu_t *menu, surface_t *display) {
+    if (browser_virtual_pak_recovery_active) {
+        if (menu->actions.back) {
+            sound_play_effect(SFX_EXIT);
+            browser_virtual_pak_recovery_active = false;
+            browser_virtual_pak_recovery_failed = false;
+            browser_virtual_pak_recovery_snoozed = true;
+        } else if (menu->actions.settings) {
+            sound_play_effect(SFX_ERROR);
+            virtual_pak_force_clear_pending();
+            browser_virtual_pak_recovery_active = false;
+            browser_virtual_pak_recovery_failed = false;
+            browser_virtual_pak_recovery_snoozed = true;
+        } else if (menu->actions.enter) {
+            browser_virtual_pak_recovery_retry_cooldown = 0;
+        }
+
+        draw(menu, display);
+
+        if (!browser_virtual_pak_recovery_active || browser_virtual_pak_recovery_snoozed) {
+            return;
+        }
+
+        if (browser_virtual_pak_recovery_retry_cooldown > 0) {
+            browser_virtual_pak_recovery_retry_cooldown--;
+        } else {
+            virtual_pak_try_sync_pending();
+            if (!virtual_pak_has_pending_sync()) {
+                browser_virtual_pak_recovery_active = false;
+                browser_virtual_pak_recovery_failed = false;
+                return;
+            }
+            browser_virtual_pak_recovery_failed = true;
+            browser_virtual_pak_recovery_retry_cooldown = 30;
+            snprintf(browser_virtual_pak_recovery_message, sizeof(browser_virtual_pak_recovery_message),
+                "Virtual Pak recovery needs the same physical Controller Pak in controller 1.\n\nA: Retry now  B: Continue for now  Start: Force clear");
+        }
+        return;
+    }
+
     process(menu);
 
     draw(menu, display);

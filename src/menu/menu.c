@@ -513,7 +513,6 @@ static void menu_init (boot_params_t *boot_params) {
     path_pop(path);
 
     virtual_pak_init(menu->storage_prefix);
-    virtual_pak_try_sync_pending();
   
     if (menu->settings.pal60_compatibility_mode) { // hardware VI mods that dont really understand the output
         tv_type = get_tv_type();

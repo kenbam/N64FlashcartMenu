@@ -1,6 +1,9 @@
 #include "views.h"
 #include "../sound.h"
+#include <stdio.h>
+#include <string.h>
 
+static char error_message_buffer[512];
 
 static void process (menu_t *menu) {
     if (menu->actions.back) {
@@ -25,6 +28,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 static void deinit (menu_t *menu) {
     menu->error_message = NULL;
+    error_message_buffer[0] = '\0';
     menu->flashcart_err = FLASHCART_OK;
 }
 
@@ -52,5 +56,11 @@ void view_error_display (menu_t *menu, surface_t *display) {
 void menu_show_error (menu_t *menu, char *error_message) {
     sound_play_effect(SFX_ERROR);
     menu->next_mode = MENU_MODE_ERROR;
-    menu->error_message = error_message;
+    if (error_message && error_message[0] != '\0') {
+        snprintf(error_message_buffer, sizeof(error_message_buffer), "%s", error_message);
+        menu->error_message = error_message_buffer;
+    } else {
+        snprintf(error_message_buffer, sizeof(error_message_buffer), "%s", "Unspecified error");
+        menu->error_message = error_message_buffer;
+    }
 }
