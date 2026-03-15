@@ -170,6 +170,40 @@ If this gets revisited later, the best next directions are probably:
 - Use it only to answer a narrow question
 - then back it out immediately
 
+### Additional Untried Ideas
+
+#### 1. Switch BGM asset to WAV64 (highest impact, zero code change)
+
+The menu already prefers `/menu/music/menu.wav64` over `.mp3` (menu.c:299-310). VADPCM decompression runs on the RSP, not the CPU. This completely eliminates the `mp3player_wave_read` hotspot — no double-decode, no `fread` into 64KB buffer, no meter loop. Convert with `audioconv64 menu.mp3 menu.wav64`.
+
+#### 2. Lower audio sample rate for menu BGM
+
+Currently 44100 Hz. Menu music does not need CD quality. Dropping to 22050 Hz halves decode work, mixing work, and DMA buffer sizes. `sound_reconfigure()` already supports arbitrary frequencies.
+
+#### 3. Eliminate double MP3 decode in `mp3player_wave_read`
+
+Lines 97 and 105 of `mp3_player.c`: the first `mp3dec_decode_frame` with NULL output just gets the sample count, then the second actually decodes. This doubles CPU cost per buffer fill. Options:
+- Decode into a small static scratch buffer on the first pass and memcpy into the samplebuffer
+- Pre-allocate worst-case append (1152 samples for MPEG1) and trim if needed
+
+#### 4. Lazy/integer meter computation
+
+`mp3_player.c:116-137` runs a loop over all ~576 decoded samples doing abs/peak/sum, then converts to float with `1.0f / 32768.0f`. On 93MHz MIPS with no hardware FPU, each float multiply is a software emulation call, and this runs inside the audio callback. Options:
+- Only compute the meter when a visualizer view is active (gate with a flag)
+- Keep everything integer, convert to float lazily in `mp3player_get_meter()`
+- Subsample: compute meter on every 4th or 8th sample
+
+#### Priority ranking
+
+| # | Idea | Effort | Expected impact |
+|---|------|--------|----------------|
+| 1 | WAV64 BGM asset | Just convert the file | Eliminates MP3 CPU cost entirely |
+| 2 | Lower sample rate (22050) | One constant change | ~50% less audio work |
+| 3 | Remove double MP3 decode | Small refactor | ~40-50% less MP3 CPU per buffer |
+| 4 | Lazy/integer meter | Small refactor | Removes float softemu from audio path |
+
+If WAV64 BGM works well, ideas 3 and 4 become moot since the MP3 path would not be active.
+
 ### Current Recommendation
 
 The practical recommendation after this investigation is:
