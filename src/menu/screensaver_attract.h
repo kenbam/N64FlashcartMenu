@@ -12,9 +12,9 @@ typedef struct {
     bool scan_complete;
     uint32_t scanned_game_count;
     int current_index;
-    int sample_count;
-    uint32_t sample_seen;
-    char **samples;
+    int pool_count;
+    int pool_capacity;
+    char **pool;
     int scan_stack_count;
     int scan_stack_capacity;
     char **scan_stack;
@@ -22,8 +22,6 @@ typedef struct {
     component_boxart_t *boxart;
     sprite_t *prompt_icon;
     bool prompt_icon_attempted;
-    uint8_t transition_style;
-    bool transition_reverse;
 } screensaver_attract_state_t;
 
 void screensaver_attract_init_state(screensaver_attract_state_t *state);

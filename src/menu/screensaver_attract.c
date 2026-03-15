@@ -11,17 +11,10 @@
 #include "ui_components/constants.h"
 #include "utils/fs.h"
 
-#define SCREENSAVER_ATTRACT_SAMPLE_MAX       (256)
 #define SCREENSAVER_ATTRACT_ROTATE_SECONDS   (30.0f)
 #define SCREENSAVER_ATTRACT_SCAN_DIRS_FRAME  (2)
-#define SCREENSAVER_ATTRACT_TRANSITION_S     (0.55f)
 #define SCREENSAVER_ATTRACT_SCROLL_HOLD_S    (1.4f)
 #define SCREENSAVER_ATTRACT_SCROLL_PX_PER_S  (18.0f)
-
-enum {
-    ATTRACT_TRANSITION_WIPE = 0,
-    ATTRACT_TRANSITION_CHECKERBOARD = 1,
-};
 
 static const char *attract_rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
 static const char *attract_prompt_icon_paths[] = {
@@ -103,155 +96,6 @@ static float attract_description_scroll_offset(float featured_time_s, float scro
     }
 
     return 0.0f;
-}
-
-static float attract_transition_progress(float featured_time_s) {
-    if (featured_time_s < SCREENSAVER_ATTRACT_TRANSITION_S) {
-        return 1.0f - (featured_time_s / SCREENSAVER_ATTRACT_TRANSITION_S);
-    }
-
-    float fade_out_start = SCREENSAVER_ATTRACT_ROTATE_SECONDS - SCREENSAVER_ATTRACT_TRANSITION_S;
-    if (featured_time_s > fade_out_start) {
-        float t = (featured_time_s - fade_out_start) / SCREENSAVER_ATTRACT_TRANSITION_S;
-        if (t > 1.0f) {
-            t = 1.0f;
-        }
-        return t;
-    }
-
-    return 0.0f;
-}
-
-static void attract_draw_transition_wipe(const screensaver_attract_state_t *state) {
-    if (!state) {
-        return;
-    }
-
-    float progress = attract_transition_progress(state->featured_time_s);
-    if (progress <= 0.0f) {
-        return;
-    }
-
-    const int bands = 7;
-    const int height = VISIBLE_AREA_Y1 - VISIBLE_AREA_Y0;
-    const int width = VISIBLE_AREA_X1 - VISIBLE_AREA_X0;
-    const int band_height = (height + bands - 1) / bands;
-
-    for (int i = 0; i < bands; i++) {
-        float band_offset = ((float)i / (float)(bands - 1)) * 0.22f;
-        float band_progress = progress + band_offset;
-        if (band_progress > 1.0f) {
-            band_progress = 1.0f;
-        }
-
-        int cover = (int)((float)width * band_progress);
-        if (cover <= 0) {
-            continue;
-        }
-
-        int y0 = VISIBLE_AREA_Y0 + i * band_height;
-        int y1 = y0 + band_height + 1;
-        if (y1 > VISIBLE_AREA_Y1) {
-            y1 = VISIBLE_AREA_Y1;
-        }
-
-        if (state->transition_reverse) {
-            ui_components_box_draw(
-                VISIBLE_AREA_X1 - cover,
-                y0,
-                VISIBLE_AREA_X1,
-                y1,
-                RGBA32(0x00, 0x00, 0x00, 0xFF)
-            );
-        } else {
-            ui_components_box_draw(
-                VISIBLE_AREA_X0,
-                y0,
-                VISIBLE_AREA_X0 + cover,
-                y1,
-                RGBA32(0x00, 0x00, 0x00, 0xFF)
-            );
-        }
-    }
-}
-
-static void attract_draw_transition_checkerboard(const screensaver_attract_state_t *state) {
-    if (!state) {
-        return;
-    }
-
-    float progress = attract_transition_progress(state->featured_time_s);
-    if (progress <= 0.0f) {
-        return;
-    }
-
-    const int cols = 10;
-    const int rows = 8;
-    const int width = VISIBLE_AREA_X1 - VISIBLE_AREA_X0;
-    const int height = VISIBLE_AREA_Y1 - VISIBLE_AREA_Y0;
-    const int tile_w = (width + cols - 1) / cols;
-    const int tile_h = (height + rows - 1) / rows;
-    const int phases = cols + rows - 1;
-
-    for (int row = 0; row < rows; row++) {
-        for (int col = 0; col < cols; col++) {
-            int phase = state->transition_reverse ? ((cols - 1 - col) + row) : (col + row);
-            float cell_start = (float)phase / (float)phases;
-            float cell_end = (float)(phase + 1) / (float)phases;
-
-            if (progress <= cell_start) {
-                continue;
-            }
-
-            float local = (progress - cell_start) / (cell_end - cell_start);
-            if (local > 1.0f) {
-                local = 1.0f;
-            }
-
-            int x0 = VISIBLE_AREA_X0 + col * tile_w;
-            int y0 = VISIBLE_AREA_Y0 + row * tile_h;
-            int x1 = x0 + tile_w;
-            int y1 = y0 + tile_h;
-            if (x1 > VISIBLE_AREA_X1) {
-                x1 = VISIBLE_AREA_X1;
-            }
-            if (y1 > VISIBLE_AREA_Y1) {
-                y1 = VISIBLE_AREA_Y1;
-            }
-
-            int cx = (x0 + x1) / 2;
-            int cy = (y0 + y1) / 2;
-            int half_w = (int)(((x1 - x0) * local) * 0.5f);
-            int half_h = (int)(((y1 - y0) * local) * 0.5f);
-            if (half_w <= 0 || half_h <= 0) {
-                continue;
-            }
-
-            ui_components_box_draw(
-                cx - half_w,
-                cy - half_h,
-                cx + half_w,
-                cy + half_h,
-                RGBA32(0x00, 0x00, 0x00, 0xFF)
-            );
-        }
-    }
-}
-
-static void attract_draw_transition(const screensaver_attract_state_t *state) {
-    if (!state) {
-        return;
-    }
-
-    switch (state->transition_style) {
-        case ATTRACT_TRANSITION_CHECKERBOARD:
-            attract_draw_transition_checkerboard(state);
-            break;
-        case ATTRACT_TRANSITION_WIPE:
-        default:
-            attract_draw_transition_wipe(state);
-            break;
-    }
 }
 
 static void attract_format_last_played(char *out, size_t out_len, int64_t ts) {
@@ -389,15 +233,15 @@ static char *attract_pop_scan_dir(screensaver_attract_state_t *state) {
     return path;
 }
 
-static void attract_remove_sample(screensaver_attract_state_t *state, int index) {
-    if (!state || index < 0 || index >= state->sample_count) {
+static void attract_remove_pool_entry(screensaver_attract_state_t *state, int index) {
+    if (!state || index < 0 || index >= state->pool_count) {
         return;
     }
-    free(state->samples[index]);
-    for (int i = index; i < (state->sample_count - 1); i++) {
-        state->samples[i] = state->samples[i + 1];
+    free(state->pool[index]);
+    for (int i = index; i < (state->pool_count - 1); i++) {
+        state->pool[i] = state->pool[i + 1];
     }
-    state->sample_count--;
+    state->pool_count--;
     if (state->current_index == index) {
         state->current_index = -1;
     } else if (state->current_index > index) {
@@ -405,36 +249,26 @@ static void attract_remove_sample(screensaver_attract_state_t *state, int index)
     }
 }
 
-static void attract_sample_rom_path(screensaver_attract_state_t *state, const char *path) {
+static void attract_add_rom_path(screensaver_attract_state_t *state, const char *path) {
     if (!state || !path || path[0] == '\0') {
         return;
     }
 
-    state->sample_seen++;
-    if (state->sample_count < SCREENSAVER_ATTRACT_SAMPLE_MAX) {
-        char **next = realloc(state->samples, (size_t)(state->sample_count + 1) * sizeof(char *));
+    if (state->pool_count >= state->pool_capacity) {
+        int next_capacity = state->pool_capacity > 0 ? (state->pool_capacity * 2) : 256;
+        char **next = realloc(state->pool, (size_t)next_capacity * sizeof(char *));
         if (!next) {
             return;
         }
-        state->samples = next;
-        state->samples[state->sample_count] = strdup(path);
-        if (!state->samples[state->sample_count]) {
-            return;
-        }
-        state->sample_count++;
-        state->scanned_game_count++;
-        return;
+        state->pool = next;
+        state->pool_capacity = next_capacity;
     }
 
-    uint32_t slot = attract_rng_next(state) % state->sample_seen;
-    if (slot < SCREENSAVER_ATTRACT_SAMPLE_MAX) {
-        char *replacement = strdup(path);
-        if (!replacement) {
-            return;
-        }
-        free(state->samples[slot]);
-        state->samples[slot] = replacement;
+    state->pool[state->pool_count] = strdup(path);
+    if (!state->pool[state->pool_count]) {
+        return;
     }
+    state->pool_count++;
     state->scanned_game_count++;
 }
 
@@ -500,7 +334,7 @@ static void attract_scan_one_dir(screensaver_attract_state_t *state) {
             if (!(at_root && attract_should_skip_root_file(info.d_name))) {
                 path_t *candidate = path_clone_push(dir_path, info.d_name);
                 if (candidate) {
-                    attract_sample_rom_path(state, path_get(candidate));
+                    attract_add_rom_path(state, path_get(candidate));
                     path_free(candidate);
                 }
             }
@@ -569,13 +403,13 @@ static void attract_ensure_prompt_icon(screensaver_attract_state_t *state) {
 }
 
 static bool attract_load_feature(menu_t *menu, screensaver_attract_state_t *state, int index) {
-    if (!menu || !state || index < 0 || index >= state->sample_count) {
+    if (!menu || !state || index < 0 || index >= state->pool_count) {
         return false;
     }
 
-    path_t *rom_path = path_create(state->samples[index]);
+    path_t *rom_path = path_create(state->pool[index]);
     if (!rom_path) {
-        attract_remove_sample(state, index);
+        attract_remove_pool_entry(state, index);
         return false;
     }
 
@@ -587,11 +421,11 @@ static bool attract_load_feature(menu_t *menu, screensaver_attract_state_t *stat
     rom_err_t err = rom_config_load_ex(rom_path, &rom_info, &options);
     path_free(rom_path);
     if (err != ROM_OK) {
-        attract_remove_sample(state, index);
+        attract_remove_pool_entry(state, index);
         return false;
     }
     if (attract_is_low_signal_feature(&rom_info)) {
-        attract_remove_sample(state, index);
+        attract_remove_pool_entry(state, index);
         return false;
     }
 
@@ -603,8 +437,6 @@ static bool attract_load_feature(menu_t *menu, screensaver_attract_state_t *stat
     );
 
     attract_clear_feature(state);
-    state->transition_style = (uint8_t)(attract_rng_next(state) & 1u);
-    state->transition_reverse = (attract_rng_next(state) & 1u) != 0;
     state->current_rom_info = rom_info;
     state->current_index = index;
     state->boxart = boxart;
@@ -612,29 +444,29 @@ static bool attract_load_feature(menu_t *menu, screensaver_attract_state_t *stat
 }
 
 static void attract_pick_next_feature(menu_t *menu, screensaver_attract_state_t *state) {
-    if (!menu || !state || state->sample_count <= 0) {
+    if (!menu || !state || state->pool_count <= 0) {
         attract_clear_feature(state);
         return;
     }
 
-    int start = (int)(attract_rng_next(state) % (uint32_t)state->sample_count);
-    for (int offset = 0; offset < state->sample_count; offset++) {
-        int index = (start + offset) % state->sample_count;
-        if (state->sample_count > 1 && index == state->current_index) {
+    int start = (int)(attract_rng_next(state) % (uint32_t)state->pool_count);
+    for (int offset = 0; offset < state->pool_count; offset++) {
+        int index = (start + offset) % state->pool_count;
+        if (state->pool_count > 1 && index == state->current_index) {
             continue;
         }
         if (attract_load_feature(menu, state, index)) {
             return;
         }
-        if (state->sample_count <= 0) {
+        if (state->pool_count <= 0) {
             break;
         }
-        if (index >= state->sample_count) {
+        if (index >= state->pool_count) {
             index = 0;
         }
     }
 
-    if (state->current_index < 0 && state->sample_count > 0) {
+    if (state->current_index < 0 && state->pool_count > 0) {
         attract_load_feature(menu, state, 0);
     }
 }
@@ -660,12 +492,13 @@ void screensaver_attract_deinit(screensaver_attract_state_t *state) {
         return;
     }
     attract_clear_feature(state);
-    for (int i = 0; i < state->sample_count; i++) {
-        free(state->samples[i]);
+    for (int i = 0; i < state->pool_count; i++) {
+        free(state->pool[i]);
     }
-    free(state->samples);
-    state->samples = NULL;
-    state->sample_count = 0;
+    free(state->pool);
+    state->pool = NULL;
+    state->pool_count = 0;
+    state->pool_capacity = 0;
     for (int i = 0; i < state->scan_stack_count; i++) {
         free(state->scan_stack[i]);
     }
@@ -675,7 +508,6 @@ void screensaver_attract_deinit(screensaver_attract_state_t *state) {
     state->scan_stack_capacity = 0;
     state->scan_started = false;
     state->scan_complete = false;
-    state->sample_seen = 0;
     state->scanned_game_count = 0;
     if (state->prompt_icon) {
         sprite_free(state->prompt_icon);
@@ -690,12 +522,11 @@ void screensaver_attract_activate(menu_t *menu, screensaver_attract_state_t *sta
     }
     state->rng ^= (uint32_t)get_ticks_us();
     attract_rng_next(state);
-    state->featured_time_s = 0.0f;
     attract_ensure_prompt_icon(state);
     if (!state->scan_started) {
         attract_begin_scan(menu, state);
     }
-    if (state->sample_count > 0) {
+    if (state->scan_complete && state->pool_count > 0) {
         attract_pick_next_feature(menu, state);
     }
 }
@@ -719,7 +550,7 @@ void screensaver_attract_step(menu_t *menu, screensaver_attract_state_t *state, 
     }
 
     if (state->current_index < 0) {
-        if (state->sample_count > 0) {
+        if (state->scan_complete && state->pool_count > 0) {
             attract_pick_next_feature(menu, state);
         }
         return;
@@ -732,14 +563,14 @@ void screensaver_attract_step(menu_t *menu, screensaver_attract_state_t *state, 
 }
 
 bool screensaver_attract_open_current(menu_t *menu, screensaver_attract_state_t *state) {
-    if (!menu || !state || state->current_index < 0 || state->current_index >= state->sample_count) {
+    if (!menu || !state || state->current_index < 0 || state->current_index >= state->pool_count) {
         return false;
     }
 
     if (menu->load.rom_path) {
         path_free(menu->load.rom_path);
     }
-    menu->load.rom_path = path_create(state->samples[state->current_index]);
+    menu->load.rom_path = path_create(state->pool[state->current_index]);
     if (!menu->load.rom_path) {
         return false;
     }
@@ -756,7 +587,7 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
 
     ui_components_background_draw();
 
-    if (!state || state->current_index < 0 || state->current_index >= state->sample_count) {
+    if (!state || state->current_index < 0 || state->current_index >= state->pool_count) {
         ui_components_box_draw(
             VISIBLE_AREA_X0 + 12,
             VISIBLE_AREA_Y0 + 18,
@@ -891,7 +722,7 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
     }
 
     char play_line[80];
-    playtime_entry_t *playtime = playtime_get_if_cached(&menu->playtime, state->samples[state->current_index]);
+    playtime_entry_t *playtime = playtime_get_if_cached(&menu->playtime, state->pool[state->current_index]);
     attract_format_last_played(play_line, sizeof(play_line), playtime ? playtime->last_played : 0);
     rdpq_text_print(
         &(rdpq_textparms_t){
@@ -1003,5 +834,4 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
 
     attract_draw_boxart(state);
 
-    attract_draw_transition(state);
 }
