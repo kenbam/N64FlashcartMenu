@@ -89,6 +89,9 @@ static bool path_has_ext_ci(const char *path, const char *ext) {
 }
 
 static void menu_bgm_set_meter_from_pcm(const void *samples_ptr, int samples, int channels, int bits) {
+    if (!sound_bgm_meter_enabled()) {
+        return;
+    }
     if (!samples_ptr || samples <= 0 || channels <= 0) {
         sound_bgm_meter_reset();
         return;
@@ -546,6 +549,7 @@ static void menu_init (boot_params_t *boot_params) {
     ui_components_background_set_visualizer(menu->settings.background_visualizer_enabled);
     ui_components_background_set_visualizer_style(menu->settings.background_visualizer_style);
     ui_components_background_set_visualizer_intensity(menu->settings.background_visualizer_intensity);
+    sound_bgm_meter_enable(menu->settings.background_visualizer_enabled);
     ui_components_set_selected_row_shimmer(menu->settings.selected_row_shimmer_enabled);
     path_pop(path);
 

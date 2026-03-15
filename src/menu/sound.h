@@ -90,5 +90,7 @@ void sound_poll(void);
 void sound_bgm_meter_reset(void);
 void sound_bgm_meter_set(const sound_bgm_meter_t *meter);
 bool sound_bgm_meter_get(sound_bgm_meter_t *meter);
+void sound_bgm_meter_enable(bool enabled);
+bool sound_bgm_meter_enabled(void);
 
 #endif /* SOUND_H__ */

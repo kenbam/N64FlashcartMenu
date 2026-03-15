@@ -34,6 +34,7 @@ typedef struct {
 
     mp3dec_t dec; /**< MP3 decoder */
     mp3dec_frame_info_t info; /**< MP3 frame information */
+    mp3d_sample_t decode_scratch[MINIMP3_MAX_SAMPLES_PER_FRAME]; /**< Scratch buffer for one decoded frame */
 
     int seek_predecode_frames; /**< Number of frames to pre-decode when seeking */
     float duration; /**< Duration of the MP3 file */
@@ -94,19 +95,17 @@ static void mp3player_wave_read (void *ctx, samplebuffer_t *sbuf, int wpos, int 
     while (wlen > 0) {
         mp3player_fill_buffer();
 
-        int samples = mp3dec_decode_frame(&p->dec, p->buffer_ptr, p->buffer_left, NULL, &p->info);
+        int samples = mp3dec_decode_frame(&p->dec, p->buffer_ptr, p->buffer_left, p->decode_scratch, &p->info);
 
         if (samples > 0) {
-            short *buffer = (short *) (samplebuffer_append(sbuf, samples));
-
             p->buffer_ptr += p->info.frame_offset;
             p->buffer_left -= p->info.frame_offset;
 
-            mp3dec_decode_frame(&p->dec, p->buffer_ptr, p->buffer_left, buffer, &p->info);
+            short *buffer = (short *) (samplebuffer_append(sbuf, samples));
+            memcpy(buffer, p->decode_scratch, (size_t)samples * (size_t)p->info.channels * sizeof(short));
 
-            // Capture a lightweight normalized meter from decoded PCM so UI visualizers
-            // can react to real menu music without re-decoding audio.
-            if (samples > 0 && p->info.channels > 0) {
+            // Only compute meter values when the visualizer is actively using them.
+            if (sound_bgm_meter_enabled() && samples > 0 && p->info.channels > 0) {
                 int channels = p->info.channels;
                 uint32_t sum_abs_l = 0;
                 uint32_t sum_abs_r = 0;
@@ -252,8 +251,6 @@ mp3player_err_t mp3player_load (char *path) {
     if ((p->f = fopen(path, "rb")) == NULL) {
         return MP3PLAYER_ERR_IO;
     }
-    setbuf(p->f, NULL);
-
     struct stat st;
     if (fstat(fileno(p->f), &st)) {
         fclose(p->f);

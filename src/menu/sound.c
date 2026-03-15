@@ -15,6 +15,7 @@
 
 static wav64_t sfx_cursor, sfx_error, sfx_enter, sfx_exit, sfx_setting;
 static sound_bgm_meter_t bgm_meter = {0};
+static bool bgm_meter_enabled = false;
 
 static bool sound_initialized = false;
 static bool sfx_enabled = false;
@@ -152,6 +153,10 @@ void sound_bgm_meter_reset(void) {
 }
 
 void sound_bgm_meter_set(const sound_bgm_meter_t *meter) {
+    if (!bgm_meter_enabled) {
+        sound_bgm_meter_reset();
+        return;
+    }
     if (!meter) {
         sound_bgm_meter_reset();
         return;
@@ -160,9 +165,20 @@ void sound_bgm_meter_set(const sound_bgm_meter_t *meter) {
 }
 
 bool sound_bgm_meter_get(sound_bgm_meter_t *meter) {
-    if (!meter || !bgm_meter.valid) {
+    if (!bgm_meter_enabled || !meter || !bgm_meter.valid) {
         return false;
     }
     *meter = bgm_meter;
     return true;
+}
+
+void sound_bgm_meter_enable(bool enabled) {
+    bgm_meter_enabled = enabled;
+    if (!enabled) {
+        sound_bgm_meter_reset();
+    }
+}
+
+bool sound_bgm_meter_enabled(void) {
+    return bgm_meter_enabled;
 }

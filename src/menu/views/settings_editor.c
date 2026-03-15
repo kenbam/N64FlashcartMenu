@@ -214,6 +214,7 @@ static void set_use_rom_fast_reboot_enabled_type (menu_t *menu, void *arg) {
 static void set_background_visualizer_enabled_type (menu_t *menu, void *arg) {
     menu->settings.background_visualizer_enabled = (bool)(uintptr_t)(arg);
     ui_components_background_set_visualizer(menu->settings.background_visualizer_enabled);
+    sound_bgm_meter_enable(menu->settings.background_visualizer_enabled);
     settings_save(&menu->settings);
 }
 
