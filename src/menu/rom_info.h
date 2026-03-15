@@ -20,6 +20,12 @@
 #define ROM_METADATA_MODES_LENGTH       96
 #define ROM_METADATA_SHORT_DESC_LENGTH  256
 #define ROM_METADATA_LONG_DESC_LENGTH   1536
+#define ROM_METADATA_CURATED_FIELD_LENGTH 256
+#define ROM_METADATA_CURATED_LIST_LENGTH  768
+#define ROM_METADATA_CURATOR_LENGTH     1024
+#define ROM_METADATA_MUSEUM_LENGTH      1536
+#define ROM_METADATA_TRIVIA_LENGTH      768
+#define ROM_METADATA_RECEPTION_LENGTH   768
 #define ROM_STABLE_ID_LENGTH            32
 #define ROM_CONFIG_PATH_LENGTH          320
 
@@ -203,6 +209,23 @@ typedef struct {
         char modes[ROM_METADATA_MODES_LENGTH]; /**< Metadata mode tags (co-op, versus, etc.) */
         char short_desc[ROM_METADATA_SHORT_DESC_LENGTH]; /**< Metadata short description */
         char long_desc[ROM_METADATA_LONG_DESC_LENGTH];   /**< Metadata long description */
+        char hook[ROM_METADATA_CURATED_FIELD_LENGTH];    /**< Curated one-line hook */
+        char why_play[ROM_METADATA_CURATED_FIELD_LENGTH]; /**< Curated why-play note */
+        char vibe[ROM_METADATA_CURATED_FIELD_LENGTH];    /**< Curated vibe summary */
+        char notable[ROM_METADATA_CURATED_FIELD_LENGTH]; /**< Curated notable note */
+        char context[ROM_METADATA_CURATED_FIELD_LENGTH]; /**< Curated context note */
+        char play_curator_note[ROM_METADATA_CURATED_FIELD_LENGTH]; /**< Pairing / curator note */
+        char tags[ROM_METADATA_CURATED_FIELD_LENGTH];    /**< Curated tag list */
+        char warnings[ROM_METADATA_CURATED_LIST_LENGTH]; /**< Curated warnings */
+        char museum_card[ROM_METADATA_CURATED_LIST_LENGTH]; /**< Museum card fields */
+        char trivia_museum[ROM_METADATA_TRIVIA_LENGTH];  /**< Museum trivia list */
+        char oddities[ROM_METADATA_CURATED_LIST_LENGTH]; /**< Museum oddities */
+        char design_quirks[ROM_METADATA_CURATED_LIST_LENGTH]; /**< Museum design quirks */
+        char discovery_prompts[ROM_METADATA_CURATED_LIST_LENGTH]; /**< Museum discovery prompts */
+        char curator[ROM_METADATA_CURATOR_LENGTH];       /**< Curated play summary and recommendations */
+        char museum[ROM_METADATA_MUSEUM_LENGTH];         /**< Museum-style notes and prompts */
+        char trivia[ROM_METADATA_TRIVIA_LENGTH];         /**< Metadata trivia / history notes */
+        char reception[ROM_METADATA_RECEPTION_LENGTH];   /**< Metadata reception / review notes */
     } metadata;                     /**< The ROM metadata */
 } rom_info_t;
 

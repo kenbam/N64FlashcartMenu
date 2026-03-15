@@ -855,6 +855,25 @@ static void read_text_file_to_buffer (const char *path, char *buffer, size_t buf
     fclose(file);
 }
 
+static void read_metadata_text_file_if_missing(path_t *directory, bool enabled, const char *filename, char *buffer, size_t buffer_length) {
+    if (!enabled || (directory == NULL) || (filename == NULL) || (buffer == NULL) || (buffer_length == 0) || (buffer[0] != '\0')) {
+        return;
+    }
+
+    path_t *text_path = path_clone(directory);
+    path_push(text_path, (char *)filename);
+    if (file_exists(path_get(text_path))) {
+        read_text_file_to_buffer(path_get(text_path), buffer, buffer_length);
+    }
+    path_free(text_path);
+}
+
+static void read_metadata_mapped_text_if_missing(path_t *directory, bool enabled, const char *mapped_filename,
+                                                 const char *default_filename, char *buffer, size_t buffer_length) {
+    const char *filename = ((mapped_filename != NULL) && (mapped_filename[0] != '\0')) ? mapped_filename : default_filename;
+    read_metadata_text_file_if_missing(directory, enabled, filename, buffer, buffer_length);
+}
+
 static char *trim_whitespace (char *string) {
     if (string == NULL) {
         return NULL;
@@ -1006,7 +1025,26 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
     }
 
     bool in_meta_section = false;
+    bool in_curated_section = false;
     char long_desc_file[128] = {0};
+    char curated_description_file[128] = {0};
+    char hook_file[128] = {0};
+    char why_play_file[128] = {0};
+    char vibe_file[128] = {0};
+    char notable_file[128] = {0};
+    char context_file[128] = {0};
+    char play_curator_note_file[128] = {0};
+    char tags_file[128] = {0};
+    char warnings_file[128] = {0};
+    char museum_card_file[128] = {0};
+    char trivia_museum_file[128] = {0};
+    char oddities_file[128] = {0};
+    char design_quirks_file[128] = {0};
+    char discovery_prompts_file[128] = {0};
+    char curator_file[128] = {0};
+    char museum_file[128] = {0};
+    char trivia_file[128] = {0};
+    char reception_file[128] = {0};
     char line[512];
 
     while (fgets(line, sizeof(line), metadata_file) != NULL) {
@@ -1030,10 +1068,11 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
             char *section_name = trim_whitespace(cursor + 1);
             lowercase_ascii(section_name);
             in_meta_section = ((strcmp(section_name, "meta") == 0) || (strcmp(section_name, "metadata") == 0));
+            in_curated_section = (strcmp(section_name, "curated") == 0);
             continue;
         }
 
-        if (!in_meta_section) {
+        if (!in_meta_section && !in_curated_section) {
             continue;
         }
 
@@ -1046,6 +1085,48 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
         char *key = trim_whitespace(cursor);
         char *value = trim_whitespace(equal_sign + 1);
         lowercase_ascii(key);
+
+        if (in_curated_section) {
+            if ((strcmp(key, "hook") == 0) && (hook_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(hook_file, sizeof(hook_file), "%s", value);
+            } else if ((strcmp(key, "why_play") == 0) && (why_play_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(why_play_file, sizeof(why_play_file), "%s", value);
+            } else if ((strcmp(key, "vibe") == 0) && (vibe_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(vibe_file, sizeof(vibe_file), "%s", value);
+            } else if ((strcmp(key, "notable") == 0) && (notable_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(notable_file, sizeof(notable_file), "%s", value);
+            } else if ((strcmp(key, "context") == 0) && (context_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(context_file, sizeof(context_file), "%s", value);
+            } else if ((strcmp(key, "play_curator_note") == 0) && (play_curator_note_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(play_curator_note_file, sizeof(play_curator_note_file), "%s", value);
+            } else if ((strcmp(key, "tags") == 0) && (tags_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(tags_file, sizeof(tags_file), "%s", value);
+            } else if ((strcmp(key, "warnings") == 0) && (warnings_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(warnings_file, sizeof(warnings_file), "%s", value);
+            } else if ((strcmp(key, "museum_card") == 0) && (museum_card_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(museum_card_file, sizeof(museum_card_file), "%s", value);
+            } else if ((strcmp(key, "trivia_museum") == 0) && (trivia_museum_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(trivia_museum_file, sizeof(trivia_museum_file), "%s", value);
+            } else if ((strcmp(key, "oddities") == 0) && (oddities_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(oddities_file, sizeof(oddities_file), "%s", value);
+            } else if ((strcmp(key, "design_quirks") == 0) && (design_quirks_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(design_quirks_file, sizeof(design_quirks_file), "%s", value);
+            } else if ((strcmp(key, "discovery_prompts") == 0) && (discovery_prompts_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(discovery_prompts_file, sizeof(discovery_prompts_file), "%s", value);
+            } else if ((strcmp(key, "curator") == 0) && (curator_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(curator_file, sizeof(curator_file), "%s", value);
+            } else if ((strcmp(key, "museum") == 0) && (museum_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(museum_file, sizeof(museum_file), "%s", value);
+            } else if ((strcmp(key, "trivia") == 0) && (trivia_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(trivia_file, sizeof(trivia_file), "%s", value);
+            } else if ((strcmp(key, "reception") == 0) && (reception_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(reception_file, sizeof(reception_file), "%s", value);
+            } else if (((strcmp(key, "full_description") == 0) || (strcmp(key, "description") == 0)) &&
+                       (curated_description_file[0] == '\0') && (value[0] != '\0')) {
+                snprintf(curated_description_file, sizeof(curated_description_file), "%s", value);
+            }
+            continue;
+        }
 
         if ((strcmp(key, "name") == 0) || (strcmp(key, "title") == 0)) {
             metadata_copy_if_empty(rom_info->metadata.name, sizeof(rom_info->metadata.name), value);
@@ -1112,15 +1193,42 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
     }
 
     // Common metadata fallback used by our generated sets.
-    if (include_long_description && rom_info->metadata.long_desc[0] == '\0') {
-        path_t *description_path = path_clone(directory);
-        path_push(description_path, "description.txt");
-        if (file_exists(path_get(description_path))) {
-            read_text_file_to_buffer(path_get(description_path), rom_info->metadata.long_desc,
-                                     sizeof(rom_info->metadata.long_desc));
-        }
-        path_free(description_path);
-    }
+    read_metadata_mapped_text_if_missing(directory, include_long_description, curated_description_file, "description.txt",
+                                         rom_info->metadata.long_desc, sizeof(rom_info->metadata.long_desc));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, hook_file, "hook.txt",
+                                         rom_info->metadata.hook, sizeof(rom_info->metadata.hook));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, why_play_file, "why_play.txt",
+                                         rom_info->metadata.why_play, sizeof(rom_info->metadata.why_play));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, vibe_file, "vibe.txt",
+                                         rom_info->metadata.vibe, sizeof(rom_info->metadata.vibe));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, notable_file, "notable.txt",
+                                         rom_info->metadata.notable, sizeof(rom_info->metadata.notable));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, context_file, "context.txt",
+                                         rom_info->metadata.context, sizeof(rom_info->metadata.context));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, play_curator_note_file, "play_curator_note.txt",
+                                         rom_info->metadata.play_curator_note, sizeof(rom_info->metadata.play_curator_note));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, tags_file, "tags.txt",
+                                         rom_info->metadata.tags, sizeof(rom_info->metadata.tags));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, warnings_file, "warnings.txt",
+                                         rom_info->metadata.warnings, sizeof(rom_info->metadata.warnings));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, museum_card_file, "museum_card.txt",
+                                         rom_info->metadata.museum_card, sizeof(rom_info->metadata.museum_card));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, trivia_museum_file, "trivia_museum.txt",
+                                         rom_info->metadata.trivia_museum, sizeof(rom_info->metadata.trivia_museum));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, oddities_file, "oddities.txt",
+                                         rom_info->metadata.oddities, sizeof(rom_info->metadata.oddities));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, design_quirks_file, "design_quirks.txt",
+                                         rom_info->metadata.design_quirks, sizeof(rom_info->metadata.design_quirks));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, discovery_prompts_file, "discovery_prompts.txt",
+                                         rom_info->metadata.discovery_prompts, sizeof(rom_info->metadata.discovery_prompts));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, curator_file, "curator.txt",
+                                         rom_info->metadata.curator, sizeof(rom_info->metadata.curator));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, museum_file, "museum.txt",
+                                         rom_info->metadata.museum, sizeof(rom_info->metadata.museum));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, trivia_file, "trivia.txt",
+                                         rom_info->metadata.trivia, sizeof(rom_info->metadata.trivia));
+    read_metadata_mapped_text_if_missing(directory, include_long_description, reception_file, "reception.txt",
+                                         rom_info->metadata.reception, sizeof(rom_info->metadata.reception));
 }
 
 static void load_rom_metadata (path_t *rom_path, rom_info_t *rom_info, bool include_long_description) {
@@ -1229,6 +1337,23 @@ static void extract_rom_info (match_t *match, rom_header_t *rom_header, rom_info
     rom_info->metadata.modes[0] = '\0';
     rom_info->metadata.short_desc[0] = '\0';
     rom_info->metadata.long_desc[0] = '\0';
+    rom_info->metadata.hook[0] = '\0';
+    rom_info->metadata.why_play[0] = '\0';
+    rom_info->metadata.vibe[0] = '\0';
+    rom_info->metadata.notable[0] = '\0';
+    rom_info->metadata.context[0] = '\0';
+    rom_info->metadata.play_curator_note[0] = '\0';
+    rom_info->metadata.tags[0] = '\0';
+    rom_info->metadata.warnings[0] = '\0';
+    rom_info->metadata.museum_card[0] = '\0';
+    rom_info->metadata.trivia_museum[0] = '\0';
+    rom_info->metadata.oddities[0] = '\0';
+    rom_info->metadata.design_quirks[0] = '\0';
+    rom_info->metadata.discovery_prompts[0] = '\0';
+    rom_info->metadata.curator[0] = '\0';
+    rom_info->metadata.museum[0] = '\0';
+    rom_info->metadata.trivia[0] = '\0';
+    rom_info->metadata.reception[0] = '\0';
     rom_info->settings.cheats_enabled = false;
     rom_info->settings.patches_enabled = false;
     rom_info->settings.patch_profile[0] = '\0';
@@ -1268,8 +1393,8 @@ static void load_rom_config_from_file (path_t *path, rom_info_t *rom_info) {
         int virtual_pak_slot = mini_get_int(rom_config_ini, NULL, "virtual_pak_slot", rom_info->settings.virtual_pak_slot);
         if (virtual_pak_slot < 1) {
             virtual_pak_slot = 1;
-        } else if (virtual_pak_slot > 8) {
-            virtual_pak_slot = 8;
+        } else if (virtual_pak_slot > 4) {
+            virtual_pak_slot = 4;
         }
         rom_info->settings.virtual_pak_slot = (uint8_t)virtual_pak_slot;
 
@@ -1671,8 +1796,8 @@ rom_err_t rom_config_setting_set_virtual_pak_enabled(path_t *path, rom_info_t *r
 rom_err_t rom_config_setting_set_virtual_pak_slot(path_t *path, rom_info_t *rom_info, uint8_t slot) {
     if (slot < 1) {
         slot = 1;
-    } else if (slot > 8) {
-        slot = 8;
+    } else if (slot > 4) {
+        slot = 4;
     }
     rom_info->settings.virtual_pak_slot = slot;
     return save_rom_config_setting_to_file(path, NULL, "virtual_pak_slot", slot, 1);
@@ -1736,6 +1861,16 @@ rom_err_t rom_config_load_ex(path_t *path, rom_info_t *rom_info, const rom_load_
         load_rom_config_from_file(path, rom_info);
     }
     load_rom_metadata(path, rom_info, effective->include_long_description);
+
+    if (path != NULL) {
+        char stable_id[ROM_STABLE_ID_LENGTH] = {0};
+        if (rom_info_get_stable_id(rom_info, stable_id, sizeof(stable_id))) {
+            rom_stable_id_cache_entry_t *slot = rom_stable_id_cache_alloc(path_get(path));
+            if (slot) {
+                snprintf(slot->stable_id, sizeof(slot->stable_id), "%s", stable_id);
+            }
+        }
+    }
 
     return ROM_OK;
 }
