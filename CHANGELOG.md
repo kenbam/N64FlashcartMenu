@@ -6,51 +6,172 @@ built from latest commit on main branch.
 - For the 64Drive, use the `menu.bin` file in the root of your SD card.
 - For the ares emulator, use the `N64FlashcartMenu.n64` file.
 
-## Branch Notes (ben/m3u-support)
+## Fork Notes (custom `main`)
 
-This section summarizes the major user-facing work added on the `ben/m3u-support` branch.
+### Overview
+- Browsing now combines filesystem browsing, `.m3u` playlists, metadata-driven smart playlists, history/favorites, playtime views, and grid-based media browsing.
+- Presentation features now include custom backgrounds, theme presets, menu music, reactive visualizers, screensavers, attract mode, richer ROM details, and manual viewing.
+- Launch-related additions now include 64DD pairing flows, virtual Controller Pak slot management, ROM patch groundwork, load-path recovery, and stronger save/config write hardening.
+- The repository now also carries local content and tooling including personal playlists, metadata snapshots, reports, playlist templates, patch examples, and helper scripts for assets and metadata.
 
-### Playlists and Browser
-- Added `.m3u` playlist support for ROM browsing, including preserved playlist order (`custom` sort mode). (`ce7c65c1`)
-- Added browser sorting modes (`Custom`, `A-Z`, `Z-A`) and persisted sort preference in settings. (`890a835b`, `9f4d5d96`)
-- Added random game jump from the browser and later smart-random modes with persistence. (`35aae24e`, `40b4cc0c`)
-- Refined file list row rendering and selector alignment / visible-row handling. (`09a22fe6`)
-- Clipped scrollable UI regions and reduced action-bar crowding. (`d78c0c0b`)
+### Browser, Playlists, and Library Navigation
+- Added `.m3u` playlist browsing with preserved playlist order through `Custom` sorting. (`ce7c65c1`)
+- Added browser sort modes (`Custom`, `A-Z`, `Z-A`) and persisted sort selection in settings. (`890a835b`, `9f4d5d96`)
+- Added browser random jump and later smart-random browsing modes with persistent selection. (`35aae24e`, `25e002ac`, `40b4cc0c`, `d3a58a2f`)
+- Added playlist profile intro toasts and companion text/context handling for playlist presentation. (`019a2364`, `ced29ac4`)
+- Improved browser UX with faster scrolling, cleaner list behavior, selector alignment fixes, clipped scroll regions, better empty-folder escape, and hiding of Datel sidecar clutter. (`3b28ea5f`, `09a22fe6`, `d78c0c0b`, `3ec19fb7`)
+- Expanded favorites capacity and improved navigation from history/playtime-driven entry points. (`bc3ce63a`, `a9e57fd0`, `5054f486`)
+- Additional browsing changes:
+- normal filesystem browsing
+- playlist browsing with preserved authored order
+- random pick / smart-random pick flows
+- favorites and recently played entry points
+- playtime leaderboard and play-history style discovery
+- playlist-led curated browsing rather than only folder-led browsing
 
-### ROM Metadata and Details
-- Improved ROM details screen with metadata database loading and richer metadata display. (`e8a6275c`)
-- Hardened metadata parsing and expanded description handling. (`91da44af`)
-- Added `description.txt` fallback loading for full descriptions. (`01a2e915`)
-- Added metadata boxart fallback behavior for improved image coverage. (`890a835b`)
-- Added save backend and save file health information to ROM details. (`3ee948cd`)
+### Smart Playlists, ROM Identity, and Discovery
+- Added metadata-driven smart playlists and expanded their rule set. (`259b6347`, `35c4da35`)
+- Added ROM identity tracking so playlists and references can survive moved ROM paths. (`1beef2d0`, `e1119ead`, `b25cebe1`)
+- Added descriptive text for fun playlists and fixed blank playlist description panels. (`057cb422`, `97de0ae3`)
+- Added and documented playlist performance telemetry and the internal 3-tier cache model. (`9fe524cf`, `6e754ec7`)
+- Additional smart-playlist and discovery changes:
+- metadata-derived library slices
+- playlist references that can survive path churn
+- companion text/context files for curated lists
+- telemetry and caching work to keep heavier discovery features responsive
 
-### Playtime and Session Tracking
-- Added per-game playtime tracking (including total time and last played display). (`a2e6c76d`)
-- Added recent play session tracking in bookkeeping/history. (`c0e9ed0f`)
-- Added a playtime leaderboard tab and navigation. (`639b1d43`)
+### Grid View and Media Browsing
+- Added playlist boxart grid view with toggle shortcuts. (`cef0a124`, `05f136e0`)
+- Reworked grid loading with queued thumbnail prep, metadata caching, neighboring-page prefetch, LRU caching, incremental prewarm, and cleaner tile rendering. (`b075dae5`, `59178952`, `005b86f9`, `39e3a0bd`, `87b93981`)
+- Simplified grid rendering by removing redundant fallback work, dead cache paths, white selection fill, and grid-only thumbnail behavior that was not paying for itself. (`5939d16e`, `4d775edf`, `bdaf1f7d`, `1fbecb5a`)
+- Added lightweight ROM-header reads and cached boxart directory resolution to reduce repeated SD lookups. (`8603d874`, `30993627`, `9f073d26`)
+- Additional media-browsing changes:
+- a dedicated playlist grid mode
+- queued thumbnail generation and caching
+- neighboring-page prefetch and prewarm logic
+- lighter ROM-header probes and reduced repeated SD-card stats
+- cleanup passes that removed grid work that hurt responsiveness without enough payoff
 
-### Menu Audio and MP3 Experience
-- Added menu BGM autoplay with MP3 playback stability improvements. (`62b9142e`)
-- Added settings support to enable/disable menu BGM and choose a menu music file from `sd:/menu/music/`. (`15aa6241`)
-- Fixed playlist BGM override path handling for absolute prefixed paths (e.g. `sd:/...`). (`70936409`)
+### ROM Details, Metadata, Saves, and Manuals
+- Expanded the ROM details screen to load metadata from the menu database and show richer per-game information. (`e8a6275c`)
+- Hardened metadata parsing and added `description.txt` fallback handling for full descriptions. (`91da44af`, `01a2e915`)
+- Added metadata boxart fallback behavior and improved ROM-detail performance by moving repeated SD access out of the render loop. (`890a835b`, `2d577d03`, `ad730c50`)
+- Added save backend and save-file health visibility in ROM details. (`3ee948cd`)
+- Added release-year enrichment and SC64-backed playtime bookkeeping. (`5c5a2c20`)
+- Added native manual support with image-backed viewing, then removed only the tiled-manual beta path while keeping the manual feature itself and a manual availability indicator. (`27209739`, `74f8059c`, `9ae2b9cc`)
+- Hardened manual/image loading with duplicate-load removal, dimension caps, path sanitizing, and lower stack pressure. (`85e7ad64`, `d1fe5b6e`, `a386565d`, `05a2cd76`, `8bc63d42`)
+- Additional ROM-detail and manual changes:
+- database metadata with richer description support
+- boxart fallback behavior
+- save-backend and save-health visibility
+- release-year enrichment
+- manual availability detection
+- native image-backed manual viewing
+- lower-I/O ROM detail rendering compared with earlier builds
 
-### Visual Customization and Themes
-- Added configurable text panel overlay (including opacity/alpha) to improve readability over backgrounds. (`c332a085`, `d1f26a2d`)
-- Added in-menu background image picker entry. (`2abfef26`)
-- Added theme presets and theme selection support in settings. (`df2279d0`)
+### Playtime, History, and Bookkeeping
+- Added per-game playtime tracking with total time and last-played visibility. (`a2e6c76d`)
+- Added recent play-session tracking and a playtime leaderboard tab. (`c0e9ed0f`, `639b1d43`)
+- Tightened playtime storage and lookup behavior with cached-only lookups, INI bounds checks, safer formatting, and deferred writes. (`52a1cc85`, `b4a9e50a`, `b631dd83`, `02fa7221`)
+- Additional bookkeeping changes:
+- per-game total playtime
+- recent-session tracking
+- last-played style visibility
+- playtime leaderboard surfacing
+- safer and cheaper writes than the earlier implementation
 
-### Screensaver
-- Added idle DVD-logo screensaver. (`df2279d0`)
-- Added selectable screensaver logos from `sd:/menu/screensavers/`. (`15aa6241`)
-- Added screensaver smooth mode / motion tuning and configurable safe margins for display crop compensation. (`a16342b1`)
+### Themes, Backgrounds, Music, and Visualizers
+- Added menu BGM autoplay and improved MP3 playback stability. (`62b9142e`)
+- Added selectable menu music from `sd:/menu/music/`, then extended menu audio/background handling with WAV64 support and media-pipeline acceleration. (`15aa6241`, `4472ea81`, `99374aca`)
+- Added configurable text-panel overlays to improve readability over custom backgrounds. (`c332a085`, `d1f26a2d`)
+- Added in-menu background image picking, theme presets, additional themes, and a selected-row shimmer toggle. (`2abfef26`, `df2279d0`, `4444ebb0`, `e4172657`)
+- Added music-reactive visualizer backgrounds including pulse wash, sunburst, and oscilloscope styles. (`41f650ae`, `274bce3a`, `b7146275`)
+- Added playlist-level presentation overrides for theme, background, music, and visualizer behavior. (`7f7d1d91`, `70936409`, `b7146275`)
+- Additional presentation changes:
+- theme presets and additional themes
+- per-menu background image selection
+- selectable menu music
+- MP3 plus WAV64-backed audio handling
+- readability overlays over custom art
+- playlist-specific visual and audio overrides
+- reactive background modes rather than only static backdrops
 
-### Per-Playlist Immersion Overrides
-- Added temporary per-playlist theme, background, and BGM overrides via M3U comment directives (restored on exit). (`7f7d1d91`)
+### Screensavers and Attract Mode
+- Added the idle DVD-logo screensaver and support for selectable custom screensaver logos from `sd:/menu/screensavers/`. (`df2279d0`, `15aa6241`)
+- Added safe margins and motion tuning for display-crop compensation. (`a16342b1`)
+- Added random and attract-mode screensavers, polished the attract description panel, and tuned attract pacing. (`87233637`, `7cd306c6`, `cf8298aa`)
+- Refined the broader screensaver system, including pipes and living-gradient variants with textured blob rendering. (`a78e44ae`, `5be77748`, `fb5f83cb`, `994f784b`)
+- Later removed the heavy attract transition effect and fixed attract selection so it draws from the full discovered pool instead of feeling biased toward early-scanned games. (`bac60710`)
+- Additional screensaver changes:
+- DVD-logo idle mode
+- random screensaver selection
+- attract mode with rotating games
+- pipes and living-gradient variants
+- custom logo loading from SD
+- safer attract behavior after transition removal and full-pool randomization fixes
 
-#### Supported M3U directives
+### 64DD Pairing and Combo Launch
+- Added 64DD pairing helpers, remembered disk preferences, and browser-picker support for combo ROM flows. (`19a2be3f`, `8049f245`, `b92d343c`)
+- Added auto-launch for single compatible disks and filtering/picker logic for multiple candidates. (`2127de9a`, `d3a010d3`)
+- Added fallback behavior for missing or unmatched disks, including explicit ROM-only launch. (`a2733e16`, `4635f6f9`, `ffad2d8f`)
+- Preserved combo auto-launch through the load-disk flow and later avoided unnecessary whole-card discovery scans. (`1ca45746`, `7415b486`)
+- Restored and refined the 64DD pairing flow after merge work. (`423af155`)
+- Additional 64DD changes:
+- remembered disk pairing preferences
+- combo-ROM-aware browser pickers
+- auto-launch for simple one-match cases
+- ROM-only fallback when no good disk match exists
+- fewer expensive whole-card scans during discovery
+
+### Virtual Controller Pak
+- Added per-ROM virtual Controller Pak slots stored on SD card. (`c5f7c733`)
+- Hardened the early virtual Pak work and reduced related playlist-loading overhead. (`145d9fff`)
+- Reworked the feature into a safer physical-Pak swap flow with four slots per game, clearer slot controls, better physical-Pak detection, and stronger launch validation. (`1eff3028`)
+- Fixed blank error-box behavior so launch failures show real text instead of a tiny empty black box. (`1eff3028`)
+- Added progress reporting during virtual Pak backup, load, and verify stages so pre-launch swaps do not look like a frozen UI. (`1eff3028`)
+- Added journaled recovery for interrupted sessions, browser-side recovery handling, and force-clear behavior for abandoned recovery state. (`1eff3028`)
+- Additional virtual Pak changes:
+- per-game SD-backed pak slots
+- four slots per game
+- physical Controller Pak required on original hardware
+- clearer error messaging around hardware requirements
+- visible progress during swap work
+- recovery journaling rather than a one-shot blind swap
+- browser-level recovery handling for pending sessions
+
+### Performance, Reliability, and Safety Hardening
+- Reduced SD-card I/O in hot paths through cached favorites, static-playlist caches, prewarm tuning, deferred heavy overrides, and playlist/load-path caching. (`4a8dff40`, `beaf04c3`, `ec68e03f`, `e7722a01`, `0f6bb857`, `35bbd7eb`, `af11844a`, `02fa7221`)
+- Poll-audio safeguards were added during heavier smart-playlist scans to reduce BGM dropouts. (`f24451c7`)
+- Hardened writes with atomic `mini_save`, FAT32-safe rename handling, atomic INI writes, controller pak dump safety, and `.tmp` recovery when loading INI files. (`dfd07f0d`, `4f87b9f9`, `f034a0e7`, `cceb93d8`, `86eac8d8`)
+- Fixed broader memory-safety and robustness issues including unchecked realloc, double-free risk, signed-overflow growth, null-guarding, stack reduction, and widespread `snprintf` conversions. (`57d2ce70`, `52a1cc85`, `bfef645c`, `4a7c62bb`, `0b388958`, `d1badfe0`, `572dbce2`, `de1f0afd`)
+- Enabled `-Wextra` and cleaned up the warning fallout across the codebase. (`a90a6cc0`)
+- Additional reliability changes:
+- much less per-frame or repeated SD I/O in browse/detail flows
+- safer write patterns for config and pak-related files
+- more resilience to resets/power loss during file updates
+- lower stack pressure and fewer avoidable allocation hazards
+- more compiler-driven cleanup than upstream
+
+### ROM Patch Groundwork
+- Added experimental ROM patch pipeline groundwork and later hardened the patch path with safer buffers and null guards. (`ef5843d9`, `0b388958`)
+- Patch support in this fork is still groundwork-oriented rather than a finished flagship feature, but the menu and docs now carry examples and infrastructure for patch-driven workflows.
+
+### Documentation, Tooling, and Fork Content
+- Refreshed customized build documentation and added branch/fork feature writeups in the changelog and README. (`3ee113c4`, `12a19e95`, `0503b80e`, `5dec6046`, `c8246c09`, `e00937da`, `c20b4bf6`)
+- Documented playlist immersion directives, visualizer behavior, and asset conversion helpers. (`473a3412`, `602e29f7`)
+- Added backup docs, playlist templates, and tracked local metadata/playlist snapshots used by this fork. (`2272eb51`, `432deaa5`, `04d3ca71`, `a914b263`, `cfe7ac8f`)
+- Repository content added by the fork now includes:
+- example playlists and patch examples
+- personal curated playlists by year, genre, studio, history, and ranked themes
+- metadata and playlist audit reports
+- menu asset tooling and metadata helper scripts
+- manual-build experiments and planning docs
+- branch-specific docs for backups, ideas, firmware notes, and feature behavior
+
+### Supported playlist directives
 - `#SC64_THEME=...`
-- `#SC64_BACKGROUND=...` (or `#SC64_BG=...`)
-- `#SC64_BGM=...` (or `#SC64_MUSIC=...`)
+- `#SC64_BACKGROUND=...` or `#SC64_BG=...`
+- `#SC64_BGM=...` or `#SC64_MUSIC=...`
 
 ## Release Notes 2025-12-04 - Tagged 0.3.1
 
