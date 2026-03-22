@@ -117,6 +117,8 @@ SOUNDS = \
 IMAGES = \
 	attract_a_button.png
 
+$(FILESYSTEM_DIR)/attract_a_button.sprite: MKSPRITE_FLAGS+=-f RGBA32
+
 OBJS = $(addprefix $(BUILD_DIR)/, $(addsuffix .o,$(basename $(SRCS))))
 MINIZ_OBJS = $(filter $(BUILD_DIR)/libs/miniz/%.o,$(OBJS))
 SPNG_OBJS = $(filter $(BUILD_DIR)/libs/libspng/%.o,$(OBJS))

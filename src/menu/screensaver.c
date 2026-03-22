@@ -154,6 +154,17 @@ void screensaver_update_state(menu_t *menu) {
         return;
     }
 
+    if (screensaver.active && screensaver_get_style(menu) == SCREENSAVER_STYLE_ATTRACT) {
+        if (menu->actions.go_left) {
+            screensaver_attract_cycle_current(menu, &screensaver.attract, -1);
+            return;
+        }
+        if (menu->actions.go_right) {
+            screensaver_attract_cycle_current(menu, &screensaver.attract, 1);
+            return;
+        }
+    }
+
     if (menu_has_any_input(menu)) {
         screensaver_reset(menu);
         return;

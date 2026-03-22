@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "fonts.h"
 #include "path.h"
@@ -13,6 +14,7 @@
 
 #define SCREENSAVER_ATTRACT_ROTATE_SECONDS   (30.0f)
 #define SCREENSAVER_ATTRACT_SCAN_DIRS_FRAME  (2)
+#define SCREENSAVER_ATTRACT_FINALIZE_BUDGET  (48)
 #define SCREENSAVER_ATTRACT_SCROLL_HOLD_S    (1.4f)
 #define SCREENSAVER_ATTRACT_SCROLL_PX_PER_S  (18.0f)
 
@@ -31,9 +33,259 @@ static const char *attract_library_roots[] = {
     NULL,
 };
 
+typedef enum {
+    ATTRACT_ROOT_STANDARD = 0,
+    ATTRACT_ROOT_TRANSLATIONS,
+    ATTRACT_ROOT_AFTERMARKET,
+    ATTRACT_ROOT_N64DD,
+} attract_root_class_t;
+
 static uint32_t attract_rng_next(screensaver_attract_state_t *state) {
     state->rng = (state->rng * 1664525u) + 1013904223u;
     return state->rng;
+}
+
+static attract_root_class_t attract_classify_root(const char *path) {
+    if (!path) {
+        return ATTRACT_ROOT_STANDARD;
+    }
+    if (strstr(path, "/N64 - Translations/") || strstr(path, "/N64 - Translations\\")) {
+        return ATTRACT_ROOT_TRANSLATIONS;
+    }
+    if (strstr(path, "/N64 - Aftermarket/") || strstr(path, "/N64 - Aftermarket\\")) {
+        return ATTRACT_ROOT_AFTERMARKET;
+    }
+    if (strstr(path, "/N64 - N64DD/") || strstr(path, "/N64 - N64DD\\")) {
+        return ATTRACT_ROOT_N64DD;
+    }
+    return ATTRACT_ROOT_STANDARD;
+}
+
+static int attract_standard_root_rank(const char *path) {
+    if (!path) {
+        return 3;
+    }
+    if (strstr(path, "/N64 - USA/") || strstr(path, "/N64 - USA\\")) {
+        return 0;
+    }
+    if (strstr(path, "/N64 - EU/") || strstr(path, "/N64 - EU\\")) {
+        return 1;
+    }
+    if (strstr(path, "/N64 - JP/") || strstr(path, "/N64 - JP\\")) {
+        return 2;
+    }
+    return 3;
+}
+
+static bool attract_is_region_token(const char *token) {
+    if (!token || token[0] == '\0') {
+        return false;
+    }
+    return strstr(token, "usa") || strstr(token, "europe") || strstr(token, "euro") ||
+        strstr(token, "japan") || strstr(token, "jp") || strstr(token, "world") ||
+        strstr(token, "germany") || strstr(token, "france") || strstr(token, "italy") ||
+        strstr(token, "spain") || strstr(token, "australia") || strstr(token, "canada") ||
+        strstr(token, "korea") || strstr(token, "beta") || strstr(token, "proto") ||
+        strstr(token, "rev ") || strstr(token, "rev") || strstr(token, "v1.") ||
+        strstr(token, "v2.") || strstr(token, "v3.") || strstr(token, "demo");
+}
+
+static bool attract_build_dedupe_key(const char *path, char out[96]) {
+    if (!path || !out) {
+        return false;
+    }
+
+    const char *base = strrchr(path, '/');
+    const char *base2 = strrchr(path, '\\');
+    if (base2 && (!base || base2 > base)) {
+        base = base2;
+    }
+    base = base ? (base + 1) : path;
+
+    size_t len = strcspn(base, ".");
+    if (len == 0) {
+        return false;
+    }
+
+    char raw[192];
+    if (len >= sizeof(raw)) {
+        len = sizeof(raw) - 1;
+    }
+    memcpy(raw, base, len);
+    raw[len] = '\0';
+
+    char simplified[192];
+    size_t wi = 0;
+    for (size_t i = 0; raw[i] != '\0' && wi + 1 < sizeof(simplified); i++) {
+        if (raw[i] == '(' || raw[i] == '[') {
+            char closer = (raw[i] == '(') ? ')' : ']';
+            size_t start = i + 1;
+            while (raw[i] != '\0' && raw[i] != closer) {
+                i++;
+            }
+            size_t token_len = (raw[i] == closer && i > start) ? (i - start) : 0;
+            char token[64];
+            if (token_len >= sizeof(token)) token_len = sizeof(token) - 1;
+            if (token_len > 0) {
+                memcpy(token, &raw[start], token_len);
+                token[token_len] = '\0';
+                for (size_t j = 0; token[j] != '\0'; j++) {
+                    token[j] = (char)tolower((unsigned char)token[j]);
+                }
+                if (attract_is_region_token(token)) {
+                    continue;
+                }
+            }
+            simplified[wi++] = ' ';
+            continue;
+        }
+        simplified[wi++] = (char)tolower((unsigned char)raw[i]);
+    }
+    simplified[wi] = '\0';
+
+    size_t oi = 0;
+    bool last_sep = true;
+    for (size_t i = 0; simplified[i] != '\0' && oi + 1 < 96; i++) {
+        unsigned char c = (unsigned char)simplified[i];
+        if (isalnum(c)) {
+            out[oi++] = (char)c;
+            last_sep = false;
+        } else if (!last_sep) {
+            out[oi++] = ' ';
+            last_sep = true;
+        }
+    }
+    if (oi > 0 && out[oi - 1] == ' ') {
+        oi--;
+    }
+    out[oi] = '\0';
+    return oi > 0;
+}
+
+static void attract_finalize_work_reset(screensaver_attract_state_t *state) {
+    if (!state) {
+        return;
+    }
+    free(state->finalize_paths);
+    free(state->finalize_keys);
+    free(state->finalize_ranks);
+    free(state->finalize_deduped);
+    state->finalize_paths = NULL;
+    state->finalize_keys = NULL;
+    state->finalize_ranks = NULL;
+    state->finalize_deduped = NULL;
+    state->finalize_index = 0;
+    state->finalize_kept_count = 0;
+}
+
+static bool attract_finalize_begin(screensaver_attract_state_t *state) {
+    if (!state) {
+        return false;
+    }
+    if (state->pool_finalized) {
+        return true;
+    }
+    if (state->finalize_paths) {
+        return true;
+    }
+    if (state->pool_count <= 0) {
+        state->pool_finalized = true;
+        return true;
+    }
+
+    state->finalize_paths = calloc((size_t)state->pool_count, sizeof(char *));
+    state->finalize_keys = calloc((size_t)state->pool_count, sizeof(*state->finalize_keys));
+    state->finalize_ranks = calloc((size_t)state->pool_count, sizeof(int));
+    state->finalize_deduped = calloc((size_t)state->pool_count, sizeof(bool));
+    state->finalize_index = 0;
+    state->finalize_kept_count = 0;
+    if (!state->finalize_paths || !state->finalize_keys || !state->finalize_ranks || !state->finalize_deduped) {
+        attract_finalize_work_reset(state);
+        state->pool_finalized = true;
+        return false;
+    }
+    return true;
+}
+
+static void attract_finalize_commit(screensaver_attract_state_t *state) {
+    if (!state) {
+        return;
+    }
+
+    free(state->pool);
+    state->pool = state->finalize_paths;
+    state->pool_count = state->finalize_kept_count;
+    state->pool_capacity = state->finalize_kept_count;
+    state->finalize_paths = NULL;
+    free(state->finalize_keys);
+    free(state->finalize_ranks);
+    free(state->finalize_deduped);
+    state->finalize_keys = NULL;
+    state->finalize_ranks = NULL;
+    state->finalize_deduped = NULL;
+    state->finalize_index = 0;
+    state->finalize_kept_count = 0;
+    state->pool_finalized = true;
+}
+
+static void attract_finalize_step(screensaver_attract_state_t *state, int budget) {
+    if (!state || state->pool_finalized) {
+        return;
+    }
+    if (!attract_finalize_begin(state)) {
+        return;
+    }
+
+    int steps = budget > 0 ? budget : 1;
+    while (steps-- > 0 && state->finalize_index < state->pool_count) {
+        int i = state->finalize_index++;
+        char *path = state->pool[i];
+        if (!path) {
+            continue;
+        }
+
+        attract_root_class_t root_class = attract_classify_root(path);
+        char key[96] = {0};
+        bool have_key = attract_build_dedupe_key(path, key);
+
+        if (root_class != ATTRACT_ROOT_STANDARD || !have_key) {
+            state->finalize_paths[state->finalize_kept_count] = path;
+            state->finalize_ranks[state->finalize_kept_count] = 0;
+            state->finalize_deduped[state->finalize_kept_count] = false;
+            state->finalize_kept_count++;
+            continue;
+        }
+
+        int rank = attract_standard_root_rank(path);
+        int existing = -1;
+        for (int j = 0; j < state->finalize_kept_count; j++) {
+            if (state->finalize_deduped[j] && strcmp(state->finalize_keys[j], key) == 0) {
+                existing = j;
+                break;
+            }
+        }
+
+        if (existing < 0) {
+            state->finalize_paths[state->finalize_kept_count] = path;
+            snprintf(state->finalize_keys[state->finalize_kept_count], sizeof(state->finalize_keys[state->finalize_kept_count]), "%s", key);
+            state->finalize_ranks[state->finalize_kept_count] = rank;
+            state->finalize_deduped[state->finalize_kept_count] = true;
+            state->finalize_kept_count++;
+            continue;
+        }
+
+        if (rank < state->finalize_ranks[existing]) {
+            free(state->finalize_paths[existing]);
+            state->finalize_paths[existing] = path;
+            state->finalize_ranks[existing] = rank;
+        } else {
+            free(path);
+        }
+    }
+
+    if (state->finalize_index >= state->pool_count) {
+        attract_finalize_commit(state);
+    }
 }
 
 static const char *attract_display_name(const screensaver_attract_state_t *state) {
@@ -233,6 +485,53 @@ static char *attract_pop_scan_dir(screensaver_attract_state_t *state) {
     return path;
 }
 
+static void attract_shuffle_reset(screensaver_attract_state_t *state) {
+    if (!state) {
+        return;
+    }
+    free(state->shuffle_order);
+    state->shuffle_order = NULL;
+    state->current_shuffle_pos = -1;
+}
+
+static bool attract_shuffle_rebuild(screensaver_attract_state_t *state, int preferred_index) {
+    if (!state) {
+        return false;
+    }
+
+    attract_shuffle_reset(state);
+    if (state->pool_count <= 0) {
+        return false;
+    }
+
+    state->shuffle_order = malloc((size_t)state->pool_count * sizeof(int));
+    if (!state->shuffle_order) {
+        return false;
+    }
+
+    for (int i = 0; i < state->pool_count; i++) {
+        state->shuffle_order[i] = i;
+    }
+
+    for (int i = state->pool_count - 1; i > 0; i--) {
+        int j = (int)(attract_rng_next(state) % (uint32_t)(i + 1));
+        int tmp = state->shuffle_order[i];
+        state->shuffle_order[i] = state->shuffle_order[j];
+        state->shuffle_order[j] = tmp;
+    }
+
+    state->current_shuffle_pos = 0;
+    if (preferred_index >= 0) {
+        for (int i = 0; i < state->pool_count; i++) {
+            if (state->shuffle_order[i] == preferred_index) {
+                state->current_shuffle_pos = i;
+                break;
+            }
+        }
+    }
+    return true;
+}
+
 static void attract_remove_pool_entry(screensaver_attract_state_t *state, int index) {
     if (!state || index < 0 || index >= state->pool_count) {
         return;
@@ -246,6 +545,11 @@ static void attract_remove_pool_entry(screensaver_attract_state_t *state, int in
         state->current_index = -1;
     } else if (state->current_index > index) {
         state->current_index--;
+    }
+    if (state->pool_count > 0) {
+        attract_shuffle_rebuild(state, state->current_index);
+    } else {
+        attract_shuffle_reset(state);
     }
 }
 
@@ -270,6 +574,7 @@ static void attract_add_rom_path(screensaver_attract_state_t *state, const char 
     }
     state->pool_count++;
     state->scanned_game_count++;
+    state->pool_finalized = false;
 }
 
 static void attract_begin_scan(menu_t *menu, screensaver_attract_state_t *state) {
@@ -449,26 +754,75 @@ static void attract_pick_next_feature(menu_t *menu, screensaver_attract_state_t 
         return;
     }
 
-    int start = (int)(attract_rng_next(state) % (uint32_t)state->pool_count);
-    for (int offset = 0; offset < state->pool_count; offset++) {
-        int index = (start + offset) % state->pool_count;
-        if (state->pool_count > 1 && index == state->current_index) {
-            continue;
+    if (!state->shuffle_order || state->current_shuffle_pos < 0 || state->current_shuffle_pos >= state->pool_count) {
+        if (!attract_shuffle_rebuild(state, state->current_index)) {
+            attract_clear_feature(state);
+            return;
         }
+    }
+
+    int start_pos = state->current_shuffle_pos;
+    if (state->pool_count > 1 && state->current_index >= 0) {
+        start_pos = (start_pos + 1) % state->pool_count;
+    }
+
+    for (int offset = 0; offset < state->pool_count; offset++) {
+        int pos = (start_pos + offset) % state->pool_count;
+        int index = state->shuffle_order[pos];
         if (attract_load_feature(menu, state, index)) {
+            state->current_shuffle_pos = pos;
             return;
         }
         if (state->pool_count <= 0) {
             break;
         }
-        if (index >= state->pool_count) {
-            index = 0;
-        }
     }
 
     if (state->current_index < 0 && state->pool_count > 0) {
-        attract_load_feature(menu, state, 0);
+        attract_shuffle_rebuild(state, -1);
+        if (state->shuffle_order && attract_load_feature(menu, state, state->shuffle_order[0])) {
+            state->current_shuffle_pos = 0;
+        }
     }
+}
+
+bool screensaver_attract_cycle_current(menu_t *menu, screensaver_attract_state_t *state, int direction) {
+    (void)direction;
+    if (!menu || !state || state->pool_count <= 0) {
+        return false;
+    }
+
+    if (state->current_index < 0) {
+        if (state->scan_complete) {
+            attract_pick_next_feature(menu, state);
+            return state->current_index >= 0;
+        }
+        return false;
+    }
+
+    if (!state->shuffle_order || state->current_shuffle_pos < 0 || state->current_shuffle_pos >= state->pool_count) {
+        if (!attract_shuffle_rebuild(state, state->current_index)) {
+            return false;
+        }
+    }
+
+    int start_pos = (int)(attract_rng_next(state) % (uint32_t)state->pool_count);
+    for (int offset = 0; offset < state->pool_count; offset++) {
+        int pos = (start_pos + offset) % state->pool_count;
+        int index = state->shuffle_order[pos];
+        if (index == state->current_index) {
+            continue;
+        }
+        if (attract_load_feature(menu, state, index)) {
+            state->current_shuffle_pos = pos;
+            return true;
+        }
+        if (state->pool_count <= 0) {
+            break;
+        }
+    }
+
+    return state->current_index >= 0;
 }
 
 void screensaver_attract_init_state(screensaver_attract_state_t *state) {
@@ -478,6 +832,7 @@ void screensaver_attract_init_state(screensaver_attract_state_t *state) {
     memset(state, 0, sizeof(*state));
     state->rng = 0xA57A47C3u;
     state->current_index = -1;
+    state->current_shuffle_pos = -1;
 }
 
 void screensaver_attract_reset(screensaver_attract_state_t *state) {
@@ -499,6 +854,8 @@ void screensaver_attract_deinit(screensaver_attract_state_t *state) {
     state->pool = NULL;
     state->pool_count = 0;
     state->pool_capacity = 0;
+    attract_finalize_work_reset(state);
+    attract_shuffle_reset(state);
     for (int i = 0; i < state->scan_stack_count; i++) {
         free(state->scan_stack[i]);
     }
@@ -508,6 +865,7 @@ void screensaver_attract_deinit(screensaver_attract_state_t *state) {
     state->scan_stack_capacity = 0;
     state->scan_started = false;
     state->scan_complete = false;
+    state->pool_finalized = false;
     state->scanned_game_count = 0;
     if (state->prompt_icon) {
         sprite_free(state->prompt_icon);
@@ -526,7 +884,10 @@ void screensaver_attract_activate(menu_t *menu, screensaver_attract_state_t *sta
     if (!state->scan_started) {
         attract_begin_scan(menu, state);
     }
-    if (state->scan_complete && state->pool_count > 0) {
+    if (state->scan_complete && !state->pool_finalized) {
+        attract_finalize_step(state, SCREENSAVER_ATTRACT_FINALIZE_BUDGET);
+    }
+    if (state->scan_complete && state->pool_finalized && state->pool_count > 0) {
         attract_pick_next_feature(menu, state);
     }
 }
@@ -548,9 +909,12 @@ void screensaver_attract_step(menu_t *menu, screensaver_attract_state_t *state, 
             attract_scan_one_dir(state);
         }
     }
+    if (state->scan_complete && !state->pool_finalized) {
+        attract_finalize_step(state, SCREENSAVER_ATTRACT_FINALIZE_BUDGET);
+    }
 
     if (state->current_index < 0) {
-        if (state->scan_complete && state->pool_count > 0) {
+        if (state->scan_complete && state->pool_finalized && state->pool_count > 0) {
             attract_pick_next_feature(menu, state);
         }
         return;
@@ -807,6 +1171,8 @@ void screensaver_attract_draw(menu_t *menu, surface_t *display, screensaver_attr
     if (state->prompt_icon) {
         rdpq_mode_push();
             rdpq_set_mode_standard();
+            rdpq_mode_combiner(RDPQ_COMBINER_TEX);
+            rdpq_mode_alphacompare(1);
             rdpq_sprite_blit(state->prompt_icon, (float)icon_x, (float)icon_y, NULL);
         rdpq_mode_pop();
     } else {
