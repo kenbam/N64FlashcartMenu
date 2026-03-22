@@ -346,7 +346,7 @@ void screensaver_dvd_draw(menu_t *menu, screensaver_dvd_state_t *state, surface_
 
     if (state->logo_image) {
         rdpq_mode_push();
-            rdpq_set_mode_copy(false);
+            rdpq_set_mode_copy(true);
             rdpq_set_scissor(0, 0, screen_w, screen_h);
             rdpq_tex_blit(state->logo_image, draw_x, draw_y, &(rdpq_blitparms_t){
                 .width = logo_width,
