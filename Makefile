@@ -65,6 +65,7 @@ SRCS = \
 	menu/screensaver_attract.c \
 	menu/screensaver_dvd.c \
 	menu/screensaver_gradient.c \
+	menu/screensaver_mystify_gl.c \
 	menu/screensaver_pipes_gl_render.c \
 	menu/screensaver_pipes_render.c \
 	menu/screensaver_pipes_state.c \

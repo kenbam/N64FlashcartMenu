@@ -95,7 +95,7 @@ void settings_load (settings_t *settings) {
     settings->bgm_file = strdup(mini_get_string(ini, "menu", "bgm_file", init.bgm_file));
     if (!settings->bgm_file) settings->bgm_file = strdup(init.bgm_file);
     settings->screensaver_style = mini_get_int(ini, "menu", "screensaver_style", init.screensaver_style);
-    if (settings->screensaver_style < SCREENSAVER_STYLE_DVD || settings->screensaver_style > SCREENSAVER_STYLE_PIPES_GL) {
+    if (settings->screensaver_style < SCREENSAVER_STYLE_DVD || settings->screensaver_style > SCREENSAVER_STYLE_MYSTIFY_GL) {
         settings->screensaver_style = init.screensaver_style;
     }
     settings->screensaver_logo_file = strdup(mini_get_string(ini, "menu", "screensaver_logo_file", init.screensaver_logo_file));

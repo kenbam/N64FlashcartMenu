@@ -366,8 +366,10 @@ static int get_screensaver_style_current_selection (menu_t *menu) {
             return 3;
         case SCREENSAVER_STYLE_PIPES_GL:
             return 4;
-        case SCREENSAVER_STYLE_RANDOM:
+        case SCREENSAVER_STYLE_MYSTIFY_GL:
             return 5;
+        case SCREENSAVER_STYLE_RANDOM:
+            return 6;
         case SCREENSAVER_STYLE_DVD:
         default:
             return 0;
@@ -382,6 +384,7 @@ static component_context_menu_t set_screensaver_style_context_menu = {
         {.text = "Living Gradient", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_GRADIENT) },
         {.text = "Attract Mode", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_ATTRACT) },
         {.text = "GL Pipes (Experimental)", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_PIPES_GL) },
+        {.text = "GL Mystify (Experimental)", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_MYSTIFY_GL) },
         {.text = "Random", .action = set_screensaver_style_type, .arg = (void *)(uintptr_t)(SCREENSAVER_STYLE_RANDOM) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
@@ -778,6 +781,9 @@ static void draw (menu_t *menu, surface_t *d) {
             break;
         case SCREENSAVER_STYLE_PIPES_GL:
             screensaver_style_label = "GL Pipes (Exp)";
+            break;
+        case SCREENSAVER_STYLE_MYSTIFY_GL:
+            screensaver_style_label = "GL Mystify (Exp)";
             break;
         case SCREENSAVER_STYLE_RANDOM:
             screensaver_style_label = "Random";

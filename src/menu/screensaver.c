@@ -6,6 +6,7 @@
 #include "screensaver_attract.h"
 #include "screensaver_dvd.h"
 #include "screensaver_gradient.h"
+#include "screensaver_mystify_gl.h"
 #include "screensaver_pipes_gl_render.h"
 #include "screensaver_pipes_render.h"
 #include "screensaver_pipes_state.h"
@@ -20,6 +21,7 @@ typedef struct {
     screensaver_attract_state_t attract;
     screensaver_dvd_state_t dvd;
     screensaver_gradient_state_t gradient;
+    screensaver_mystify_state_t mystify;
     screensaver_pipes_state_t pipes;
 } screensaver_state_t;
 
@@ -32,7 +34,7 @@ static screensaver_state_t screensaver = {
 };
 
 static screensaver_style_t screensaver_pick_random_style(void) {
-    switch ((get_ticks_us() / 1000ULL) % 5ULL) {
+    switch ((get_ticks_us() / 1000ULL) % 6ULL) {
         case 1:
             return SCREENSAVER_STYLE_PIPES;
         case 2:
@@ -41,6 +43,8 @@ static screensaver_style_t screensaver_pick_random_style(void) {
             return SCREENSAVER_STYLE_ATTRACT;
         case 4:
             return SCREENSAVER_STYLE_PIPES_GL;
+        case 5:
+            return SCREENSAVER_STYLE_MYSTIFY_GL;
         case 0:
         default:
             return SCREENSAVER_STYLE_DVD;
@@ -96,6 +100,9 @@ static screensaver_style_t screensaver_get_style(const menu_t *menu) {
     if (menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES_GL) {
         return SCREENSAVER_STYLE_PIPES_GL;
     }
+    if (menu->settings.screensaver_style == SCREENSAVER_STYLE_MYSTIFY_GL) {
+        return SCREENSAVER_STYLE_MYSTIFY_GL;
+    }
     return SCREENSAVER_STYLE_DVD;
 }
 
@@ -121,6 +128,7 @@ static void screensaver_reset(menu_t *menu) {
     screensaver_attract_reset(&screensaver.attract);
     screensaver_dvd_reset(&screensaver.dvd);
     screensaver_gradient_reset(&screensaver.gradient);
+    screensaver_mystify_reset(&screensaver.mystify);
     screensaver_pipes_reset(&screensaver.pipes);
     if (was_active) {
         screensaver_apply_fps_limit(menu);
@@ -137,6 +145,9 @@ static void screensaver_activate(menu_t *menu) {
         case SCREENSAVER_STYLE_PIPES:
         case SCREENSAVER_STYLE_PIPES_GL:
             screensaver_pipes_activate(&screensaver.pipes);
+            break;
+        case SCREENSAVER_STYLE_MYSTIFY_GL:
+            screensaver_mystify_activate(&screensaver.mystify);
             break;
         case SCREENSAVER_STYLE_GRADIENT:
             screensaver_gradient_activate(&screensaver.gradient);
@@ -242,6 +253,14 @@ void screensaver_draw(menu_t *menu, surface_t *display) {
         return;
     }
 
+    if (style == SCREENSAVER_STYLE_MYSTIFY_GL) {
+        rdpq_attach(display, display_get_zbuf());
+        screensaver_mystify_step(&screensaver.mystify, dt);
+        screensaver_mystify_draw(display, &screensaver.mystify);
+        rdpq_detach_show();
+        return;
+    }
+
     rdpq_attach_clear(display, NULL);
 
     switch (style) {
@@ -270,5 +289,6 @@ void screensaver_deinit(void) {
     screensaver_attract_deinit(&screensaver.attract);
     screensaver_dvd_deinit(&screensaver.dvd);
     screensaver_gradient_reset(&screensaver.gradient);
+    screensaver_mystify_reset(&screensaver.mystify);
     screensaver_pipes_reset(&screensaver.pipes);
 }
