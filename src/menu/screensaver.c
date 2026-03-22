@@ -94,6 +94,19 @@ static screensaver_style_t screensaver_get_style(const menu_t *menu) {
     return SCREENSAVER_STYLE_DVD;
 }
 
+static int screensaver_get_idle_seconds(const menu_t *menu) {
+    if (!menu) {
+        return 30;
+    }
+    int seconds = menu->settings.screensaver_wait_seconds;
+    if (seconds < 5) {
+        seconds = 5;
+    } else if (seconds > 300) {
+        seconds = 300;
+    }
+    return seconds;
+}
+
 static void screensaver_reset(menu_t *menu) {
     bool was_active = screensaver.active;
     screensaver.active = false;
@@ -172,7 +185,7 @@ void screensaver_update_state(menu_t *menu) {
 
     if (!screensaver.active) {
         screensaver.idle_frames++;
-        if (screensaver.idle_frames >= (SCREENSAVER_IDLE_SECONDS * (int)SCREENSAVER_FPS_LIMIT)) {
+        if (screensaver.idle_frames >= (screensaver_get_idle_seconds(menu) * (int)SCREENSAVER_FPS_LIMIT)) {
             screensaver_activate(menu);
         }
     }

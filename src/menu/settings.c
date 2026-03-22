@@ -28,6 +28,7 @@ static settings_t init = {
     .screensaver_style = SCREENSAVER_STYLE_DVD,
     .screensaver_logo_file = "",
     .screensaver_smooth_mode = false,
+    .screensaver_wait_seconds = 30,
     .screensaver_margin_left = 2,
     .screensaver_margin_right = 0,
     .screensaver_margin_top = 16,
@@ -100,6 +101,10 @@ void settings_load (settings_t *settings) {
     settings->screensaver_logo_file = strdup(mini_get_string(ini, "menu", "screensaver_logo_file", init.screensaver_logo_file));
     if (!settings->screensaver_logo_file) settings->screensaver_logo_file = strdup(init.screensaver_logo_file);
     settings->screensaver_smooth_mode = mini_get_bool(ini, "menu", "screensaver_smooth_mode", init.screensaver_smooth_mode);
+    int screensaver_wait_seconds = mini_get_int(ini, "menu", "screensaver_wait_seconds", init.screensaver_wait_seconds);
+    if (screensaver_wait_seconds < 5) screensaver_wait_seconds = 5;
+    if (screensaver_wait_seconds > 300) screensaver_wait_seconds = 300;
+    settings->screensaver_wait_seconds = (uint8_t)screensaver_wait_seconds;
     int margin_left = mini_get_int(ini, "menu", "screensaver_margin_left", init.screensaver_margin_left);
     int margin_right = mini_get_int(ini, "menu", "screensaver_margin_right", init.screensaver_margin_right);
     int margin_top = mini_get_int(ini, "menu", "screensaver_margin_top", init.screensaver_margin_top);
@@ -176,6 +181,7 @@ void settings_save (settings_t *settings) {
     mini_set_int(ini, "menu", "screensaver_style", settings->screensaver_style);
     mini_set_string(ini, "menu", "screensaver_logo_file", settings->screensaver_logo_file ? settings->screensaver_logo_file : "");
     mini_set_bool(ini, "menu", "screensaver_smooth_mode", settings->screensaver_smooth_mode);
+    mini_set_int(ini, "menu", "screensaver_wait_seconds", settings->screensaver_wait_seconds);
     mini_set_int(ini, "menu", "screensaver_margin_left", settings->screensaver_margin_left);
     mini_set_int(ini, "menu", "screensaver_margin_right", settings->screensaver_margin_right);
     mini_set_int(ini, "menu", "screensaver_margin_top", settings->screensaver_margin_top);

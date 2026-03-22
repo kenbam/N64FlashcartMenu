@@ -9,6 +9,10 @@
 
 static bool show_message_reset_settings = false;
 
+static component_context_menu_t set_screensaver_style_context_menu;
+static component_context_menu_t set_screensaver_smooth_mode_context_menu;
+static component_context_menu_t set_screensaver_wait_context_menu;
+
 static const char *format_switch (bool state) {
     switch (state) {
         case true: return "On";
@@ -110,6 +114,11 @@ static void set_screensaver_style_type (menu_t *menu, void *arg) {
 
 static void set_screensaver_smooth_mode_type (menu_t *menu, void *arg) {
     menu->settings.screensaver_smooth_mode = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_screensaver_wait_seconds_type (menu_t *menu, void *arg) {
+    menu->settings.screensaver_wait_seconds = (uint8_t)(uintptr_t)(arg);
     settings_save(&menu->settings);
 }
 
@@ -332,6 +341,15 @@ static component_context_menu_t set_screensaver_logo_file_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static component_context_menu_t screensaver_general_context_menu = {
+    .list = {
+        {.text = "Type", .submenu = &set_screensaver_style_context_menu },
+        {.text = "Logo", .submenu = &set_screensaver_logo_file_context_menu },
+        {.text = "Wait", .submenu = &set_screensaver_wait_context_menu },
+        {.text = "Smooth", .submenu = &set_screensaver_smooth_mode_context_menu },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static int get_screensaver_style_current_selection (menu_t *menu) {
     switch (menu->settings.screensaver_style) {
         case SCREENSAVER_STYLE_PIPES:
@@ -368,6 +386,32 @@ static component_context_menu_t set_screensaver_smooth_mode_context_menu = {
     .list = {
         {.text = "On (60 FPS)", .action = set_screensaver_smooth_mode_type, .arg = (void *)(uintptr_t)(true) },
         {.text = "Off (30 FPS)", .action = set_screensaver_smooth_mode_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_screensaver_wait_current_selection(menu_t *menu) {
+    int seconds = menu->settings.screensaver_wait_seconds;
+    if (seconds <= 5) return 0;
+    if (seconds <= 10) return 1;
+    if (seconds <= 15) return 2;
+    if (seconds <= 30) return 3;
+    if (seconds <= 45) return 4;
+    if (seconds <= 60) return 5;
+    if (seconds <= 120) return 6;
+    return 7;
+}
+
+static component_context_menu_t set_screensaver_wait_context_menu = {
+    .get_default_selection = get_screensaver_wait_current_selection,
+    .list = {
+        {.text = "5 sec", .action = set_screensaver_wait_seconds_type, .arg = (void *)(uintptr_t)(5) },
+        {.text = "10 sec", .action = set_screensaver_wait_seconds_type, .arg = (void *)(uintptr_t)(10) },
+        {.text = "15 sec", .action = set_screensaver_wait_seconds_type, .arg = (void *)(uintptr_t)(15) },
+        {.text = "30 sec", .action = set_screensaver_wait_seconds_type, .arg = (void *)(uintptr_t)(30) },
+        {.text = "45 sec", .action = set_screensaver_wait_seconds_type, .arg = (void *)(uintptr_t)(45) },
+        {.text = "60 sec", .action = set_screensaver_wait_seconds_type, .arg = (void *)(uintptr_t)(60) },
+        {.text = "2 min", .action = set_screensaver_wait_seconds_type, .arg = (void *)(uintptr_t)(120) },
+        {.text = "5 min", .action = set_screensaver_wait_seconds_type, .arg = (void *)(uintptr_t)(300) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -413,6 +457,15 @@ SCREEN_MARGIN_MENU(set_screensaver_margin_left_context_menu, get_screensaver_mar
 SCREEN_MARGIN_MENU(set_screensaver_margin_right_context_menu, get_screensaver_margin_right_current_selection, set_screensaver_margin_right_type)
 SCREEN_MARGIN_MENU(set_screensaver_margin_top_context_menu, get_screensaver_margin_top_current_selection, set_screensaver_margin_top_type)
 SCREEN_MARGIN_MENU(set_screensaver_margin_bottom_context_menu, get_screensaver_margin_bottom_current_selection, set_screensaver_margin_bottom_type)
+
+static component_context_menu_t screensaver_dvd_bounds_context_menu = {
+    .list = {
+        {.text = "Left Margin", .submenu = &set_screensaver_margin_left_context_menu },
+        {.text = "Right Margin", .submenu = &set_screensaver_margin_right_context_menu },
+        {.text = "Top Margin", .submenu = &set_screensaver_margin_top_context_menu },
+        {.text = "Bottom Margin", .submenu = &set_screensaver_margin_bottom_context_menu },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
 #undef SCREEN_MARGIN_MENU
 
 static int get_text_panel_enabled_current_selection (menu_t *menu) {
@@ -637,13 +690,8 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Sound Effects", .submenu = &set_soundfx_enabled_type_context_menu },
     { .text = "Background Music", .submenu = &set_bgm_enabled_type_context_menu },
     { .text = "Menu Music File", .submenu = &set_menu_music_file_context_menu },
-    { .text = "Screensaver Type", .submenu = &set_screensaver_style_context_menu },
-    { .text = "Screensaver Logo", .submenu = &set_screensaver_logo_file_context_menu },
-    { .text = "Screensaver Smooth", .submenu = &set_screensaver_smooth_mode_context_menu },
-    { .text = "Screensaver Margin Left", .submenu = &set_screensaver_margin_left_context_menu },
-    { .text = "Screensaver Margin Right", .submenu = &set_screensaver_margin_right_context_menu },
-    { .text = "Screensaver Margin Top", .submenu = &set_screensaver_margin_top_context_menu },
-    { .text = "Screensaver Margin Bottom", .submenu = &set_screensaver_margin_bottom_context_menu },
+    { .text = "Screensaver", .submenu = &screensaver_general_context_menu },
+    { .text = "DVD Logo Bounds", .submenu = &screensaver_dvd_bounds_context_menu },
     { .text = "Use Saves Folder", .submenu = &set_use_saves_folder_type_context_menu },
     { .text = "Show Saves Folder", .submenu = &set_show_saves_folder_type_context_menu },
     { .text = "Text Panel Overlay", .submenu = &set_text_panel_enabled_type_context_menu },
@@ -725,6 +773,13 @@ static void draw (menu_t *menu, surface_t *d) {
             break;
     }
     const char *screensaver_smooth_label = menu->settings.screensaver_smooth_mode ? "On (60)" : "Off (30)";
+    char screensaver_wait_label[16];
+    int wait_seconds = menu->settings.screensaver_wait_seconds;
+    if (wait_seconds >= 60 && (wait_seconds % 60) == 0) {
+        snprintf(screensaver_wait_label, sizeof(screensaver_wait_label), "%d min", wait_seconds / 60);
+    } else {
+        snprintf(screensaver_wait_label, sizeof(screensaver_wait_label), "%d sec", wait_seconds);
+    }
     const char *visualizer_style_label = "Bars";
     switch (menu->settings.background_visualizer_style) {
         case 1: visualizer_style_label = "Pulse Wash"; break;
@@ -762,11 +817,12 @@ ui_components_main_text_draw(
         "     Sound Effects     : %s\n"
         "     Background Music  : %s\n"
         "     Menu Music File   : %s\n"
-        "     Screensaver Type  : %s\n"
-        "     Screensaver Logo  : %s\n"
-        "     Screensaver Smooth: %s\n"
-        "     Saver Margin L/R  : %d / %d\n"
-        "     Saver Margin T/B  : %d / %d\n"
+        "     Screensaver       : %s\n"
+        "     Saver Logo        : %s\n"
+        "     Saver Wait        : %s\n"
+        "     Saver Smooth      : %s\n"
+        "     DVD Bounds L/R    : %d / %d\n"
+        "     DVD Bounds T/B    : %d / %d\n"
         "     Use Saves folder  : %s\n"
         "     Show Saves folder : %s\n"
         "     Text Panel Overlay: %s\n"
@@ -801,6 +857,7 @@ ui_components_main_text_draw(
         bgm_file_label,
         screensaver_style_label,
         screensaver_logo_label,
+        screensaver_wait_label,
         screensaver_smooth_label,
         (int)menu->settings.screensaver_margin_left,
         (int)menu->settings.screensaver_margin_right,
