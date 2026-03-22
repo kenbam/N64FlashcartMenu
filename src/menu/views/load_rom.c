@@ -1135,7 +1135,7 @@ static void rebuild_details_layout(menu_t *menu) {
 
     free_details_layout();
 
-    char details[13824];
+    char details[32768];
     const char *display_name = (menu->load.rom_info.metadata.name[0] != '\0') ? menu->load.rom_info.metadata.name : rom_filename;
     const char *publisher = (menu->load.rom_info.metadata.author[0] != '\0') ? menu->load.rom_info.metadata.author : "Unknown";
     const char *developer = (menu->load.rom_info.metadata.developer[0] != '\0') ? menu->load.rom_info.metadata.developer : "Unknown";
@@ -1275,7 +1275,7 @@ static void rebuild_details_layout(menu_t *menu) {
     rdpq_paragraph_builder_begin(
         &(rdpq_textparms_t) {
             .width = get_details_text_width(),
-            .height = 2040,
+            .height = 2048,
             .wrap = WRAP_WORD,
             .line_spacing = TEXT_LINE_SPACING_ADJUST,
         },

@@ -60,6 +60,61 @@ static int browser_virtual_pak_recovery_retry_cooldown = 0;
 static bool browser_virtual_pak_recovery_snoozed = false;
 static char browser_virtual_pak_recovery_message[128];
 
+typedef struct {
+    const char *label;
+    const char *text;
+} browser_search_key_t;
+
+static bool browser_search_active = false;
+static char browser_search_query[32];
+static int *browser_search_matches = NULL;
+static int browser_search_match_count = 0;
+static int browser_search_selected = 0;
+static int browser_search_key_row = 0;
+static int browser_search_key_col = 0;
+static bool browser_search_focus_results = false;
+
+#define BROWSER_SEARCH_HEADER_X0   (VISIBLE_AREA_X0 + 10)
+#define BROWSER_SEARCH_HEADER_X1   (VISIBLE_AREA_X1 - 10)
+#define BROWSER_SEARCH_HEADER_Y0   (VISIBLE_AREA_Y0 + TAB_HEIGHT + 8)
+#define BROWSER_SEARCH_HEADER_Y1   (BROWSER_SEARCH_HEADER_Y0 + 228)
+#define BROWSER_SEARCH_RESULTS_Y0  (BROWSER_SEARCH_HEADER_Y1 + 8)
+#define BROWSER_SEARCH_RESULTS_Y1  (LAYOUT_ACTIONS_SEPARATOR_Y - 8)
+#define BROWSER_SEARCH_RESULTS_X0  (VISIBLE_AREA_X0 + 8)
+#define BROWSER_SEARCH_RESULTS_X1  (VISIBLE_AREA_X1 - 8)
+#define BROWSER_SEARCH_LIST_X      (BROWSER_SEARCH_RESULTS_X0 + 10)
+#define BROWSER_SEARCH_LIST_Y0     (BROWSER_SEARCH_RESULTS_Y0 + 24)
+#define BROWSER_SEARCH_LIST_Y1     (BROWSER_SEARCH_RESULTS_Y1 - 8)
+#define BROWSER_SEARCH_RESULT_ROW_H (19)
+
+static const browser_search_key_t browser_search_keyboard[][10] = {
+    {
+        {"A", "A"}, {"B", "B"}, {"C", "C"}, {"D", "D"}, {"E", "E"},
+        {"F", "F"}, {"G", "G"}, {"H", "H"}, {"I", "I"}, {"J", "J"},
+    },
+    {
+        {"K", "K"}, {"L", "L"}, {"M", "M"}, {"N", "N"}, {"O", "O"},
+        {"P", "P"}, {"Q", "Q"}, {"R", "R"}, {"S", "S"}, {"T", "T"},
+    },
+    {
+        {"U", "U"}, {"V", "V"}, {"W", "W"}, {"X", "X"}, {"Y", "Y"},
+        {"Z", "Z"}, {"0", "0"}, {"1", "1"}, {"2", "2"}, {"3", "3"},
+    },
+    {
+        {"4", "4"}, {"5", "5"}, {"6", "6"}, {"7", "7"}, {"8", "8"},
+        {"9", "9"}, {"-", "-"}, {"_", "_"}, {".", "."}, {"'", "'"},
+    },
+    {
+        {"Space", " "}, {"Del", "\b"}, {"Clear", "\f"}, {"Done", "\r"},
+        {"", ""}, {"", ""}, {"", ""}, {"", ""}, {"", ""}, {"", ""},
+    },
+};
+
+static const int browser_search_keyboard_row_lengths[] = { 10, 10, 10, 10, 4 };
+
+static void browser_search_reset_state(void);
+static void browser_hide_all_context_menus(void);
+
 /*
  * ========================================================================
  * Playlist 3-tier cache architecture
@@ -1906,6 +1961,7 @@ static void browser_list_free (menu_t *menu) {
     menu->browser.entries = 0;
     menu->browser.entry = NULL;
     menu->browser.selected = -1;
+    browser_search_reset_state();
 }
 
 void view_browser_deinit (menu_t *menu) {
@@ -3985,6 +4041,374 @@ static void show_properties (menu_t *menu, void *arg) {
     menu->next_mode = menu->browser.entry->type == ENTRY_TYPE_ARCHIVED ? MENU_MODE_EXTRACT_FILE : MENU_MODE_FILE_INFO;
 }
 
+static void browser_search_clear_matches(void) {
+    free(browser_search_matches);
+    browser_search_matches = NULL;
+    browser_search_match_count = 0;
+    browser_search_selected = 0;
+}
+
+static void browser_search_reset_state(void) {
+    browser_search_active = false;
+    browser_search_query[0] = '\0';
+    browser_search_key_row = 0;
+    browser_search_key_col = 0;
+    browser_search_focus_results = false;
+    browser_search_clear_matches();
+}
+
+static char browser_search_fold_char(char ch) {
+    if (ch >= 'A' && ch <= 'Z') {
+        return (char)(ch - 'A' + 'a');
+    }
+    return ch;
+}
+
+static bool browser_search_name_matches(const char *name, const char *query) {
+    if (!query || query[0] == '\0') {
+        return true;
+    }
+    if (!name) {
+        return false;
+    }
+
+    size_t query_len = strlen(query);
+    for (size_t start = 0; name[start] != '\0'; start++) {
+        size_t i = 0;
+        while (i < query_len && name[start + i] != '\0' &&
+               browser_search_fold_char(name[start + i]) == browser_search_fold_char(query[i])) {
+            i++;
+        }
+        if (i == query_len) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void browser_search_rebuild(menu_t *menu) {
+    browser_search_clear_matches();
+
+    if (!menu || menu->browser.entries <= 0 || !menu->browser.list) {
+        return;
+    }
+
+    browser_search_matches = malloc((size_t)menu->browser.entries * sizeof(int));
+    if (!browser_search_matches) {
+        return;
+    }
+
+    for (int i = 0; i < menu->browser.entries; i++) {
+        if (browser_search_name_matches(menu->browser.list[i].name, browser_search_query)) {
+            browser_search_matches[browser_search_match_count++] = i;
+        }
+    }
+
+    if (browser_search_match_count <= 0) {
+        browser_search_selected = 0;
+        return;
+    }
+
+    int current_selected = menu->browser.selected;
+    for (int i = 0; i < browser_search_match_count; i++) {
+        if (browser_search_matches[i] == current_selected) {
+            browser_search_selected = i;
+            return;
+        }
+    }
+    browser_search_selected = 0;
+}
+
+static void browser_search_sync_selection(menu_t *menu) {
+    if (!menu || browser_search_match_count <= 0 || !browser_search_matches) {
+        return;
+    }
+
+    if (browser_search_selected < 0) {
+        browser_search_selected = 0;
+    } else if (browser_search_selected >= browser_search_match_count) {
+        browser_search_selected = browser_search_match_count - 1;
+    }
+
+    menu->browser.selected = browser_search_matches[browser_search_selected];
+    if (menu->browser.selected >= 0 && menu->browser.selected < menu->browser.entries) {
+        menu->browser.entry = &menu->browser.list[menu->browser.selected];
+    }
+}
+
+static void browser_search_open(menu_t *menu, void *arg) {
+    (void)arg;
+    browser_hide_all_context_menus();
+    browser_search_active = true;
+    browser_search_query[0] = '\0';
+    browser_search_key_row = 0;
+    browser_search_key_col = 0;
+    browser_search_focus_results = false;
+    browser_search_rebuild(menu);
+    browser_search_sync_selection(menu);
+}
+
+static void browser_search_close(void) {
+    browser_hide_all_context_menus();
+    browser_search_active = false;
+    browser_search_focus_results = false;
+}
+
+static void browser_search_append_text(menu_t *menu, const char *text) {
+    if (!text || text[0] == '\0') {
+        return;
+    }
+
+    size_t len = strlen(browser_search_query);
+    size_t add_len = strlen(text);
+    if ((len + add_len) >= sizeof(browser_search_query)) {
+        return;
+    }
+
+    memcpy(browser_search_query + len, text, add_len + 1);
+    browser_search_rebuild(menu);
+    browser_search_sync_selection(menu);
+}
+
+static void browser_search_backspace(menu_t *menu) {
+    size_t len = strlen(browser_search_query);
+    if (len == 0) {
+        return;
+    }
+    browser_search_query[len - 1] = '\0';
+    browser_search_rebuild(menu);
+    browser_search_sync_selection(menu);
+}
+
+static void browser_search_clear_query(menu_t *menu) {
+    browser_search_query[0] = '\0';
+    browser_search_rebuild(menu);
+    browser_search_sync_selection(menu);
+}
+
+static void browser_search_activate_key(menu_t *menu) {
+    const browser_search_key_t *key = &browser_search_keyboard[browser_search_key_row][browser_search_key_col];
+    if (!key->label || key->label[0] == '\0') {
+        return;
+    }
+    if (strcmp(key->text, "\b") == 0) {
+        browser_search_backspace(menu);
+    } else if (strcmp(key->text, "\f") == 0) {
+        browser_search_clear_query(menu);
+    } else if (strcmp(key->text, "\r") == 0) {
+        browser_search_close();
+    } else {
+        browser_search_append_text(menu, key->text);
+    }
+}
+
+static bool browser_search_process(menu_t *menu) {
+    if (!browser_search_active) {
+        return false;
+    }
+
+    if (menu->actions.settings) {
+        browser_search_close();
+        sound_play_effect(SFX_EXIT);
+        return true;
+    }
+
+    if (menu->actions.back) {
+        browser_search_close();
+        sound_play_effect(SFX_EXIT);
+        return true;
+    }
+
+    if (menu->actions.options) {
+        browser_search_focus_results = !browser_search_focus_results;
+        sound_play_effect(SFX_SETTING);
+        return true;
+    }
+
+    if (browser_search_focus_results) {
+        if (menu->actions.go_up) {
+            browser_search_selected -= (menu->actions.go_fast ? 10 : 1);
+            browser_search_sync_selection(menu);
+            sound_play_effect(SFX_CURSOR);
+            return true;
+        }
+        if (menu->actions.go_down) {
+            browser_search_selected += (menu->actions.go_fast ? 10 : 1);
+            browser_search_sync_selection(menu);
+            sound_play_effect(SFX_CURSOR);
+            return true;
+        }
+        if (menu->actions.enter) {
+            browser_search_close();
+            sound_play_effect(SFX_ENTER);
+            return false;
+        }
+        return true;
+    }
+
+    if (menu->actions.go_left) {
+        browser_search_key_col--;
+        if (browser_search_key_col < 0) {
+            browser_search_key_col = browser_search_keyboard_row_lengths[browser_search_key_row] - 1;
+        }
+        sound_play_effect(SFX_CURSOR);
+        return true;
+    }
+    if (menu->actions.go_right) {
+        browser_search_key_col++;
+        if (browser_search_key_col >= browser_search_keyboard_row_lengths[browser_search_key_row]) {
+            browser_search_key_col = 0;
+        }
+        sound_play_effect(SFX_CURSOR);
+        return true;
+    }
+    if (menu->actions.go_up) {
+        browser_search_key_row--;
+        if (browser_search_key_row < 0) {
+            browser_search_key_row = (int)(sizeof(browser_search_keyboard_row_lengths) / sizeof(browser_search_keyboard_row_lengths[0])) - 1;
+        }
+        if (browser_search_key_col >= browser_search_keyboard_row_lengths[browser_search_key_row]) {
+            browser_search_key_col = browser_search_keyboard_row_lengths[browser_search_key_row] - 1;
+        }
+        sound_play_effect(SFX_CURSOR);
+        return true;
+    }
+    if (menu->actions.go_down) {
+        browser_search_key_row++;
+        if (browser_search_key_row >= (int)(sizeof(browser_search_keyboard_row_lengths) / sizeof(browser_search_keyboard_row_lengths[0]))) {
+            browser_search_key_row = 0;
+        }
+        if (browser_search_key_col >= browser_search_keyboard_row_lengths[browser_search_key_row]) {
+            browser_search_key_col = browser_search_keyboard_row_lengths[browser_search_key_row] - 1;
+        }
+        sound_play_effect(SFX_CURSOR);
+        return true;
+    }
+    if (menu->actions.enter) {
+        browser_search_activate_key(menu);
+        sound_play_effect(SFX_ENTER);
+        return true;
+    }
+
+    return true;
+}
+
+static void browser_search_draw(menu_t *menu) {
+    (void)menu;
+    rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+    char header_text[1536];
+    char results_text[2048];
+    size_t header_used = 0;
+    size_t results_used = 0;
+    ui_region_t header_region = {
+        .x = BROWSER_SEARCH_HEADER_X0 + 12,
+        .y = BROWSER_SEARCH_HEADER_Y0 + 8,
+        .width = (BROWSER_SEARCH_HEADER_X1 - BROWSER_SEARCH_HEADER_X0) - 24,
+        .height = (BROWSER_SEARCH_HEADER_Y1 - BROWSER_SEARCH_HEADER_Y0) - 16,
+    };
+    ui_region_t results_region = {
+        .x = BROWSER_SEARCH_LIST_X,
+        .y = BROWSER_SEARCH_LIST_Y0,
+        .width = (BROWSER_SEARCH_RESULTS_X1 - BROWSER_SEARCH_RESULTS_X0) - 20,
+        .height = BROWSER_SEARCH_LIST_Y1 - BROWSER_SEARCH_LIST_Y0,
+    };
+
+    ui_components_box_draw(BROWSER_SEARCH_HEADER_X0, BROWSER_SEARCH_HEADER_Y0, BROWSER_SEARCH_HEADER_X1, BROWSER_SEARCH_HEADER_Y1, RGBA32(0x08, 0x10, 0x1C, 0xC8));
+    ui_components_border_draw(BROWSER_SEARCH_HEADER_X0, BROWSER_SEARCH_HEADER_Y0, BROWSER_SEARCH_HEADER_X1, BROWSER_SEARCH_HEADER_Y1);
+
+    header_used += (size_t)snprintf(
+        header_text + header_used,
+        header_used < sizeof(header_text) ? sizeof(header_text) - header_used : 0,
+        "^%02XSearch^00\n"
+        "%s\n"
+        "^%02X%d result%s^00  R: %s  B/Start: Close\n"
+        "^%02X%s^00\n\n",
+        STL_GREEN,
+        browser_search_query[0] != '\0' ? browser_search_query : "Type to filter titles",
+        browser_search_match_count > 0 ? STL_DEFAULT : STL_ORANGE,
+        browser_search_match_count,
+        browser_search_match_count == 1 ? "" : "s",
+        browser_search_focus_results ? "Results" : "Keyboard",
+        STL_YELLOW,
+        browser_search_focus_results ? "Results: Up/Down browse, A accept" : "Keyboard: D-pad move, A type"
+    );
+
+    for (int row = 0; row < (int)(sizeof(browser_search_keyboard_row_lengths) / sizeof(browser_search_keyboard_row_lengths[0])); row++) {
+        int row_len = browser_search_keyboard_row_lengths[row];
+        for (int col = 0; col < row_len; col++) {
+            const browser_search_key_t *key = &browser_search_keyboard[row][col];
+            bool selected = !browser_search_focus_results && row == browser_search_key_row && col == browser_search_key_col;
+            header_used += (size_t)snprintf(
+                header_text + header_used,
+                header_used < sizeof(header_text) ? sizeof(header_text) - header_used : 0,
+                "%s^%02X%s^00",
+                col == 0 ? "" : "  ",
+                selected ? STL_YELLOW : STL_GRAY,
+                key->label
+            );
+        }
+        header_used += (size_t)snprintf(
+            header_text + header_used,
+            header_used < sizeof(header_text) ? sizeof(header_text) - header_used : 0,
+            "\n"
+        );
+    }
+
+    ui_components_text_draw_in_region(&header_region, STL_DEFAULT, "%s", header_text);
+
+    ui_components_box_draw(BROWSER_SEARCH_RESULTS_X0, BROWSER_SEARCH_RESULTS_Y0, BROWSER_SEARCH_RESULTS_X1, BROWSER_SEARCH_RESULTS_Y1, RGBA32(0x05, 0x08, 0x12, 0xA8));
+    ui_components_border_draw(BROWSER_SEARCH_RESULTS_X0, BROWSER_SEARCH_RESULTS_Y0, BROWSER_SEARCH_RESULTS_X1, BROWSER_SEARCH_RESULTS_Y1);
+    rdpq_text_printf(
+        &(rdpq_textparms_t){ .width = VISIBLE_AREA_WIDTH - 32, .height = 16, .wrap = WRAP_NONE },
+        FNT_DEFAULT,
+        VISIBLE_AREA_X0 + 16,
+        BROWSER_SEARCH_RESULTS_Y0 + 4,
+        "^%02XFiltered Results^00",
+        STL_YELLOW
+    );
+
+    int visible_rows = (BROWSER_SEARCH_LIST_Y1 - BROWSER_SEARCH_LIST_Y0) / BROWSER_SEARCH_RESULT_ROW_H;
+    if (visible_rows < 1) {
+        visible_rows = 1;
+    }
+
+    if (browser_search_match_count <= 0) {
+        ui_components_text_draw_in_region(&results_region, STL_ORANGE, "No matching entries in this list.");
+        return;
+    }
+
+    int start = 0;
+    if (browser_search_selected >= visible_rows / 2) {
+        start = browser_search_selected - (visible_rows / 2);
+        if (start > browser_search_match_count - visible_rows) {
+            start = browser_search_match_count - visible_rows;
+        }
+    }
+    if (start < 0) {
+        start = 0;
+    }
+
+    int end = start + visible_rows;
+    if (end > browser_search_match_count) {
+        end = browser_search_match_count;
+    }
+
+    for (int i = start; i < end; i++) {
+        int source_index = browser_search_matches[i];
+        bool selected = (i == browser_search_selected);
+        results_used += (size_t)snprintf(
+            results_text + results_used,
+            results_used < sizeof(results_text) ? sizeof(results_text) - results_used : 0,
+            "%s^%02X%s^00\n",
+            selected ? "> " : "  ",
+            selected ? STL_YELLOW : STL_DEFAULT,
+            menu->browser.list[source_index].name ? menu->browser.list[source_index].name : "(unnamed)"
+        );
+    }
+
+    ui_components_text_draw_in_region(&results_region, STL_DEFAULT, "%s", results_text);
+}
+
 static void delete_entry (menu_t *menu, void *arg) {
     path_t *path = path_clone_push(menu->browser.directory, menu->browser.entry->name);
 
@@ -4100,6 +4524,7 @@ static void open_virtual_pak_center(menu_t *menu, void *arg) {
 
 static component_context_menu_t settings_context_menu = {
     .list = {
+        { .text = "Search...", .action = browser_search_open },
         { .text = "Random mode...", .submenu = &random_mode_context_menu },
         { .text = "Controller Pak manager", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_CONTROLLER_PAKFS) },
         { .text = "Virtual Pak center", .action = open_virtual_pak_center },
@@ -4111,6 +4536,21 @@ static component_context_menu_t settings_context_menu = {
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
+
+static void browser_hide_all_context_menus(void) {
+    entry_context_menu.row_selected = -1;
+    entry_context_menu.submenu = NULL;
+    entry_context_menu.hide_pending = false;
+    archive_context_menu.row_selected = -1;
+    archive_context_menu.submenu = NULL;
+    archive_context_menu.hide_pending = false;
+    playlist_context_menu.row_selected = -1;
+    playlist_context_menu.submenu = NULL;
+    playlist_context_menu.hide_pending = false;
+    settings_context_menu.row_selected = -1;
+    settings_context_menu.submenu = NULL;
+    settings_context_menu.hide_pending = false;
+}
 
 static void process (menu_t *menu) {
     if (playlist_toast.frames_left > 0) {
@@ -4140,6 +4580,10 @@ static void process (menu_t *menu) {
     }
 
     if (ui_components_context_menu_process(menu, &settings_context_menu)) {
+        return;
+    }
+
+    if (browser_search_process(menu)) {
         return;
     }
 
@@ -4322,11 +4766,15 @@ static void draw (menu_t *menu, surface_t *d) {
 
     bool use_playlist_grid = browser_use_playlist_grid(menu);
 
+    if (browser_search_active) {
+        browser_search_draw(menu);
+    }
+
     ui_components_set_file_list_top_inset(0);
 
-    if (use_playlist_grid) {
+    if (!browser_search_active && use_playlist_grid) {
         browser_playlist_grid_draw(menu);
-    } else {
+    } else if (!browser_search_active) {
         ui_components_set_file_list_last_played_context(&menu->playtime, menu->current_time);
         ui_components_file_list_draw(menu->browser.list, menu->browser.entries, menu->browser.selected);
     }
@@ -4349,26 +4797,48 @@ static void draw (menu_t *menu, surface_t *d) {
         }
     }
 
-    ui_components_actions_bar_text_draw(
-        STL_DEFAULT,
-        ALIGN_LEFT, VALIGN_TOP,
-        "%s\n"
-        "^%02XB: Back^00 | ^%02XL: %s^00",
-        menu->browser.entries == 0 ? "" : action,
-        path_is_root(menu->browser.directory) ? STL_GRAY : STL_DEFAULT,
-        menu->browser.entries > 1 ? STL_DEFAULT : STL_GRAY,
-        "Random"
-    );
+    if (browser_search_active) {
+        ui_components_actions_bar_text_draw(
+            STL_DEFAULT,
+            ALIGN_LEFT, VALIGN_TOP,
+            "A: Type / Accept\n"
+            "^%02XR: Switch Keyboard/Results^00 | ^%02XB: Close^00",
+            STL_DEFAULT,
+            STL_DEFAULT
+        );
+    } else {
+        ui_components_actions_bar_text_draw(
+            STL_DEFAULT,
+            ALIGN_LEFT, VALIGN_TOP,
+            "%s\n"
+            "^%02XB: Back^00 | ^%02XL: %s^00",
+            menu->browser.entries == 0 ? "" : action,
+            path_is_root(menu->browser.directory) ? STL_GRAY : STL_DEFAULT,
+            menu->browser.entries > 1 ? STL_DEFAULT : STL_GRAY,
+            "Random"
+        );
+    }
 
-    ui_components_actions_bar_text_draw(
-        STL_DEFAULT,
-        ALIGN_RIGHT, VALIGN_TOP,
-        "^%02XStart: Settings^00\n"
-        "^%02XR: Options^00 | Sort:%s",
-        menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
-        menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
-        browser_sort_mode_string(menu)
-    );
+    if (browser_search_active) {
+        ui_components_actions_bar_text_draw(
+            STL_DEFAULT,
+            ALIGN_RIGHT, VALIGN_TOP,
+            "^%02XStart: Close search^00\n"
+            "Sort:%s",
+            STL_DEFAULT,
+            browser_sort_mode_string(menu)
+        );
+    } else {
+        ui_components_actions_bar_text_draw(
+            STL_DEFAULT,
+            ALIGN_RIGHT, VALIGN_TOP,
+            "^%02XStart: Settings^00\n"
+            "^%02XR: Options^00 | Sort:%s",
+            menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+            menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+            browser_sort_mode_string(menu)
+        );
+    }
 
     if (menu->current_time >= 0) {
         char datetime[32];
@@ -4388,15 +4858,17 @@ static void draw (menu_t *menu, surface_t *d) {
         );
     }
 
-    if (menu->browser.archive) {
-        ui_components_context_menu_draw(&archive_context_menu);
-    } else if (menu->browser.playlist) {
-        ui_components_context_menu_draw(&playlist_context_menu);
-    } else {
-        ui_components_context_menu_draw(&entry_context_menu);
-    }
+    if (!browser_search_active) {
+        if (menu->browser.archive) {
+            ui_components_context_menu_draw(&archive_context_menu);
+        } else if (menu->browser.playlist) {
+            ui_components_context_menu_draw(&playlist_context_menu);
+        } else {
+            ui_components_context_menu_draw(&entry_context_menu);
+        }
 
-    ui_components_context_menu_draw(&settings_context_menu);
+        ui_components_context_menu_draw(&settings_context_menu);
+    }
 
     playlist_toast_draw();
 

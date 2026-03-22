@@ -577,6 +577,65 @@ void ui_components_messagebox_draw (char *fmt, ...) {
     rdpq_paragraph_free(paragraph);
 }
 
+ui_region_t ui_components_content_region_get(bool tabbed, int top_padding, int bottom_padding) {
+    int x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
+    int y = VISIBLE_AREA_Y0 + TEXT_MARGIN_VERTICAL + TEXT_OFFSET_VERTICAL;
+    int height = LAYOUT_ACTIONS_SEPARATOR_Y - OVERSCAN_HEIGHT - (TEXT_MARGIN_VERTICAL * 2);
+
+    if (tabbed) {
+        y += TAB_HEIGHT + BORDER_THICKNESS;
+        height -= TAB_HEIGHT + BORDER_THICKNESS;
+    }
+
+    y += top_padding;
+    height -= top_padding + bottom_padding;
+    if (height < 0) {
+        height = 0;
+    }
+
+    return (ui_region_t) {
+        .x = x,
+        .y = y,
+        .width = VISIBLE_AREA_WIDTH - (TEXT_MARGIN_HORIZONTAL * 2),
+        .height = height,
+    };
+}
+
+void ui_components_text_draw_in_region (const ui_region_t *region, menu_font_style_t style, char *fmt, ...) {
+    if (!region || region->width <= 0 || region->height <= 0) {
+        return;
+    }
+
+    char buffer[2048];
+    size_t nbytes = sizeof(buffer);
+
+    va_list va;
+    va_start(va, fmt);
+    char *formatted = vasnprintf(buffer, &nbytes, fmt, va);
+    va_end(va);
+
+    rdpq_text_printn(
+        &(rdpq_textparms_t) {
+            .style_id = style,
+            .width = region->width,
+            .height = region->height,
+            .align = ALIGN_LEFT,
+            .valign = VALIGN_TOP,
+            .wrap = WRAP_WORD,
+            .line_spacing = TEXT_LINE_SPACING_ADJUST,
+        },
+        FNT_DEFAULT,
+        region->x,
+        region->y,
+        formatted,
+        nbytes
+    );
+
+    if (formatted != buffer) {
+        free(formatted);
+    }
+}
+
 /**
  * @brief Draw the main text with formatted content.
  * 

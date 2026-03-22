@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include <libdragon.h>
 #include <mini.c/src/mini.h>
@@ -97,6 +98,9 @@ typedef struct {
         feat_t feat; /**< Supported features */
     } data;
 } match_t;
+
+static int32_t parse_age_rating_from_value(const char *value);
+static rom_esrb_age_rating_t parse_esrb_age_rating_from_value(const char *value);
 
 #define MATCH_ID(i, s, f)                       { .type = MATCH_TYPE_ID, .fields = { .id = i }, .data = { .save = s, .feat = f } }
 #define MATCH_ID_REGION(i, s, f)                { .type = MATCH_TYPE_ID_REGION, .fields = { .id = i }, .data = { .save = s, .feat = f } }
@@ -1161,11 +1165,21 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
             metadata_copy_if_empty(rom_info->metadata.short_desc, sizeof(rom_info->metadata.short_desc), value);
         } else if ((strcmp(key, "long-desc") == 0) && (long_desc_file[0] == '\0') && (value[0] != '\0')) {
             snprintf(long_desc_file, sizeof(long_desc_file), "%s", value);
-        } else if ((strcmp(key, "age-rating") == 0) && (rom_info->metadata.age_rating < 0)) {
-            char *parse_end = NULL;
-            long parsed = strtol(value, &parse_end, 10);
-            if ((parse_end != value) && (parsed >= 0) && (parsed <= 18)) {
-                rom_info->metadata.age_rating = (int32_t)parsed;
+        } else if (((strcmp(key, "age-rating") == 0) || (strcmp(key, "age_rating") == 0)) &&
+                   (rom_info->metadata.age_rating < 0)) {
+            int32_t parsed = parse_age_rating_from_value(value);
+            if (parsed >= 0) {
+                rom_info->metadata.age_rating = parsed;
+            }
+        } else if (((strcmp(key, "esrb") == 0) ||
+                    (strcmp(key, "esrb-rating") == 0) ||
+                    (strcmp(key, "esrb_rating") == 0) ||
+                    (strcmp(key, "esrb-age-rating") == 0) ||
+                    (strcmp(key, "esrb_age_rating") == 0)) &&
+                   (rom_info->metadata.esrb_age_rating == ROM_ESRB_AGE_RATING_NONE)) {
+            rom_esrb_age_rating_t parsed = parse_esrb_age_rating_from_value(value);
+            if (parsed != ROM_ESRB_AGE_RATING_NONE) {
+                rom_info->metadata.esrb_age_rating = parsed;
             }
         } else if (((strcmp(key, "release-date") == 0) ||
                     (strcmp(key, "release_date") == 0) ||
@@ -1442,6 +1456,107 @@ static bool rom_identity_should_scan_dir(const char *dirname) {
     return true;
 }
 
+static int32_t parse_age_rating_from_value(const char *value) {
+    if (!value || value[0] == '\0') {
+        return -1;
+    }
+
+    while (*value == ' ' || *value == '\t') {
+        value++;
+    }
+
+    char *parse_end = NULL;
+    long parsed = strtol(value, &parse_end, 10);
+    if (parse_end == value || parsed < 0 || parsed > 18) {
+        return -1;
+    }
+
+    while (*parse_end == ' ' || *parse_end == '\t') {
+        parse_end++;
+    }
+
+    if (*parse_end == '+') {
+        parse_end++;
+    }
+    while (*parse_end == ' ' || *parse_end == '\t') {
+        parse_end++;
+    }
+
+    return (*parse_end == '\0') ? (int32_t)parsed : -1;
+}
+
+static rom_esrb_age_rating_t parse_esrb_age_rating_from_value(const char *value) {
+    if (!value || value[0] == '\0') {
+        return ROM_ESRB_AGE_RATING_NONE;
+    }
+
+    while (*value == ' ' || *value == '\t') {
+        value++;
+    }
+
+    char *parse_end = NULL;
+    long parsed = strtol(value, &parse_end, 10);
+    if (parse_end != value) {
+        while (*parse_end == ' ' || *parse_end == '\t') {
+            parse_end++;
+        }
+        if (*parse_end == '\0' && parsed >= ROM_ESRB_AGE_RATING_NONE && parsed <= ROM_ESRB_AGE_RATING_ADULT) {
+            return (rom_esrb_age_rating_t)parsed;
+        }
+    }
+
+    if (strcasecmp(value, "e") == 0 || strcasecmp(value, "everyone") == 0) {
+        return ROM_ESRB_AGE_RATING_EVERYONE;
+    }
+    if (strcasecmp(value, "e10+") == 0 ||
+        strcasecmp(value, "everyone 10+") == 0 ||
+        strcasecmp(value, "everyone10+") == 0 ||
+        strcasecmp(value, "everyone 10 plus") == 0) {
+        return ROM_ESRB_AGE_RATING_EVERYONE_10_PLUS;
+    }
+    if (strcasecmp(value, "t") == 0 || strcasecmp(value, "teen") == 0) {
+        return ROM_ESRB_AGE_RATING_TEEN;
+    }
+    if (strcasecmp(value, "m") == 0 || strcasecmp(value, "mature") == 0 || strcasecmp(value, "mature 17+") == 0) {
+        return ROM_ESRB_AGE_RATING_MATURE;
+    }
+    if (strcasecmp(value, "ao") == 0 || strcasecmp(value, "adults only") == 0 || strcasecmp(value, "adults only 18+") == 0) {
+        return ROM_ESRB_AGE_RATING_ADULT;
+    }
+
+    return ROM_ESRB_AGE_RATING_NONE;
+}
+
+static size_t rom_identity_legacy_prefix_length(const char *game_id) {
+    if (!game_id || game_id[0] == '\0') {
+        return 0;
+    }
+
+    const char *dash = strchr(game_id, '-');
+    size_t len = dash ? (size_t)(dash - game_id) : strlen(game_id);
+    if (len > 4) {
+        len = 4;
+    }
+    return len;
+}
+
+static bool rom_identity_matches_candidate(const char *target_game_id, const char *candidate_game_id) {
+    if (!target_game_id || !candidate_game_id || target_game_id[0] == '\0' || candidate_game_id[0] == '\0') {
+        return false;
+    }
+
+    if (strcmp(candidate_game_id, target_game_id) == 0) {
+        return true;
+    }
+
+    size_t prefix_len = rom_identity_legacy_prefix_length(target_game_id);
+    if (prefix_len >= 3 && strncmp(candidate_game_id, target_game_id, prefix_len) == 0) {
+        return true;
+    }
+
+    return false;
+}
+
 static bool rom_identity_scan_dir(path_t *dir_path, const char *target_game_id, char *out, size_t out_len, int depth) {
     static const char *rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
 
@@ -1455,23 +1570,32 @@ static bool rom_identity_scan_dir(path_t *dir_path, const char *target_game_id, 
     dir_t info;
     int result = dir_findfirst(path_get(dir_path), &info);
     while (result == 0) {
-        if (info.d_type == DT_DIR) {
-            if (rom_identity_should_scan_dir(info.d_name)) {
-                path_t *subdir = path_clone_push(dir_path, info.d_name);
+        path_t *candidate_path = path_clone_push(dir_path, info.d_name);
+        bool is_dir = false;
+        if (candidate_path) {
+            is_dir = (info.d_type == DT_DIR) || directory_exists(path_get(candidate_path));
+        }
+
+        if (is_dir) {
+            if (rom_identity_should_scan_dir(info.d_name) && candidate_path) {
+                path_t *subdir = candidate_path;
+                candidate_path = NULL;
                 if (subdir) {
                     bool found = rom_identity_scan_dir(subdir, target_game_id, out, out_len, depth + 1);
                     path_free(subdir);
                     if (found) {
+                        path_free(candidate_path);
                         return true;
                     }
                 }
             }
         } else if (file_has_extensions(info.d_name, rom_extensions)) {
-            path_t *candidate = path_clone_push(dir_path, info.d_name);
+            path_t *candidate = candidate_path;
+            candidate_path = NULL;
             if (candidate) {
                 char candidate_game_id[ROM_STABLE_ID_LENGTH] = {0};
                 if (rom_info_get_stable_id_for_path(path_get(candidate), candidate_game_id, sizeof(candidate_game_id)) &&
-                    strcmp(candidate_game_id, target_game_id) == 0) {
+                    rom_identity_matches_candidate(target_game_id, candidate_game_id)) {
                     snprintf(out, out_len, "%s", path_get(candidate));
                     path_free(candidate);
                     return true;
@@ -1479,6 +1603,7 @@ static bool rom_identity_scan_dir(path_t *dir_path, const char *target_game_id, 
                 path_free(candidate);
             }
         }
+        path_free(candidate_path);
         result = dir_findnext(path_get(dir_path), &info);
     }
 

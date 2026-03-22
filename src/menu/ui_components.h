@@ -48,6 +48,16 @@ typedef struct {
 } file_info_t;
 
 /**
+ * @brief Rectangular UI region in screen coordinates.
+ */
+typedef struct {
+    int x;
+    int y;
+    int width;
+    int height;
+} ui_region_t;
+
+/**
  * @brief Draw a box component.
  * 
  * @param x0 Starting x-coordinate.
@@ -194,6 +204,26 @@ void ui_components_dialog_draw(int width, int height);
 void ui_components_messagebox_draw(char *fmt, ...);
 
 /**
+ * @brief Get the main content region for a screen.
+ *
+ * @param tabbed Whether the screen has top tabs.
+ * @param top_padding Extra top inset inside the content region.
+ * @param bottom_padding Extra bottom inset inside the content region.
+ * @return ui_region_t Region bounds.
+ */
+ui_region_t ui_components_content_region_get(bool tabbed, int top_padding, int bottom_padding);
+
+/**
+ * @brief Draw text inside an explicit region.
+ *
+ * @param region Destination region.
+ * @param style Font style.
+ * @param fmt Format string for the text.
+ * @param ... Additional arguments for the format string.
+ */
+void ui_components_text_draw_in_region(const ui_region_t *region, menu_font_style_t style, char *fmt, ...);
+
+/**
  * @brief Draw the main text component.
  * 
  * @param style The font style.
@@ -272,6 +302,7 @@ void ui_components_background_draw(void);
  * @param selected Index of the selected entry.
  */
 void ui_components_file_list_draw(entry_t *list, int entries, int selected);
+void ui_components_file_list_draw_indexed(entry_t *list, const int *indices, int entries, int selected);
 
 /**
  * @brief Context menu structure.

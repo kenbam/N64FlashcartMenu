@@ -123,7 +123,7 @@ static int format_last_played(char *buffer, size_t buf_size, const entry_t *entr
  * @param entries Number of entries in the list.
  * @param selected Index of the currently selected entry.
  */
-void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
+static void ui_components_file_list_draw_internal(entry_t *list, const int *indices, int entries, int selected) {
     menu_font_style_t shimmer_style = selected_shimmer_style();
 
     const int nominal_row_height = 19;
@@ -187,7 +187,8 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
             if (i >= visible_entries || entry_index >= entries) {
                 name_lengths[i] = 0;
             } else {
-                size_t length = strlen(list[entry_index].name);
+                int source_index = indices ? indices[entry_index] : entry_index;
+                size_t length = strlen(list[source_index].name);
                 name_lengths[i] = length;
                 total_length += length;
             }
@@ -210,7 +211,8 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
         for (int i = 0; i < visible_entries; i++) {
             int entry_index = starting_position + i;
-            entry_t *entry = &list[entry_index];
+            int source_index = indices ? indices[entry_index] : entry_index;
+            entry_t *entry = &list[source_index];
 
             menu_font_style_t style;
 
@@ -296,7 +298,8 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
         for (int i = 0; i < visible_entries; i++) {
             int entry_index = starting_position + i;
-            entry_t *entry = &list[entry_index];
+            int source_index = indices ? indices[entry_index] : entry_index;
+            entry_t *entry = &list[source_index];
 
             if (entry_index == selected) {
                 rdpq_paragraph_builder_style(shimmer_style);
@@ -326,4 +329,12 @@ void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
 
         rdpq_paragraph_free(layout);
     }
+}
+
+void ui_components_file_list_draw(entry_t *list, int entries, int selected) {
+    ui_components_file_list_draw_internal(list, NULL, entries, selected);
+}
+
+void ui_components_file_list_draw_indexed(entry_t *list, const int *indices, int entries, int selected) {
+    ui_components_file_list_draw_internal(list, indices, entries, selected);
 }

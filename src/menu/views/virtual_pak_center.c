@@ -7,6 +7,7 @@
 #include "../path.h"
 #include "../rom_info.h"
 #include "../sound.h"
+#include "../ui_components/constants.h"
 #include "utils/fs.h"
 #include "../virtual_pak.h"
 #include "views.h"
@@ -40,6 +41,9 @@ static int slot_entry_count = 0;
 static int slot_selected_index = 0;
 static int slot_scroll_offset = 0;
 static bool slot_delete_armed = false;
+static int status_refresh_cooldown = 0;
+
+#define VIRTUAL_PAK_LIST_ROWS     (8)
 
 static const char *virtual_pak_phase_label(int phase) {
     switch (phase) {
@@ -53,8 +57,18 @@ static const char *virtual_pak_yes_no(bool value) {
     return value ? "Yes" : "No";
 }
 
+static ui_region_t virtual_pak_center_body_region(void) {
+    return ui_components_content_region_get(true, 8, 8);
+}
+
+static void virtual_pak_center_draw_body_text(menu_font_style_t style, const char *text) {
+    ui_region_t region = virtual_pak_center_body_region();
+    ui_components_text_draw_in_region(&region, style, "%s", text ? text : "");
+}
+
 static void virtual_pak_center_refresh(void) {
     virtual_pak_get_status(&current_status);
+    status_refresh_cooldown = 20;
 }
 
 static void virtual_pak_center_set_message(const char *message) {
@@ -250,8 +264,8 @@ static void virtual_pak_center_move_slot_selection(int delta) {
 
     if (slot_selected_index < slot_scroll_offset) {
         slot_scroll_offset = slot_selected_index;
-    } else if (slot_selected_index >= (slot_scroll_offset + 8)) {
-        slot_scroll_offset = slot_selected_index - 7;
+    } else if (slot_selected_index >= (slot_scroll_offset + VIRTUAL_PAK_LIST_ROWS)) {
+        slot_scroll_offset = slot_selected_index - (VIRTUAL_PAK_LIST_ROWS - 1);
     }
 }
 
@@ -272,6 +286,8 @@ static void virtual_pak_center_open_selected_slot_rom(menu_t *menu) {
         path_free(menu->load.rom_path);
     }
     menu->load.rom_path = path_create(entry->owner_path);
+    menu->load.load_history_id = -1;
+    menu->load.load_favorite_id = -1;
     menu->load.back_mode = MENU_MODE_VIRTUAL_PAK_CENTER;
     menu->next_mode = MENU_MODE_LOAD_ROM;
     sound_play_effect(SFX_ENTER);
@@ -310,7 +326,7 @@ static void virtual_pak_center_prime_visible_slots(menu_t *menu) {
     }
 
     int start = slot_scroll_offset;
-    int end = slot_scroll_offset + 8;
+    int end = slot_scroll_offset + VIRTUAL_PAK_LIST_ROWS;
     if (slot_selected_index < start) {
         start = slot_selected_index;
     }
@@ -329,8 +345,10 @@ static void virtual_pak_center_prime_visible_slots(menu_t *menu) {
 static void process(menu_t *menu) {
     if (current_tab == VIRTUAL_PAK_CENTER_TAB_ALL_SLOTS) {
         virtual_pak_center_prime_visible_slots(menu);
-    } else {
+    } else if (status_refresh_cooldown <= 0) {
         virtual_pak_center_refresh();
+    } else {
+        status_refresh_cooldown--;
     }
 
     if (menu->actions.back) {
@@ -433,10 +451,10 @@ static void process(menu_t *menu) {
 }
 
 static void draw_status_tab(void) {
-    ui_components_main_text_draw(
-        STL_DEFAULT,
-        ALIGN_LEFT, VALIGN_TOP,
-        "\n\n"
+    char body[2048];
+    snprintf(
+        body,
+        sizeof(body),
         "Session Active       : %s\n"
         "Phase                : %s\n"
         "Controller           : %d\n"
@@ -469,6 +487,7 @@ static void draw_status_tab(void) {
         current_status.pak_path[0] ? current_status.pak_path : "(none)",
         current_status.backup_path[0] ? current_status.backup_path : "(none)"
     );
+    virtual_pak_center_draw_body_text(STL_DEFAULT, body);
 }
 
 static void draw_recovery_tab(void) {
@@ -476,10 +495,10 @@ static void draw_recovery_tab(void) {
         ? "Keep the same physical Controller Pak inserted in controller 1 before retrying recovery."
         : "No pending recovery session. Launch a virtual-pak game to populate this screen.";
 
-    ui_components_main_text_draw(
-        current_status.session_active ? STL_ORANGE : STL_DEFAULT,
-        ALIGN_LEFT, VALIGN_TOP,
-        "\n\n"
+    char body[1536];
+    snprintf(
+        body,
+        sizeof(body),
         "%s\n"
         "\n"
         "Recovery Phase       : %s\n"
@@ -499,14 +518,13 @@ static void draw_recovery_tab(void) {
         current_status.rescue_file_exists ? "Present" : "Missing",
         current_status.rescue_path[0] ? current_status.rescue_path : "(none)"
     );
+    virtual_pak_center_draw_body_text(current_status.session_active ? STL_ORANGE : STL_DEFAULT, body);
 }
 
 static void draw_rom_slot_tab(menu_t *menu) {
     if (!virtual_pak_center_has_rom(menu)) {
-        ui_components_main_text_draw(
+        virtual_pak_center_draw_body_text(
             STL_DEFAULT,
-            ALIGN_LEFT, VALIGN_TOP,
-            "\n\n"
             "No ROM is currently selected.\n"
             "\n"
             "Open this center from a ROM details screen to manage a specific game's virtual pak settings.\n"
@@ -517,14 +535,14 @@ static void draw_rom_slot_tab(menu_t *menu) {
     const char *supports_cpak = menu->load.rom_info.features.controller_pak ? "Yes" : "No";
     const char *enabled = menu->load.rom_info.settings.virtual_pak_enabled ? "Yes" : "No";
 
-    ui_components_main_text_draw(
-        menu->load.rom_info.features.controller_pak ? STL_DEFAULT : STL_ORANGE,
-        ALIGN_LEFT, VALIGN_TOP,
-        "\n\n"
-        "ROM Title             : %s\n"
+    char body[1024];
+    snprintf(
+        body,
+        sizeof(body),
+        "ROM Title              : %s\n"
         "Supports Controller Pak: %s\n"
-        "Virtual Pak Enabled   : %s\n"
-        "Assigned Slot         : %u\n"
+        "Virtual Pak Enabled    : %s\n"
+        "Assigned Slot          : %u\n"
         "\n"
         "A toggles virtual pak for this ROM.\n"
         "Up/Down changes the assigned slot.\n"
@@ -535,41 +553,41 @@ static void draw_rom_slot_tab(menu_t *menu) {
         enabled,
         (unsigned)menu->load.rom_info.settings.virtual_pak_slot
     );
+    virtual_pak_center_draw_body_text(menu->load.rom_info.features.controller_pak ? STL_DEFAULT : STL_ORANGE, body);
 }
 
 static void draw_all_slots_tab(void) {
-    ui_components_main_text_draw(
-        STL_DEFAULT,
-        ALIGN_LEFT, VALIGN_TOP,
-        "\n\n"
-        "Stored Virtual Pak Slots: %d\n"
+    char body[4096];
+    ui_region_t region = virtual_pak_center_body_region();
+    size_t used = (size_t)snprintf(
+        body,
+        sizeof(body),
+        "Slots Stored: %d\n"
         "\n",
         slot_entry_count
     );
-
     if (slot_entry_count <= 0) {
-        ui_components_main_text_draw(
-            STL_DEFAULT,
-            ALIGN_LEFT, VALIGN_TOP,
-            "\n\n\n\n"
-            "No virtual pak slot files were found in /menu/virtual_paks.\n"
+        rdpq_text_printf(
+            &(rdpq_textparms_t){ .width = region.width, .height = region.height, .wrap = WRAP_WORD },
+            FNT_DEFAULT,
+            region.x,
+            region.y,
+            "No virtual pak slot files were found in /menu/virtual_paks."
         );
         return;
     }
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < VIRTUAL_PAK_LIST_ROWS; i++) {
         int index = slot_scroll_offset + i;
         if (index >= slot_entry_count) {
             break;
         }
         virtual_pak_slot_entry_t *entry = &slot_entries[index];
-        menu_font_style_t style = (index == slot_selected_index) ? STL_YELLOW : STL_DEFAULT;
-        ui_components_main_text_draw(
-            style,
-            ALIGN_LEFT, VALIGN_TOP,
-            "\n\n\n\n"
-            "%s%2u  %-24.24s  %-3lld KB  %s\n",
-            (index == slot_selected_index) ? "> " : "  ",
+        used += (size_t)snprintf(
+            body + used,
+            used < sizeof(body) ? sizeof(body) - used : 0,
+            "%s%2u  %-22.22s  %-4lld KB  %s\n",
+            (index == slot_selected_index) ? ">" : " ",
             (unsigned)entry->slot,
             entry->display_title,
             (long long)((entry->size_bytes + 1023) / 1024),
@@ -579,10 +597,10 @@ static void draw_all_slots_tab(void) {
 
     if (slot_selected_index >= 0 && slot_selected_index < slot_entry_count) {
         virtual_pak_slot_entry_t *selected = &slot_entries[slot_selected_index];
-        ui_components_main_text_draw(
-            STL_DEFAULT,
-            ALIGN_LEFT, VALIGN_TOP,
-            "\n\n\n\n\n\n\n\n\n\n\n\n"
+        used += (size_t)snprintf(
+            body + used,
+            used < sizeof(body) ? sizeof(body) - used : 0,
+            "\n"
             "Selected Title       : %s\n"
             "Selected Game ID     : %s\n"
             "Slot File            : %s\n"
@@ -593,24 +611,31 @@ static void draw_all_slots_tab(void) {
             selected->owner_exists ? selected->owner_path : "(not found)"
         );
     }
+
+    rdpq_text_printf(
+        &(rdpq_textparms_t){ .width = region.width, .height = region.height, .wrap = WRAP_WORD },
+        FNT_DEFAULT,
+        region.x,
+        region.y,
+        "%s",
+        body
+    );
 }
 
 static void draw(menu_t *menu, surface_t *display) {
+    const char *tab_labels[] = {"Status", "Recovery", "ROM Slot", "All Slots"};
+    const int tab_count = 4;
+    float tab_width = (VISIBLE_AREA_X1 - VISIBLE_AREA_X0 - 8.0f) / (tab_count + 0.5f);
+
     rdpq_attach(display, NULL);
 
     ui_components_background_draw();
-    ui_components_layout_draw();
-
-    ui_components_main_text_draw(
-        STL_DEFAULT,
-        ALIGN_CENTER, VALIGN_TOP,
-        "VIRTUAL PAK CENTER\n"
-        "\n"
-        "[%s]   [%s]   [%s]   [%s]",
-        current_tab == VIRTUAL_PAK_CENTER_TAB_STATUS ? "Status" : "status",
-        current_tab == VIRTUAL_PAK_CENTER_TAB_RECOVERY ? "Recovery" : "recovery",
-        current_tab == VIRTUAL_PAK_CENTER_TAB_ROM_SLOT ? "ROM Slot" : "rom slot",
-        current_tab == VIRTUAL_PAK_CENTER_TAB_ALL_SLOTS ? "All Slots" : "all slots"
+    ui_components_layout_draw_tabbed();
+    ui_components_tabs_draw(
+        tab_labels,
+        tab_count,
+        (int)current_tab,
+        tab_width
     );
 
     if (current_tab == VIRTUAL_PAK_CENTER_TAB_STATUS) {
@@ -698,6 +723,7 @@ void view_virtual_pak_center_init(menu_t *menu) {
     }
     status_message[0] = '\0';
     slot_delete_armed = false;
+    status_refresh_cooldown = 20;
 }
 
 void view_virtual_pak_center_display(menu_t *menu, surface_t *display) {

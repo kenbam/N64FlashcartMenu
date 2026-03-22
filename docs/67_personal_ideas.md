@@ -16,6 +16,24 @@
   - theme + music + background + visualizer preset + text panel alpha.
 - "Now Playing" mini-OSD for menu music.
 - Challenge mode + party mode launchers based on curated playlists.
+- Emulator experience upgrades:
+  - emulator details page should show which core will be used, expected save type, and whether a matching emulator binary exists in `/menu/emulators`.
+  - add per-core compatibility / caveat notes (for example header stripping, save quirks, unsupported mappers/chips, likely performance issues).
+  - surface emulator ROM metadata where cheap:
+    title fallback from filename, file size, save path, last played, last save modified.
+  - add emulator-specific curated art / manuals / metadata roots similar to native ROM metadata where practical.
+  - support quick launch presets per emulator family (last played, favorites, recently used per core).
+  - add missing-system guidance:
+    if the required emulator binary is absent, show the exact expected filename and target directory before launch.
+  - add save-management shortcuts for emulated ROMs:
+    inspect save path, delete/reset save, maybe duplicate save for alternate playthroughs.
+  - consider per-core settings profiles:
+    region / speed / video mode / known boot flags if supported by the emulator frontend.
+  - add archive-awareness if worthwhile:
+    let the menu extract or stage common emulator ROM archives into cache before launch.
+  - unify emulator file typing/extensions:
+    `file_info.c` and browser extension tables are slightly inconsistent (`sfc` missing in one place).
+  - longer-term: emulator library browser mode / shelves grouped by system, instead of treating emulator ROMs as generic files.
 
 ## Rank 3: Performance/Architecture
 - Firmware-assisted I/O prefetch hints for backgrounds/boxart/music.
