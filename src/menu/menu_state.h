@@ -37,6 +37,7 @@ typedef enum {
     MENU_MODE_SETTINGS_EDITOR,
     MENU_MODE_RTC,
     MENU_MODE_CONTROLLER_PAKFS,
+    MENU_MODE_VIRTUAL_PAK_CENTER,
     MENU_MODE_CONTROLLER_PAK_DUMP_INFO,
     MENU_MODE_CONTROLLER_PAK_DUMP_NOTE_INFO,
     MENU_MODE_FLASHCART,
@@ -111,6 +112,7 @@ typedef struct {
 typedef struct {
     menu_mode_t mode;
     menu_mode_t next_mode;
+    menu_mode_t utility_return_mode;
 
     const char *storage_prefix;
     settings_t settings;

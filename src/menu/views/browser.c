@@ -4092,10 +4092,17 @@ static void set_menu_next_mode (menu_t *menu, void *arg) {
     menu->next_mode = next_mode;
 }
 
+static void open_virtual_pak_center(menu_t *menu, void *arg) {
+    (void)arg;
+    menu->utility_return_mode = MENU_MODE_BROWSER;
+    menu->next_mode = MENU_MODE_VIRTUAL_PAK_CENTER;
+}
+
 static component_context_menu_t settings_context_menu = {
     .list = {
         { .text = "Random mode...", .submenu = &random_mode_context_menu },
         { .text = "Controller Pak manager", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_CONTROLLER_PAKFS) },
+        { .text = "Virtual Pak center", .action = open_virtual_pak_center },
         { .text = "Menu settings", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_SETTINGS_EDITOR) },
         { .text = "Time (RTC) settings", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_RTC) },
         { .text = "Menu information", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_CREDITS) },
@@ -4452,6 +4459,11 @@ void view_browser_display (menu_t *menu, surface_t *display) {
             browser_virtual_pak_recovery_active = false;
             browser_virtual_pak_recovery_failed = false;
             browser_virtual_pak_recovery_snoozed = true;
+        } else if (menu->actions.options) {
+            sound_play_effect(SFX_ENTER);
+            menu->utility_return_mode = MENU_MODE_BROWSER;
+            menu->next_mode = MENU_MODE_VIRTUAL_PAK_CENTER;
+            return;
         } else if (menu->actions.settings) {
             sound_play_effect(SFX_ERROR);
             virtual_pak_force_clear_pending();
@@ -4480,7 +4492,7 @@ void view_browser_display (menu_t *menu, surface_t *display) {
             browser_virtual_pak_recovery_failed = true;
             browser_virtual_pak_recovery_retry_cooldown = 30;
             snprintf(browser_virtual_pak_recovery_message, sizeof(browser_virtual_pak_recovery_message),
-                "Virtual Pak recovery needs the same physical Controller Pak in controller 1.\n\nA: Retry now  B: Continue for now  Start: Force clear");
+                "Virtual Pak recovery needs the same physical Controller Pak in controller 1.\n\nA: Retry now  B: Continue for now  R: Open center  Start: Force clear");
         }
         return;
     }

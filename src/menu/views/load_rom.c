@@ -827,6 +827,12 @@ static void set_menu_next_mode (menu_t *menu, void *arg) {
     menu->next_mode = next_mode;
 }
 
+static void open_virtual_pak_center(menu_t *menu, void *arg) {
+    (void)arg;
+    menu->utility_return_mode = MENU_MODE_LOAD_ROM;
+    menu->next_mode = MENU_MODE_VIRTUAL_PAK_CENTER;
+}
+
 static void manual_prepare_launch (menu_t *menu, path_t *manual_directory) {
     if (menu->manual.directory) {
         path_free(menu->manual.directory);
@@ -894,6 +900,7 @@ static component_context_menu_t options_context_menu = { .list = {
 #endif
     { .text = "Use Cheats", .submenu = &set_cheat_options_menu },
     { .text = "Virtual Controller Pak", .submenu = &set_virtual_pak_options_menu },
+    { .text = "Virtual Pak Center", .action = open_virtual_pak_center },
     { .text = "Datel Code Editor", .action = set_menu_next_mode, .arg = (void *) (MENU_MODE_DATEL_CODE_EDITOR) },
     { .text = "64DD Disk", .submenu = &set_64dd_disk_context_menu },
     { .text = "Open Manual", .action = open_manual },

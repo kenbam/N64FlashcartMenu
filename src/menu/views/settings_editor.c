@@ -213,6 +213,12 @@ static void open_background_picker (menu_t *menu, void *arg) {
     menu->next_mode = MENU_MODE_BROWSER;
 }
 
+static void open_virtual_pak_center(menu_t *menu, void *arg) {
+    (void)arg;
+    menu->utility_return_mode = MENU_MODE_SETTINGS_EDITOR;
+    menu->next_mode = MENU_MODE_VIRTUAL_PAK_CENTER;
+}
+
 #ifndef FEATURE_AUTOLOAD_ROM_ENABLED
 static void set_use_rom_fast_reboot_enabled_type (menu_t *menu, void *arg) {
     menu->settings.rom_fast_reboot_enabled = (bool)(uintptr_t)(arg);
@@ -695,6 +701,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Menu Music File", .submenu = &set_menu_music_file_context_menu },
     { .text = "Screensaver", .submenu = &screensaver_general_context_menu },
     { .text = "DVD Logo Bounds", .submenu = &screensaver_dvd_bounds_context_menu },
+    { .text = "Virtual Pak Center", .action = open_virtual_pak_center },
     { .text = "Use Saves Folder", .submenu = &set_use_saves_folder_type_context_menu },
     { .text = "Show Saves Folder", .submenu = &set_show_saves_folder_type_context_menu },
     { .text = "Text Panel Overlay", .submenu = &set_text_panel_enabled_type_context_menu },

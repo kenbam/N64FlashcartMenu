@@ -642,6 +642,7 @@ static view_t menu_views[] = {
     { MENU_MODE_SETTINGS_EDITOR, view_settings_init, view_settings_display },
     { MENU_MODE_RTC, view_rtc_init, view_rtc_display },
     { MENU_MODE_CONTROLLER_PAKFS, view_controller_pakfs_init, view_controller_pakfs_display },
+    { MENU_MODE_VIRTUAL_PAK_CENTER, view_virtual_pak_center_init, view_virtual_pak_center_display },
     { MENU_MODE_CONTROLLER_PAK_DUMP_INFO, view_controller_pak_dump_info_init, view_controller_pak_dump_info_display },
     { MENU_MODE_CONTROLLER_PAK_DUMP_NOTE_INFO, view_controller_pak_note_dump_info_init, view_controller_pak_note_dump_info_display },
     { MENU_MODE_FLASHCART, view_flashcart_info_init, view_flashcart_info_display },

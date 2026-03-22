@@ -301,6 +301,15 @@ static bool virtual_pak_build_rescue_path(int controller, uint32_t session_token
     return true;
 }
 
+static void virtual_pak_status_init(virtual_pak_status_t *status) {
+    if (!status) {
+        return;
+    }
+    memset(status, 0, sizeof(*status));
+    status->controller = VIRTUAL_PAK_CONTROLLER;
+    status->slot = VIRTUAL_PAK_SLOT_MIN;
+}
+
 static bool virtual_pak_build_tmp_path(const char *path, const char *suffix, char *out, size_t out_len) {
     if (!path || !suffix || !out || out_len == 0) {
         return false;
@@ -596,6 +605,47 @@ bool virtual_pak_has_pending_sync(void) {
 
 void virtual_pak_force_clear_pending(void) {
     virtual_pak_session_clear();
+}
+
+bool virtual_pak_get_status(virtual_pak_status_t *status) {
+    if (!status) {
+        return false;
+    }
+
+    virtual_pak_status_init(status);
+
+    virtual_pak_session_t session;
+    virtual_pak_session_load(&session);
+
+    status->session_active = session.active;
+    status->phase = session.phase;
+    status->controller = session.controller;
+    status->slot = session.slot;
+    status->session_token = session.session_token;
+
+    snprintf(status->game_id, sizeof(status->game_id), "%s", session.game_id);
+    snprintf(status->rom_path, sizeof(status->rom_path), "%s", session.rom_path);
+    snprintf(status->pak_path, sizeof(status->pak_path), "%s", session.pak_path);
+    snprintf(status->backup_path, sizeof(status->backup_path), "%s", session.backup_path);
+
+    if (session.active && session.controller >= 0 && session.controller <= 3 && session.session_token != 0) {
+        virtual_pak_build_rescue_path(session.controller, session.session_token, status->rescue_path, sizeof(status->rescue_path));
+    }
+
+    status->slot_file_exists = session.pak_path[0] && file_exists(session.pak_path);
+    status->backup_file_exists = session.backup_path[0] && file_exists(session.backup_path);
+    status->rescue_file_exists = status->rescue_path[0] && file_exists(status->rescue_path);
+
+    virtual_pak_refresh_accessory_state();
+    status->has_physical_pak = has_cpak(status->controller);
+    if (status->has_physical_pak) {
+        status->physical_bank_count = cpak_probe_banks(status->controller);
+        if (status->physical_bank_count < 0) {
+            status->physical_bank_count = 0;
+        }
+    }
+
+    return true;
 }
 
 void virtual_pak_try_sync_pending(void) {

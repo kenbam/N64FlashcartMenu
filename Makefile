@@ -89,6 +89,7 @@ SRCS = \
 	menu/views/history_favorites.c \
 	menu/views/image_viewer.c \
 	menu/views/text_viewer.c \
+	menu/views/virtual_pak_center.c \
 	menu/views/manual_viewer.c \
 	menu/views/load_disk.c \
 	menu/views/load_emulator.c \

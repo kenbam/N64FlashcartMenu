@@ -207,6 +207,18 @@ void view_controller_pakfs_init(menu_t *menu);
 void view_controller_pakfs_display(menu_t *menu, surface_t *display);
 
 /**
+ * @brief Initialize the Virtual Pak center view.
+ * @param menu Pointer to the menu structure.
+ */
+void view_virtual_pak_center_init(menu_t *menu);
+/**
+ * @brief Display the Virtual Pak center view.
+ * @param menu Pointer to the menu structure.
+ * @param display Pointer to the display surface.
+ */
+void view_virtual_pak_center_display(menu_t *menu, surface_t *display);
+
+/**
  * @brief Initialize the Controller Pak dump info view.
  * @param menu Pointer to the menu structure.
  */
