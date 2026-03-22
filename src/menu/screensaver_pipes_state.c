@@ -8,7 +8,7 @@
 #define SCREENSAVER_PIPES_GRID_HEIGHT (5)
 #define SCREENSAVER_PIPES_GRID_DEPTH  (7)
 #define SCREENSAVER_PIPES_GROWTH_RATE (3.80f)
-#define SCREENSAVER_PIPES_MAX_CELLS   (80)
+#define SCREENSAVER_PIPES_MAX_CELLS   (72)
 #define SCREENSAVER_PIPES_RESET_DELAY (1.20f)
 
 typedef enum {
@@ -50,22 +50,28 @@ static int pipes_rand_int(screensaver_pipes_state_t *state, int limit) {
 
 static uint8_t pipes_pick_run_length(screensaver_pipes_state_t *state) {
     int roll = pipes_rand_int(state, 100);
-    if (roll < 28) {
+    if (roll < 42) {
         return (uint8_t)(1 + pipes_rand_int(state, 2));
     }
-    if (roll < 68) {
-        return (uint8_t)(3 + pipes_rand_int(state, 3));
+    if (roll < 82) {
+        return (uint8_t)(2 + pipes_rand_int(state, 3));
     }
-    if (roll < 90) {
-        return (uint8_t)(6 + pipes_rand_int(state, 3));
+    if (roll < 95) {
+        return (uint8_t)(5 + pipes_rand_int(state, 3));
     }
-    return (uint8_t)(9 + pipes_rand_int(state, 3));
+    return (uint8_t)(8 + pipes_rand_int(state, 3));
 }
 
-static bool pipes_coord_valid(int x, int y, int z) {
-    return x >= 0 && x < SCREENSAVER_PIPES_GRID_WIDTH &&
-        y >= 0 && y < SCREENSAVER_PIPES_GRID_HEIGHT &&
-        z >= 0 && z < SCREENSAVER_PIPES_GRID_DEPTH;
+static bool pipes_coord_valid(const screensaver_pipes_state_t *state, int x, int y, int z) {
+    int min_x = state ? state->min_x : 0;
+    int max_x = state ? state->max_x : (SCREENSAVER_PIPES_GRID_WIDTH - 1);
+    int min_y = state ? state->min_y : 0;
+    int max_y = state ? state->max_y : (SCREENSAVER_PIPES_GRID_HEIGHT - 1);
+    int min_z = state ? state->min_z : 0;
+    int max_z = state ? state->max_z : (SCREENSAVER_PIPES_GRID_DEPTH - 1);
+    return x >= min_x && x <= max_x &&
+        y >= min_y && y <= max_y &&
+        z >= min_z && z <= max_z;
 }
 
 static int pipes_sign(int value) {
@@ -164,13 +170,29 @@ static bool pipes_can_extend_segment(const screensaver_pipe_segment_t *segment, 
     return seg_dx == edge_dx && seg_dy == edge_dy && seg_dz == edge_dz;
 }
 
+static int pipes_distance_to_edge(const screensaver_pipes_state_t *state, int x, int y, int z) {
+    int dx0 = x - state->min_x;
+    int dx1 = state->max_x - x;
+    int dy0 = y - state->min_y;
+    int dy1 = state->max_y - y;
+    int dz0 = z - state->min_z;
+    int dz1 = state->max_z - z;
+    int min_d = dx0;
+    if (dx1 < min_d) min_d = dx1;
+    if (dy0 < min_d) min_d = dy0;
+    if (dy1 < min_d) min_d = dy1;
+    if (dz0 < min_d) min_d = dz0;
+    if (dz1 < min_d) min_d = dz1;
+    return min_d;
+}
+
 static int pipes_free_edge_count(const screensaver_pipes_state_t *state, int x, int y, int z) {
     int count = 0;
     for (int dir = 0; dir < SCREENSAVER_PIPE_DIR_COUNT; dir++) {
         int nx = x + pipe_dx[dir];
         int ny = y + pipe_dy[dir];
         int nz = z + pipe_dz[dir];
-        if (!pipes_coord_valid(nx, ny, nz)) {
+        if (!pipes_coord_valid(state, nx, ny, nz)) {
             continue;
         }
         if (!pipes_edge_occupied(state, x, y, z, nx, ny, nz)) {
@@ -188,10 +210,16 @@ static bool pipes_pick_start(screensaver_pipes_state_t *state, int *out_x, int *
         int x = index % SCREENSAVER_PIPES_GRID_WIDTH;
         int y = (index / SCREENSAVER_PIPES_GRID_WIDTH) % SCREENSAVER_PIPES_GRID_HEIGHT;
         int z = index / (SCREENSAVER_PIPES_GRID_WIDTH * SCREENSAVER_PIPES_GRID_HEIGHT);
+        if (!pipes_coord_valid(state, x, y, z)) {
+            continue;
+        }
         if (pipes_node_occupied(state, x, y, z)) {
             continue;
         }
         if (pipes_free_edge_count(state, x, y, z) <= 0) {
+            continue;
+        }
+        if (pipes_distance_to_edge(state, x, y, z) <= 0 && pipes_rand_int(state, 100) < 70) {
             continue;
         }
         if (out_x) *out_x = x;
@@ -211,7 +239,7 @@ static int pipes_collect_dirs(const screensaver_pipes_state_t *state, int x, int
         int nx = x + pipe_dx[dir];
         int ny = y + pipe_dy[dir];
         int nz = z + pipe_dz[dir];
-        if (!pipes_coord_valid(nx, ny, nz)) {
+        if (!pipes_coord_valid(state, nx, ny, nz)) {
             continue;
         }
         if (pipes_node_occupied(state, nx, ny, nz)) {
@@ -248,18 +276,78 @@ static int pipes_choose_dir(screensaver_pipes_state_t *state, int x, int y, int 
             return prev_dir;
         }
 
-        if (straight_available && option_count > 1 && pipes_rand_int(state, 100) < 18) {
+        if (straight_available && option_count > 1 && pipes_rand_int(state, 100) < 10) {
             return prev_dir;
         }
     }
 
-    return options[pipes_rand_int(state, option_count)];
+    int weights[SCREENSAVER_PIPE_DIR_COUNT];
+    int total_weight = 0;
+    for (int i = 0; i < option_count; i++) {
+        int dir = options[i];
+        int nx = x + pipe_dx[dir];
+        int ny = y + pipe_dy[dir];
+        int nz = z + pipe_dz[dir];
+        int weight = 12;
+        int free_edges = pipes_free_edge_count(state, nx, ny, nz);
+        int edge_dist = pipes_distance_to_edge(state, nx, ny, nz);
+        weight += free_edges * 8;
+        weight += edge_dist * 6;
+        if (prev_dir >= 0 && dir == prev_dir) {
+            weight -= 10;
+        }
+        if (edge_dist <= 0) {
+            weight -= 8;
+        }
+        if (weight < 1) {
+            weight = 1;
+        }
+        weights[i] = weight;
+        total_weight += weight;
+    }
+
+    int pick = pipes_rand_int(state, total_weight);
+    for (int i = 0; i < option_count; i++) {
+        if (pick < weights[i]) {
+            return options[i];
+        }
+        pick -= weights[i];
+    }
+    return options[option_count - 1];
 }
 
 static void pipes_schedule_reset(screensaver_pipes_state_t *state) {
     state->dir = -1;
     state->segment_progress = 0.0f;
     state->reset_delay_s = SCREENSAVER_PIPES_RESET_DELAY;
+}
+
+static void pipes_randomize_bounds(screensaver_pipes_state_t *state) {
+    if (!state) {
+        return;
+    }
+
+    state->min_x = pipes_rand_int(state, 2);
+    state->max_x = (SCREENSAVER_PIPES_GRID_WIDTH - 1) - pipes_rand_int(state, 2);
+    state->min_z = pipes_rand_int(state, 2);
+    state->max_z = (SCREENSAVER_PIPES_GRID_DEPTH - 1) - pipes_rand_int(state, 2);
+    state->min_y = pipes_rand_int(state, 2);
+    state->max_y = (SCREENSAVER_PIPES_GRID_HEIGHT - 1) - pipes_rand_int(state, 2);
+
+    if ((state->max_x - state->min_x) < 4) {
+        state->min_x = 0;
+        state->max_x = SCREENSAVER_PIPES_GRID_WIDTH - 1;
+    }
+    if ((state->max_z - state->min_z) < 4) {
+        state->min_z = 0;
+        state->max_z = SCREENSAVER_PIPES_GRID_DEPTH - 1;
+    }
+    if ((state->max_y - state->min_y) < 2) {
+        state->min_y = 0;
+        state->max_y = SCREENSAVER_PIPES_GRID_HEIGHT - 1;
+    }
+
+    state->max_cells_target = (uint8_t)(44 + pipes_rand_int(state, 18));
 }
 
 static bool pipes_start_pipe(screensaver_pipes_state_t *state) {
@@ -275,7 +363,7 @@ static bool pipes_start_pipe(screensaver_pipes_state_t *state) {
     state->dir = pipes_choose_dir(state, start_x, start_y, start_z, -1);
     state->segment_progress = 0.0f;
     state->reset_delay_s = 0.0f;
-    state->active_color_index = (uint8_t)pipes_rand_int(state, 8);
+    state->active_color_index = (uint8_t)(1 + pipes_rand_int(state, 7));
     state->straight_run_remaining = pipes_pick_run_length(state);
     return state->dir >= 0;
 }
@@ -293,7 +381,7 @@ static void pipes_advance(screensaver_pipes_state_t *state) {
     int by = ay + pipe_dy[state->dir];
     int bz = az + pipe_dz[state->dir];
 
-    if (!pipes_coord_valid(bx, by, bz) || pipes_node_occupied(state, bx, by, bz) || pipes_edge_occupied(state, ax, ay, az, bx, by, bz)) {
+    if (!pipes_coord_valid(state, bx, by, bz) || pipes_node_occupied(state, bx, by, bz) || pipes_edge_occupied(state, ax, ay, az, bx, by, bz)) {
         if (!pipes_start_pipe(state)) {
             pipes_schedule_reset(state);
         }
@@ -330,7 +418,7 @@ static void pipes_advance(screensaver_pipes_state_t *state) {
     state->head_y = by;
     state->head_z = bz;
 
-    if (state->traversed_cells >= SCREENSAVER_PIPES_MAX_CELLS) {
+    if (state->traversed_cells >= state->max_cells_target) {
         pipes_schedule_reset(state);
         return;
     }
@@ -358,6 +446,12 @@ void screensaver_pipes_init_state(screensaver_pipes_state_t *state) {
         return;
     }
     state->rng = 0;
+    state->min_x = 0;
+    state->max_x = SCREENSAVER_PIPES_GRID_WIDTH - 1;
+    state->min_y = 0;
+    state->max_y = SCREENSAVER_PIPES_GRID_HEIGHT - 1;
+    state->min_z = 0;
+    state->max_z = SCREENSAVER_PIPES_GRID_DEPTH - 1;
     state->head_x = 0;
     state->head_y = 0;
     state->head_z = 0;
@@ -366,6 +460,7 @@ void screensaver_pipes_init_state(screensaver_pipes_state_t *state) {
     state->reset_delay_s = 0.0f;
     state->active_color_index = 0;
     state->straight_run_remaining = 0;
+    state->max_cells_target = SCREENSAVER_PIPES_MAX_CELLS;
     state->frame_tick = 0;
     state->traversed_cells = 0;
     state->segment_count = 0;
@@ -392,6 +487,7 @@ void screensaver_pipes_activate(screensaver_pipes_state_t *state) {
     state->traversed_cells = 0;
     state->segment_count = 0;
     state->straight_run_remaining = 0;
+    pipes_randomize_bounds(state);
     pipes_start_pipe(state);
 }
 

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <GL/gl_integration.h>
 #include <libdragon.h>
 
 #include "actions.h"
@@ -478,6 +479,7 @@ static void menu_init (boot_params_t *boot_params) {
     rtc_init();
     rspq_init();
     rdpq_init();
+    gl_init();
     dfs_init(DFS_DEFAULT_LOCATION);
 
     actions_init();
@@ -608,6 +610,7 @@ static void menu_deinit (menu_t *menu) {
 
     sound_deinit();
 
+    gl_close();
     rdpq_close();
     rspq_close();
     rtc_close();

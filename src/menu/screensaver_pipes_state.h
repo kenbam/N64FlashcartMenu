@@ -17,6 +17,12 @@ typedef struct {
 
 typedef struct {
     uint32_t rng;
+    int min_x;
+    int max_x;
+    int min_y;
+    int max_y;
+    int min_z;
+    int max_z;
     int head_x;
     int head_y;
     int head_z;
@@ -25,6 +31,7 @@ typedef struct {
     float reset_delay_s;
     uint8_t active_color_index;
     uint8_t straight_run_remaining;
+    uint8_t max_cells_target;
     uint32_t frame_tick;
     uint16_t traversed_cells;
     int segment_count;

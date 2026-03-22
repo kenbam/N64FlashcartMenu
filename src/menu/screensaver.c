@@ -6,10 +6,10 @@
 #include "screensaver_attract.h"
 #include "screensaver_dvd.h"
 #include "screensaver_gradient.h"
+#include "screensaver_pipes_gl_render.h"
 #include "screensaver_pipes_render.h"
 #include "screensaver_pipes_state.h"
 
-#define SCREENSAVER_IDLE_SECONDS (30)
 #define SCREENSAVER_FPS_LIMIT    (30.0f)
 
 typedef struct {
@@ -32,13 +32,15 @@ static screensaver_state_t screensaver = {
 };
 
 static screensaver_style_t screensaver_pick_random_style(void) {
-    switch ((get_ticks_us() / 1000ULL) % 4ULL) {
+    switch ((get_ticks_us() / 1000ULL) % 5ULL) {
         case 1:
             return SCREENSAVER_STYLE_PIPES;
         case 2:
             return SCREENSAVER_STYLE_GRADIENT;
         case 3:
             return SCREENSAVER_STYLE_ATTRACT;
+        case 4:
+            return SCREENSAVER_STYLE_PIPES_GL;
         case 0:
         default:
             return SCREENSAVER_STYLE_DVD;
@@ -91,6 +93,9 @@ static screensaver_style_t screensaver_get_style(const menu_t *menu) {
     if (menu->settings.screensaver_style == SCREENSAVER_STYLE_ATTRACT) {
         return SCREENSAVER_STYLE_ATTRACT;
     }
+    if (menu->settings.screensaver_style == SCREENSAVER_STYLE_PIPES_GL) {
+        return SCREENSAVER_STYLE_PIPES_GL;
+    }
     return SCREENSAVER_STYLE_DVD;
 }
 
@@ -130,6 +135,7 @@ static void screensaver_activate(menu_t *menu) {
     screensaver.active_style = style;
     switch (style) {
         case SCREENSAVER_STYLE_PIPES:
+        case SCREENSAVER_STYLE_PIPES_GL:
             screensaver_pipes_activate(&screensaver.pipes);
             break;
         case SCREENSAVER_STYLE_GRADIENT:
@@ -209,8 +215,6 @@ bool screensaver_is_active(void) {
 }
 
 void screensaver_draw(menu_t *menu, surface_t *display) {
-    rdpq_attach_clear(display, NULL);
-
     uint64_t now_us = get_ticks_us();
     float target_dt = (menu && menu->settings.screensaver_smooth_mode) ? (1.0f / 60.0f) : (1.0f / SCREENSAVER_FPS_LIMIT);
     float dt = target_dt;
@@ -228,7 +232,19 @@ void screensaver_draw(menu_t *menu, surface_t *display) {
     }
     screensaver.last_ticks_us = now_us;
 
-    switch (screensaver_get_style(menu)) {
+    screensaver_style_t style = screensaver_get_style(menu);
+
+    if (style == SCREENSAVER_STYLE_PIPES_GL) {
+        rdpq_attach(display, display_get_zbuf());
+        screensaver_pipes_step(&screensaver.pipes, dt * 1.35f);
+        screensaver_pipes_gl_draw(display, &screensaver.pipes);
+        rdpq_detach_show();
+        return;
+    }
+
+    rdpq_attach_clear(display, NULL);
+
+    switch (style) {
         case SCREENSAVER_STYLE_PIPES:
             screensaver_pipes_step(&screensaver.pipes, dt);
             screensaver_pipes_draw(display, &screensaver.pipes);
