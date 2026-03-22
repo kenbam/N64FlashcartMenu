@@ -42,6 +42,29 @@
   - phase 1: page-turning only; phase 2: thumbnails; phase 3: optional zoom tiles.
   - design notes: `docs/71_manual_scan_viewer_plan.md`.
 
+## Libdragon Preview Branch Ideas
+- Controller Pak manager upgrades:
+  - expose `cpakfs_fsck()` as a first-class `Verify / Repair` flow in the pak manager.
+  - add recovery-oriented UX: detect corruption, explain likely outcomes, offer read-only inspect before repair.
+  - surface multi-bank pak support explicitly in UI for Datel-style large paks.
+  - add bank-aware backup / restore / clone tools instead of treating every pak as a simple single-image case.
+  - consider `Recover notes` and `Export recovered notes to SD` actions when fsck can salvage partial data.
+- Typography / localization:
+  - expand `mkfont` usage beyond a single override font into curated language/font packs.
+  - support larger glyph subsets, icon fonts, stronger outlines, and better regional coverage without recompiling.
+  - consider bitmap/BMFont-based decorative theme fonts for headings while keeping body text practical.
+- Audio:
+  - move more menu music flows toward preview-era WAV64/XM64 tooling where stability or memory use benefits.
+  - evaluate XM64-based lightweight menu themes / playlist scene packs loaded from SD.
+  - revisit WAV64 handling with newer APIs where practical, especially around safer playback setup and future visualizer metering.
+- Video / attract mode:
+  - preview branch MPEG-1 support could enable title-card loops, playlist intro videos, or per-game attract clips.
+  - lower priority than Controller Pak work, but high upside for showcase / kiosk-style presentation.
+- Frame pacing / animation polish:
+  - evaluate `display_get_delta_time()` and newer FPS reporting to smooth screensavers, visualizers, and motion-heavy UI.
+- 3D / rendering experiments:
+  - OpenGL support is interesting for a 3D shelf / carousel / showcase mode, but not a near-term ROI feature for core menu UX.
+
 ## Rank 5: Stretch / Experimental
 - Controller hotkey bridge for return-to-menu (only if technically safe per game context).
 - Runtime heartbeat hook from game to firmware (idle vs active precision).
