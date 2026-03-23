@@ -6,10 +6,10 @@
 
 #include "screensaver_mystify_gl.h"
 
-#define MYSTIFY_MIN_X         (0.08f)
-#define MYSTIFY_MAX_X         (0.92f)
-#define MYSTIFY_MIN_Y         (0.10f)
-#define MYSTIFY_MAX_Y         (0.90f)
+#define MYSTIFY_MIN_X         (0.015f)
+#define MYSTIFY_MAX_X         (0.985f)
+#define MYSTIFY_MIN_Y         (0.02f)
+#define MYSTIFY_MAX_Y         (0.98f)
 #define MYSTIFY_MIN_SPEED     (0.16f)
 #define MYSTIFY_MAX_SPEED     (0.36f)
 #define MYSTIFY_BASE_ALPHA    (0.10f)
