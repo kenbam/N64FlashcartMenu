@@ -83,8 +83,8 @@ typedef struct {
     /** @brief Use 60 FPS while screensaver is active for smoother animation */
     bool screensaver_smooth_mode;
 
-    /** @brief Idle time before screensaver activates (seconds) */
-    uint8_t screensaver_wait_seconds;
+    /** @brief Idle time before screensaver activates (seconds, 5-300) */
+    uint16_t screensaver_wait_seconds;
 
     /** @brief Screensaver visible-area compensation margins (pixels) */
     uint8_t screensaver_margin_left;
