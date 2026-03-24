@@ -196,6 +196,9 @@ static bool apply_ips(const char *target_rom_path, const char *ips_path) {
     }
 
     int64_t rom_size = file_get_size((char *)target_rom_path);
+    // IPS patches can legitimately extend a ROM, so we cap at 64MB
+    // (max N64 ROM) rather than rejecting writes past original size.
+    static const int64_t MAX_ROM_SIZE = 64 * 1024 * 1024;
     bool ok = (rom_size > 0);
     while (ok) {
         uint32_t offset = 0;
@@ -222,8 +225,8 @@ static bool apply_ips(const char *target_rom_path, const char *ips_path) {
                 ok = false;
                 break;
             }
-            if ((int64_t)offset + (int64_t)rle_size > rom_size) {
-                debugf("ROM patch: IPS RLE write outside ROM bounds at %lu\n", (unsigned long)pos_before);
+            if ((int64_t)offset + (int64_t)rle_size > MAX_ROM_SIZE) {
+                debugf("ROM patch: IPS RLE write exceeds max ROM size at %lu\n", (unsigned long)pos_before);
                 ok = false;
                 break;
             }
@@ -243,8 +246,8 @@ static bool apply_ips(const char *target_rom_path, const char *ips_path) {
                 remaining -= chunk;
             }
         } else {
-            if ((int64_t)offset + (int64_t)size > rom_size) {
-                debugf("ROM patch: IPS write outside ROM bounds at %lu\n", (unsigned long)pos_before);
+            if ((int64_t)offset + (int64_t)size > MAX_ROM_SIZE) {
+                debugf("ROM patch: IPS write exceeds max ROM size at %lu\n", (unsigned long)pos_before);
                 ok = false;
                 break;
             }
