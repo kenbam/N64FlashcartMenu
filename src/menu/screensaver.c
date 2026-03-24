@@ -291,4 +291,5 @@ void screensaver_deinit(void) {
     screensaver_gradient_reset(&screensaver.gradient);
     screensaver_mystify_reset(&screensaver.mystify);
     screensaver_pipes_reset(&screensaver.pipes);
+    screensaver_pipes_gl_deinit();
 }

@@ -560,3 +560,19 @@ void screensaver_pipes_gl_draw(surface_t *display, const screensaver_pipes_state
 
     gl_context_end();
 }
+
+void screensaver_pipes_gl_deinit(void) {
+    if (pipes_gl_tube_list != 0) {
+        glDeleteLists(pipes_gl_tube_list, 1);
+        pipes_gl_tube_list = 0;
+    }
+    if (pipes_gl_joint_list != 0) {
+        glDeleteLists(pipes_gl_joint_list, 1);
+        pipes_gl_joint_list = 0;
+    }
+    if (pipes_gl_room_list != 0) {
+        glDeleteLists(pipes_gl_room_list, 1);
+        pipes_gl_room_list = 0;
+    }
+    memset(&pipes_gl_runtime, 0, sizeof(pipes_gl_runtime));
+}

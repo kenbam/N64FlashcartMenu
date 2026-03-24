@@ -6,5 +6,6 @@
 #include "screensaver_pipes_state.h"
 
 void screensaver_pipes_gl_draw(surface_t *display, const screensaver_pipes_state_t *state);
+void screensaver_pipes_gl_deinit(void);
 
 #endif
