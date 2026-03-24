@@ -1310,6 +1310,7 @@ static bool playlist_grid_get_boxart_meta_by_index_cached_only(menu_t *menu, int
 // Incremental prewarm: reads a few entries per frame to avoid blocking on
 // playlist load.  Call _start once, then _tick every frame.
 static int prewarm_next_index = -1;
+static int grid_prewarm_cooldown = 0;
 static int prewarm_total = 0;
 
 static void playlist_grid_prewarm_start(menu_t *menu) {
@@ -1324,20 +1325,26 @@ static void playlist_grid_prewarm_start(menu_t *menu) {
     }
     prewarm_next_index = 0;
     prewarm_total = menu->browser.entries;
+    grid_prewarm_cooldown = 0;
 }
-
-#define PREWARM_PER_FRAME 2
 
 static void playlist_grid_prewarm_tick(menu_t *menu) {
     if (prewarm_next_index < 0 || prewarm_next_index >= prewarm_total) {
         return;
     }
-    char gc[4], title[21];
-    for (int i = 0; i < PREWARM_PER_FRAME && prewarm_next_index < prewarm_total; i++, prewarm_next_index++) {
-        if (playlist_grid_get_boxart_meta_by_index(menu, prewarm_next_index, gc, title)) {
-            ui_components_boxart_prewarm_dir(menu->storage_prefix, gc, title);
-        }
+    if (png_decoder_is_busy()) {
+        return;
     }
+    if (grid_prewarm_cooldown > 0) {
+        grid_prewarm_cooldown--;
+        return;
+    }
+    char gc[4], title[21];
+    if (playlist_grid_get_boxart_meta_by_index(menu, prewarm_next_index, gc, title)) {
+        ui_components_boxart_prewarm_dir(menu->storage_prefix, gc, title);
+    }
+    prewarm_next_index++;
+    grid_prewarm_cooldown = 2;
 }
 
 static const char *browser_grid_display_name(const char *name, char *buffer, size_t buffer_size) {
