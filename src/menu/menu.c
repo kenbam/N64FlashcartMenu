@@ -681,7 +681,9 @@ static view_t *menu_get_view (menu_mode_t id) {
 void menu_run (boot_params_t *boot_params) {
     menu_init(boot_params);
 
+    static uint32_t menu_frame_counter = 0;
     while (true) {
+        menu_frame_counter++;
         surface_t *display = display_try_get();
 
         if (display != NULL) {
@@ -691,7 +693,7 @@ void menu_run (boot_params_t *boot_params) {
 
             if (screensaver_is_active()) {
                 screensaver_draw(menu, display);
-                time(&menu->current_time);
+                if ((menu_frame_counter & 31) == 0) time(&menu->current_time);
                 menu_bgm_poll(menu);
                 sound_poll();
                 png_decoder_poll();
@@ -721,7 +723,7 @@ void menu_run (boot_params_t *boot_params) {
                 }
             }
 
-            time(&menu->current_time);
+            if ((menu_frame_counter & 31) == 0) time(&menu->current_time);
         }
 
         if (menu->screensaver_logo_reload_requested) {
