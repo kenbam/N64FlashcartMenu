@@ -273,10 +273,12 @@ void playtime_load (playtime_db_t *db) {
         }
 
         snprintf(key, sizeof(key), "%lld_total", (long long)i);
-        entry->total_seconds = (uint64_t)mini_get_int(ini, "stats", key, 0);
+        int total_val = mini_get_int(ini, "stats", key, 0);
+        entry->total_seconds = (total_val > 0) ? (uint64_t)total_val : 0;
 
         snprintf(key, sizeof(key), "%lld_last_session", (long long)i);
-        entry->last_session_seconds = (uint64_t)mini_get_int(ini, "stats", key, 0);
+        int last_session_val = mini_get_int(ini, "stats", key, 0);
+        entry->last_session_seconds = (last_session_val > 0) ? (uint64_t)last_session_val : 0;
 
         snprintf(key, sizeof(key), "%lld_last_played", (long long)i);
         entry->last_played = (int64_t)mini_get_int(ini, "stats", key, 0);
