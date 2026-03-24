@@ -1135,7 +1135,11 @@ static void rebuild_details_layout(menu_t *menu) {
 
     free_details_layout();
 
-    char details[32768];
+    const size_t details_size = 32768;
+    char *details = malloc(details_size);
+    if (!details) {
+        return;
+    }
     const char *display_name = (menu->load.rom_info.metadata.name[0] != '\0') ? menu->load.rom_info.metadata.name : rom_filename;
     const char *publisher = (menu->load.rom_info.metadata.author[0] != '\0') ? menu->load.rom_info.metadata.author : "Unknown";
     const char *developer = (menu->load.rom_info.metadata.developer[0] != '\0') ? menu->load.rom_info.metadata.developer : "Unknown";
@@ -1187,7 +1191,7 @@ static void rebuild_details_layout(menu_t *menu) {
         snprintf(save_path, sizeof(save_path), "N/A");
     }
 
-    snprintf(details, sizeof(details),
+    snprintf(details, details_size,
         "Title:\t\t\t%s\n"
         "Publisher:\t\t%s\n"
         "Developer:\t\t%s\n"
@@ -1213,29 +1217,29 @@ static void rebuild_details_layout(menu_t *menu) {
         age_rating,
         cached_has_manual ? "Available" : "Not found"
     );
-    append_detail_section(details, sizeof(details), "Description", format_rom_description(menu));
-    append_detail_section(details, sizeof(details), "Hook", menu->load.rom_info.metadata.hook);
-    append_detail_section(details, sizeof(details), "Why Play", menu->load.rom_info.metadata.why_play);
-    append_detail_section(details, sizeof(details), "Vibe", menu->load.rom_info.metadata.vibe);
-    append_detail_section(details, sizeof(details), "Notable", menu->load.rom_info.metadata.notable);
-    append_detail_section(details, sizeof(details), "Context", menu->load.rom_info.metadata.context);
-    append_detail_section(details, sizeof(details), "Play Curator Note", menu->load.rom_info.metadata.play_curator_note);
-    append_detail_section(details, sizeof(details), "Tags", menu->load.rom_info.metadata.tags);
-    append_detail_section(details, sizeof(details), "Warnings", menu->load.rom_info.metadata.warnings);
-    append_detail_section(details, sizeof(details), "Museum Card", menu->load.rom_info.metadata.museum_card);
-    append_detail_section(details, sizeof(details), "Museum Trivia", menu->load.rom_info.metadata.trivia_museum);
-    append_detail_section(details, sizeof(details), "Oddities", menu->load.rom_info.metadata.oddities);
+    append_detail_section(details, details_size, "Description", format_rom_description(menu));
+    append_detail_section(details, details_size, "Hook", menu->load.rom_info.metadata.hook);
+    append_detail_section(details, details_size, "Why Play", menu->load.rom_info.metadata.why_play);
+    append_detail_section(details, details_size, "Vibe", menu->load.rom_info.metadata.vibe);
+    append_detail_section(details, details_size, "Notable", menu->load.rom_info.metadata.notable);
+    append_detail_section(details, details_size, "Context", menu->load.rom_info.metadata.context);
+    append_detail_section(details, details_size, "Play Curator Note", menu->load.rom_info.metadata.play_curator_note);
+    append_detail_section(details, details_size, "Tags", menu->load.rom_info.metadata.tags);
+    append_detail_section(details, details_size, "Warnings", menu->load.rom_info.metadata.warnings);
+    append_detail_section(details, details_size, "Museum Card", menu->load.rom_info.metadata.museum_card);
+    append_detail_section(details, details_size, "Museum Trivia", menu->load.rom_info.metadata.trivia_museum);
+    append_detail_section(details, details_size, "Oddities", menu->load.rom_info.metadata.oddities);
     if (menu->load.rom_info.features.controller_pak && menu->load.rom_info.settings.virtual_pak_enabled) {
-        append_detail_section(details, sizeof(details), "Virtual Pak Note",
+        append_detail_section(details, details_size, "Virtual Pak Note",
             "Requires one real Controller Pak in controller 1. The menu swaps pak contents onto that physical pak before launch, so do not remove it while playing.");
     }
-    append_detail_section(details, sizeof(details), "Design Quirks", menu->load.rom_info.metadata.design_quirks);
-    append_detail_section(details, sizeof(details), "Discovery Prompts", menu->load.rom_info.metadata.discovery_prompts);
-    append_detail_section(details, sizeof(details), "Curator", menu->load.rom_info.metadata.curator);
-    append_detail_section(details, sizeof(details), "Museum", menu->load.rom_info.metadata.museum);
-    append_detail_section(details, sizeof(details), "Trivia", menu->load.rom_info.metadata.trivia);
-    append_detail_section(details, sizeof(details), "Reception", menu->load.rom_info.metadata.reception);
-    snprintf(details + strlen(details), sizeof(details) - strlen(details),
+    append_detail_section(details, details_size, "Design Quirks", menu->load.rom_info.metadata.design_quirks);
+    append_detail_section(details, details_size, "Discovery Prompts", menu->load.rom_info.metadata.discovery_prompts);
+    append_detail_section(details, details_size, "Curator", menu->load.rom_info.metadata.curator);
+    append_detail_section(details, details_size, "Museum", menu->load.rom_info.metadata.museum);
+    append_detail_section(details, details_size, "Trivia", menu->load.rom_info.metadata.trivia);
+    append_detail_section(details, details_size, "Reception", menu->load.rom_info.metadata.reception);
+    snprintf(details + strlen(details), details_size - strlen(details),
         "Datel Cheats:\t\t%s\n"
         "Patches:\t\t\t%s\n"
         "Patch profile:\t\t%s\n"
@@ -1284,6 +1288,7 @@ static void rebuild_details_layout(menu_t *menu) {
     );
     rdpq_paragraph_builder_style(STL_DEFAULT);
     paragraph_builder_add_text(details);
+    free(details);
     details_layout = rdpq_paragraph_builder_end();
 
     if (details_layout != NULL) {
