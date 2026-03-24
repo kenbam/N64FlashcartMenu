@@ -866,9 +866,7 @@ static void read_metadata_text_file_if_missing(path_t *directory, bool enabled, 
 
     path_t *text_path = path_clone(directory);
     path_push(text_path, (char *)filename);
-    if (file_exists(path_get(text_path))) {
-        read_text_file_to_buffer(path_get(text_path), buffer, buffer_length);
-    }
+    read_text_file_to_buffer(path_get(text_path), buffer, buffer_length);
     path_free(text_path);
 }
 
@@ -1022,11 +1020,6 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
 
     path_t *metadata_path = path_clone(directory);
     path_push(metadata_path, "metadata.ini");
-    if (!file_exists(path_get(metadata_path))) {
-        path_free(metadata_path);
-        return;
-    }
-
     FILE *metadata_file = fopen(path_get(metadata_path), "rb");
     path_free(metadata_path);
     if (metadata_file == NULL) {

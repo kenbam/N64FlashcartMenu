@@ -157,10 +157,8 @@ surface_t *native_image_load_sidecar_rgba16(const char *source_path, const char 
         return NULL;
     }
 
-    surface_t *image = NULL;
-    if (file_exists(sidecar_path)) {
-        image = native_image_load_rgba16_file(sidecar_path, max_width, max_height);
-    } else {
+    surface_t *image = native_image_load_rgba16_file(sidecar_path, max_width, max_height);
+    if (!image && native_image_get_last_error() == NATIVE_IMAGE_ERR_OPEN_FAILED) {
         native_image_set_last_error(NATIVE_IMAGE_ERR_SIDECAR_MISSING);
     }
 
