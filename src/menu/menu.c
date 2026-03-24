@@ -206,11 +206,6 @@ static char *menu_bgm_resolve_path (menu_t *menu, const char *file_name) {
         return NULL;
     }
 
-    if (!file_exists(path_get(path))) {
-        path_free(path);
-        return NULL;
-    }
-
     char *resolved = strdup(path_get(path));
     path_free(path);
     return resolved;
