@@ -123,6 +123,17 @@ bool directory_create(char *path);
 bool file_rename(const char *old_path, const char *new_path);
 
 /**
+ * @brief Resolve a ROM path, trying the raw path then with a storage prefix.
+ *
+ * @param storage_prefix  Optional SD mount prefix (e.g., "sd:/").
+ * @param current_path    Path to check.
+ * @param out             Output buffer for the resolved path.
+ * @param out_len         Size of the output buffer.
+ * @return true if a valid file was found, false otherwise.
+ */
+bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len);
+
+/**
  * @brief Save a mini_t INI file safely using write-to-tmp then atomic rename.
  *
  * Writes to a .tmp file first, then atomically renames over the target.

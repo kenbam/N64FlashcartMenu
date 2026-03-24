@@ -10,9 +10,11 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <fatfs/ff.h>
+#include <libdragon.h>
 #include <mini.c/src/mini.h>
 
 #include "fs.h"
+#include "../menu/path.h"
 #include "utils.h"
 
 /**
@@ -238,6 +240,26 @@ bool file_rename(const char *old_path, const char *new_path) {
     const char *new_fat = strip_fs_prefix((char *)new_path);
     f_unlink(new_fat);
     return (f_rename(old_fat, new_fat) == FR_OK);
+}
+
+bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len) {
+    if (!current_path || current_path[0] == '\0' || !out || out_len == 0) {
+        return false;
+    }
+    if (file_exists((char *)current_path)) {
+        snprintf(out, out_len, "%s", current_path);
+        return true;
+    }
+    if (storage_prefix && current_path[0] == '/') {
+        path_t *prefixed = path_init((char *)storage_prefix, (char *)current_path);
+        if (prefixed && file_exists(path_get(prefixed))) {
+            snprintf(out, out_len, "%s", path_get(prefixed));
+            path_free(prefixed);
+            return true;
+        }
+        path_free(prefixed);
+    }
+    return false;
 }
 
 /* NOTE: Coupled to mini_t struct layout (accesses ini->path directly). */

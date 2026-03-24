@@ -169,25 +169,6 @@ static bool resolve_metadata_directory_for_current_rom(menu_t *menu, char *resol
     return true;
 }
 
-static bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len) {
-    if (!current_path || current_path[0] == '\0' || !out || out_len == 0) {
-        return false;
-    }
-    if (file_exists((char *)current_path)) {
-        snprintf(out, out_len, "%s", current_path);
-        return true;
-    }
-    if (storage_prefix && current_path[0] == '/') {
-        path_t *prefixed = path_init(storage_prefix, (char *)current_path);
-        if (prefixed && file_exists(path_get(prefixed))) {
-            snprintf(out, out_len, "%s", path_get(prefixed));
-            path_free(prefixed);
-            return true;
-        }
-        path_free(prefixed);
-    }
-    return false;
-}
 
 static bool resolve_manual_directory_for_current_rom (menu_t *menu, path_t **out_manual_directory, const char *subdirectory) {
     if (!menu || !out_manual_directory) {

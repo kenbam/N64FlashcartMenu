@@ -77,25 +77,6 @@ static int bookkeeping_compute_start_index(int selected_logical, int visible_ent
     return start;
 }
 
-static bool resolve_existing_rom_path(const char *storage_prefix, const char *current_path, char *out, size_t out_len) {
-    if (!current_path || current_path[0] == '\0' || !out || out_len == 0) {
-        return false;
-    }
-    if (file_exists((char *)current_path)) {
-        snprintf(out, out_len, "%s", current_path);
-        return true;
-    }
-    if (storage_prefix && current_path[0] == '/') {
-        path_t *prefixed = path_init(storage_prefix, (char *)current_path);
-        if (prefixed && file_exists(path_get(prefixed))) {
-            snprintf(out, out_len, "%s", path_get(prefixed));
-            path_free(prefixed);
-            return true;
-        }
-        path_free(prefixed);
-    }
-    return false;
-}
 
 static bool resolve_playtime_entry_path(menu_t *menu, playtime_entry_t *entry) {
     if (!menu || !entry) {
