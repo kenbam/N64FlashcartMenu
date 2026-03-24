@@ -10,6 +10,7 @@
 #include <mini.c/src/mini.h>
 
 #include "../flashcart/flashcart.h"
+#include "../utils/hash.h"
 #include "playtime.h"
 #include "utils/fs.h"
 
@@ -21,30 +22,18 @@ typedef enum {
     SC64_SETTING_ID_PLAYTIME_SECONDS = 3,
 } sc64_playtime_setting_id_t;
 
-static uint32_t playtime_hash_string(const char *value) {
-    uint32_t h = 2166136261u;
-    if (!value) {
-        return 0;
-    }
-    for (const unsigned char *p = (const unsigned char *)value; *p; p++) {
-        h ^= (uint32_t)(*p);
-        h *= 16777619u;
-    }
-    return h;
-}
-
 static uint32_t playtime_tracker_key_hash(const playtime_entry_t *entry, const char *path, const char *game_id) {
     if (game_id && game_id[0] != '\0') {
-        return playtime_hash_string(game_id);
+        return (uint32_t)fnv1a64_str(game_id);
     }
     if (entry && entry->game_id[0] != '\0') {
-        return playtime_hash_string(entry->game_id);
+        return (uint32_t)fnv1a64_str(entry->game_id);
     }
     if (path && path[0] != '\0') {
-        return playtime_hash_string(path);
+        return (uint32_t)fnv1a64_str(path);
     }
     if (entry && entry->path) {
-        return playtime_hash_string(entry->path);
+        return (uint32_t)fnv1a64_str(entry->path);
     }
     return 0;
 }
