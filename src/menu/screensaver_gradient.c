@@ -247,7 +247,7 @@ void screensaver_gradient_step(screensaver_gradient_state_t *state, float dt) {
         return;
     }
 
-    state->time_s += dt;
+    state->time_s = fmodf(state->time_s + dt, 10000.0f);
     for (int i = 0; i < SCREENSAVER_GRADIENT_POINT_COUNT; i++) {
         screensaver_gradient_point_t *point = &state->points[i];
         point->x += point->vx * dt;

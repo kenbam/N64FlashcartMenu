@@ -121,7 +121,7 @@ void screensaver_mystify_step(screensaver_mystify_state_t *state, float dt) {
     }
 
     float clamped_dt = mystify_clampf(dt, 0.0f, 0.05f);
-    state->time_s += clamped_dt;
+    state->time_s = fmodf(state->time_s + clamped_dt, 10000.0f);
 
     for (int i = 0; i < SCREENSAVER_MYSTIFY_VERTEX_COUNT; i++) {
         screensaver_mystify_vertex_t *vertex = &state->vertices[i];
