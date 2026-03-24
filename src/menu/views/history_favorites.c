@@ -26,6 +26,7 @@ static bookkeeping_item_t *item_list;
 static uint16_t item_max = 0;
 static playtime_entry_t **playtime_ranked = NULL;
 static uint16_t playtime_ranked_count = 0;
+static uint16_t playtime_ranked_capacity = 0;
 
 static int bookkeeping_count_visible_items(void) {
     if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME) {
@@ -149,6 +150,7 @@ static void playtime_list_free(void) {
     free(playtime_ranked);
     playtime_ranked = NULL;
     playtime_ranked_count = 0;
+    playtime_ranked_capacity = 0;
 }
 
 static int playtime_compare(const void *a, const void *b) {
@@ -170,11 +172,16 @@ static void playtime_list_rebuild(menu_t *menu) {
         if (entry->total_seconds == 0) {
             continue;
         }
-        playtime_entry_t **next = realloc(playtime_ranked, (playtime_ranked_count + 1) * sizeof(playtime_entry_t *));
-        if (!next) {
-            break;
+        if (playtime_ranked_count >= playtime_ranked_capacity) {
+            uint16_t new_cap = playtime_ranked_capacity ? (uint16_t)(playtime_ranked_capacity * 2) : 32;
+            if (new_cap < playtime_ranked_capacity) new_cap = UINT16_MAX; // overflow guard
+            playtime_entry_t **next = realloc(playtime_ranked, (size_t)new_cap * sizeof(playtime_entry_t *));
+            if (!next) {
+                break;
+            }
+            playtime_ranked = next;
+            playtime_ranked_capacity = new_cap;
         }
-        playtime_ranked = next;
         playtime_ranked[playtime_ranked_count++] = entry;
     }
 
