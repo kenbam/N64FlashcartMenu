@@ -909,7 +909,12 @@ static int32_t parse_release_year_from_value (const char *value) {
         return -1;
     }
 
-    for (const char *cursor = value; *cursor != '\0'; cursor++) {
+    size_t len = strlen(value);
+    if (len < 4) {
+        return -1;
+    }
+    for (size_t pos = 0; pos <= len - 4; pos++) {
+        const char *cursor = &value[pos];
         if (!isdigit((unsigned char)cursor[0]) ||
             !isdigit((unsigned char)cursor[1]) ||
             !isdigit((unsigned char)cursor[2]) ||
