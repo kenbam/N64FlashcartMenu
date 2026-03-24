@@ -137,7 +137,9 @@ sc64_error_t sc64_ll_get_setting (uint32_t id, uint32_t *value) {
         .arg = { id }
     };
     sc64_error_t error = sc64_ll_execute_cmd(&cmd);
-    *value = cmd.rsp[1];
+    if (error == SC64_OK) {
+        *value = cmd.rsp[1];
+    }
     return error;
 }
 
