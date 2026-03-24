@@ -58,7 +58,7 @@ static void screensaver_dvd_randomize_motion(
 
     float vx = screensaver_dvd_rand_speed(state, SCREENSAVER_SPEED_X, 7);
     float vy = screensaver_dvd_rand_speed(state, SCREENSAVER_SPEED_Y, 7);
-    while (fabsf(vx - vy) < 8.0f) {
+    for (int attempts = 0; attempts < 20 && fabsf(vx - vy) < 8.0f; attempts++) {
         vy = screensaver_dvd_rand_speed(state, SCREENSAVER_SPEED_Y, 7);
     }
 
