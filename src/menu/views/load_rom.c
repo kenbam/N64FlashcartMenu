@@ -1640,7 +1640,7 @@ void view_load_rom_init (menu_t *menu) {
     if (!menu->settings.rom_autoload_enabled) {
 #endif
         current_metadata_image_index = 0;
-        scan_metadata_images(menu);
+        // scan_metadata_images deferred to first L/R press (iterate_metadata_image)
         // Pre-warm boxart dir cache so the init below gets a cache hit
         // instead of re-resolving the same metadata directory (saves ~7 stats).
         ui_components_boxart_prewarm_dir(
