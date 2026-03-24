@@ -1641,6 +1641,13 @@ void view_load_rom_init (menu_t *menu) {
 #endif
         current_metadata_image_index = 0;
         scan_metadata_images(menu);
+        // Pre-warm boxart dir cache so the init below gets a cache hit
+        // instead of re-resolving the same metadata directory (saves ~7 stats).
+        ui_components_boxart_prewarm_dir(
+            menu->storage_prefix,
+            menu->load.rom_info.game_code,
+            menu->load.rom_info.title
+        );
         boxart = ui_components_boxart_init_memory_cached(
             menu->storage_prefix,
             menu->load.rom_info.game_code,
