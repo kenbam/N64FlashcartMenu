@@ -308,47 +308,72 @@ static mp3player_err_t menu_bgm_try_load_any (menu_t *menu, const char *file_nam
     return menu_bgm_load_mp3_file(menu, file_name);
 }
 
+/** BGM init state machine — tries one fallback path per frame to avoid spikes. */
+static int menu_bgm_init_step = -1;
+
+static const char *menu_bgm_get_init_candidate(menu_t *menu, int step) {
+    switch (step) {
+        case 0:
+            if (menu->runtime_bgm_override_file && menu->runtime_bgm_override_file[0] != '\0')
+                return menu->runtime_bgm_override_file;
+            if (menu->settings.bgm_file && menu->settings.bgm_file[0] != '\0')
+                return menu->settings.bgm_file;
+            return NULL;
+        case 1: return MENU_BGM_WAV64_FILE;
+        case 2: return MENU_BGM_MP3_FILE;
+        case 3: return MENU_BGM_WAV64_FILE_FALLBACK;
+        case 4: return MENU_BGM_MP3_FILE_FALLBACK;
+        default: return NULL;
+    }
+}
+
+#define MENU_BGM_INIT_STEPS 5
+
 static void menu_bgm_init (menu_t *menu) {
-    if (menu_bgm_initialized || menu_bgm_error) {
+    if (menu_bgm_loaded || menu_bgm_error) {
+        menu_bgm_init_step = -1;
         return;
     }
 
-    uint64_t start_us = get_ticks_us();
+    if (menu_bgm_init_step < 0) {
+        return;
+    }
+
+    while (menu_bgm_init_step < MENU_BGM_INIT_STEPS) {
+        const char *candidate = menu_bgm_get_init_candidate(menu, menu_bgm_init_step);
+        menu_bgm_init_step++;
+
+        if (!candidate) {
+            continue;
+        }
+
+        mp3player_err_t err = menu_bgm_try_load_any(menu, candidate);
+        if (err == MP3PLAYER_OK) {
+            menu_bgm_loaded = true;
+            menu_bgm_initialized = true;
+            menu_bgm_init_step = -1;
+            if (menu_bgm_perf_pending) {
+                browser_playlist_perf_note_bgm_reload(0);
+                menu_bgm_perf_pending = false;
+            }
+            return;
+        }
+        if (err != MP3PLAYER_ERR_NO_FILE) {
+            menu_bgm_error = true;
+            menu_bgm_initialized = true;
+            menu_bgm_init_step = -1;
+            debugf("Menu BGM disabled: failed to load BGM (%d)\n", err);
+            return;
+        }
+        // Try next candidate next frame
+        return;
+    }
+
+    // Exhausted all candidates
     menu_bgm_initialized = true;
-    menu_bgm_backend = MENU_BGM_BACKEND_NONE;
-    mp3player_err_t err = MP3PLAYER_ERR_NO_FILE;
-
-    if (menu->runtime_bgm_override_file && menu->runtime_bgm_override_file[0] != '\0') {
-        err = menu_bgm_try_load_any(menu, menu->runtime_bgm_override_file);
-    } else if (menu->settings.bgm_file && menu->settings.bgm_file[0] != '\0') {
-        err = menu_bgm_try_load_any(menu, menu->settings.bgm_file);
-    } else {
-        err = MP3PLAYER_ERR_NO_FILE;
-    }
-
-    if (err == MP3PLAYER_ERR_NO_FILE) {
-        err = menu_bgm_try_load_any(menu, MENU_BGM_WAV64_FILE);
-    }
-    if (err == MP3PLAYER_ERR_NO_FILE) {
-        err = menu_bgm_try_load_any(menu, MENU_BGM_MP3_FILE);
-    }
-    if (err == MP3PLAYER_ERR_NO_FILE) {
-        err = menu_bgm_try_load_any(menu, MENU_BGM_WAV64_FILE_FALLBACK);
-    }
-    if (err == MP3PLAYER_ERR_NO_FILE) {
-        err = menu_bgm_try_load_any(menu, MENU_BGM_MP3_FILE_FALLBACK);
-    }
-
-    if (err == MP3PLAYER_OK) {
-        menu_bgm_loaded = true;
-    } else if (err != MP3PLAYER_ERR_NO_FILE) {
-        menu_bgm_error = true;
-        debugf("Menu BGM disabled: failed to load BGM (%d)\n", err);
-    }
-
+    menu_bgm_init_step = -1;
     if (menu_bgm_perf_pending) {
-        uint32_t elapsed_ms = (uint32_t)((get_ticks_us() - start_us) / 1000ULL);
-        browser_playlist_perf_note_bgm_reload(elapsed_ms);
+        browser_playlist_perf_note_bgm_reload(0);
         menu_bgm_perf_pending = false;
     }
 }
@@ -358,6 +383,7 @@ static void menu_bgm_poll (menu_t *menu) {
         menu_bgm_deinit();
         menu->bgm_reload_requested = false;
         menu_bgm_perf_pending = true;
+        menu_bgm_init_step = 0;
     }
 
     if (!menu->settings.bgm_enabled) {
@@ -384,6 +410,9 @@ static void menu_bgm_poll (menu_t *menu) {
         return;
     }
 
+    if (!menu_bgm_initialized && menu_bgm_init_step < 0) {
+        menu_bgm_init_step = 0;
+    }
     menu_bgm_init(menu);
     if (!menu_bgm_initialized || !menu_bgm_loaded || menu_bgm_error) {
         return;
