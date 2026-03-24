@@ -21,6 +21,18 @@ static inline uint64_t fnv1a64_str(const char *s) {
     return h;
 }
 
+static inline uint64_t fnv1a64_buf_update(uint64_t h, const void *data, size_t len) {
+    if (!data || len == 0) {
+        return h;
+    }
+    const uint8_t *p = (const uint8_t *)data;
+    for (size_t i = 0; i < len; i++) {
+        h ^= p[i];
+        h *= FNV1A_64_PRIME;
+    }
+    return h;
+}
+
 static inline uint64_t fnv1a64_buf(const void *data, size_t len) {
     uint64_t h = FNV1A_64_OFFSET_BASIS;
     if (!data || len == 0) {

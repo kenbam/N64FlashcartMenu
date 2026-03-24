@@ -69,14 +69,6 @@ static int virtual_pak_write_raw(int controller, uint8_t bank, uint16_t address,
     return result;
 }
 
-static uint64_t virtual_pak_hash_update(uint64_t h, const void *data, size_t len) {
-    const uint8_t *p = (const uint8_t *)data;
-    for (size_t i = 0; i < len; i++) {
-        h ^= p[i];
-        h *= FNV1A_64_PRIME;
-    }
-    return h;
-}
 
 static void virtual_pak_hex_encode(const uint8_t *data, size_t len, char *out, size_t out_len) {
     static const char hex[] = "0123456789ABCDEF";
@@ -140,7 +132,7 @@ static bool virtual_pak_file_hash(const char *path, uint64_t *out_hash) {
     while (true) {
         size_t n = fread(buffer, 1, sizeof(buffer), f);
         if (n > 0) {
-            h = virtual_pak_hash_update(h, buffer, n);
+            h = fnv1a64_buf_update(h, buffer, n);
         }
         if (n < sizeof(buffer)) {
             if (ferror(f)) {
@@ -177,7 +169,7 @@ static bool virtual_pak_controller_hash(int controller, uint64_t *out_hash) {
             ok = false;
             break;
         }
-        h = virtual_pak_hash_update(h, bankbuf, VIRTUAL_PAK_BANK_SIZE);
+        h = fnv1a64_buf_update(h, bankbuf, VIRTUAL_PAK_BANK_SIZE);
     }
     free(bankbuf);
     if (!ok) {
