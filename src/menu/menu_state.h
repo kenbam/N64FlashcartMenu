@@ -70,7 +70,8 @@ typedef enum {
     ENTRY_TYPE_SAVE,
     ENTRY_TYPE_TEXT,
     ENTRY_TYPE_ARCHIVE,
-    ENTRY_TYPE_ARCHIVED
+    ENTRY_TYPE_ARCHIVED,
+    __ENTRY_TYPE_COUNT
 } entry_type_t;
 
 /** @brief File Entry Structure */

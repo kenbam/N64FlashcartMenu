@@ -1467,6 +1467,7 @@ static bool path_is_hidden (path_t *path) {
     return false;
 }
 
+_Static_assert(__ENTRY_TYPE_COUNT == 14, "Update entry_type_sort_priority when adding entry types");
 static const uint8_t entry_type_sort_priority[] = {
     [ENTRY_TYPE_DIR]       = 0,
     [ENTRY_TYPE_ARCHIVE]   = 1,
