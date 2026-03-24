@@ -111,8 +111,11 @@ static void playtime_entry_set_identity(playtime_entry_t *entry, const char *pat
     }
 
     if (path && path[0] != '\0' && (!entry->path || strcmp(entry->path, path) != 0)) {
-        free(entry->path);
-        entry->path = strdup(path);
+        char *dup = strdup(path);
+        if (dup) {
+            free(entry->path);
+            entry->path = dup;
+        }
     }
 
     if (game_id && game_id[0] != '\0') {
@@ -121,10 +124,11 @@ static void playtime_entry_set_identity(playtime_entry_t *entry, const char *pat
 }
 
 void playtime_init (char *path) {
-    if (playtime_path) {
+    char *dup = path ? strdup(path) : NULL;
+    if (dup || !path) {
         free(playtime_path);
+        playtime_path = dup;
     }
-    playtime_path = strdup(path);
 }
 
 void playtime_free (playtime_db_t *db) {
