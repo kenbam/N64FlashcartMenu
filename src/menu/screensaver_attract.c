@@ -766,16 +766,23 @@ static void attract_pick_next_feature(menu_t *menu, screensaver_attract_state_t 
         start_pos = (start_pos + 1) % state->pool_count;
     }
 
-    for (int offset = 0; offset < state->pool_count; offset++) {
-        int pos = (start_pos + offset) % state->pool_count;
+    int attempts = 0;
+    int pos = start_pos;
+    while (attempts < state->pool_count && state->pool_count > 0) {
+        int pool_before = state->pool_count;
         int index = state->shuffle_order[pos];
         if (attract_load_feature(menu, state, index)) {
             state->current_shuffle_pos = pos;
             return;
         }
-        if (state->pool_count <= 0) {
-            break;
+        if (state->pool_count < pool_before) {
+            // Pool shrank and shuffle was rebuilt; restart from position 0
+            pos = 0;
+            attempts++;
+            continue;
         }
+        pos = (pos + 1) % state->pool_count;
+        attempts++;
     }
 
     if (state->current_index < 0 && state->pool_count > 0) {
