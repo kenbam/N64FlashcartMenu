@@ -712,27 +712,29 @@ bool virtual_pak_prepare_launch(menu_t *menu, char *error, size_t error_len, vir
         progress(0.05f, "Checking Controller Pak...");
     }
 
+    #define SET_ERROR(fmt) do { if (error && error_len > 0) snprintf(error, error_len, fmt); } while (0)
+
     virtual_pak_try_sync_pending();
     if (virtual_pak_has_pending_sync()) {
-        snprintf(error, error_len, "Previous virtual pak session still needs recovery. Reinsert the same physical Controller Pak in controller 1 and return to menu.");
+        SET_ERROR("Previous virtual pak session still needs recovery. Reinsert the same physical Controller Pak in controller 1 and return to menu.");
         return false;
     }
 
     virtual_pak_refresh_accessory_state();
     if (!has_cpak(VIRTUAL_PAK_CONTROLLER)) {
-        snprintf(error, error_len, "Virtual Controller Pak requires a real Controller Pak in controller 1. Leave it inserted while playing.");
+        SET_ERROR("Virtual Controller Pak requires a real Controller Pak in controller 1. Leave it inserted while playing.");
         return false;
     }
 
     char pak_path[512];
     if (!virtual_pak_build_file_path(&menu->load.rom_info, path_get(menu->load.rom_path), menu->load.rom_info.settings.virtual_pak_slot, pak_path, sizeof(pak_path))) {
-        snprintf(error, error_len, "Couldn't build virtual pak path");
+        SET_ERROR("Couldn't build virtual pak path");
         return false;
     }
 
     char backup_path[512];
     if (!virtual_pak_build_physical_backup_path(VIRTUAL_PAK_CONTROLLER, backup_path, sizeof(backup_path))) {
-        snprintf(error, error_len, "Couldn't build Controller Pak backup path");
+        SET_ERROR("Couldn't build Controller Pak backup path");
         return false;
     }
     if (progress) {
@@ -743,7 +745,7 @@ bool virtual_pak_prepare_launch(menu_t *menu, char *error, size_t error_len, vir
         return false;
     }
     if (!virtual_pak_verify_controller_matches_file(VIRTUAL_PAK_CONTROLLER, backup_path)) {
-        snprintf(error, error_len, "Physical Controller Pak backup verification failed");
+        SET_ERROR("Physical Controller Pak backup verification failed");
         return false;
     }
 
@@ -752,7 +754,7 @@ bool virtual_pak_prepare_launch(menu_t *menu, char *error, size_t error_len, vir
     }
     if (!file_exists(pak_path) && !virtual_pak_create_blank_file(VIRTUAL_PAK_CONTROLLER, pak_path)) {
         virtual_pak_restore_file_to_controller(VIRTUAL_PAK_CONTROLLER, backup_path, NULL, 0.0f, 0.0f, NULL);
-        snprintf(error, error_len, "Couldn't create virtual pak slot on the physical Controller Pak");
+        SET_ERROR("Couldn't create virtual pak slot on the physical Controller Pak");
         return false;
     }
 
@@ -762,7 +764,7 @@ bool virtual_pak_prepare_launch(menu_t *menu, char *error, size_t error_len, vir
     if (!virtual_pak_restore_file_to_controller(VIRTUAL_PAK_CONTROLLER, pak_path, progress, 0.55f, 0.88f,
                                                 "Writing virtual Pak to controller 1...")) {
         virtual_pak_restore_file_to_controller(VIRTUAL_PAK_CONTROLLER, backup_path, NULL, 0.0f, 0.0f, NULL);
-        snprintf(error, error_len, "Couldn't load the virtual pak onto controller 1's physical Controller Pak");
+        SET_ERROR("Couldn't load the virtual pak onto controller 1's physical Controller Pak");
         return false;
     }
     if (progress) {
@@ -770,16 +772,18 @@ bool virtual_pak_prepare_launch(menu_t *menu, char *error, size_t error_len, vir
     }
     if (!virtual_pak_verify_controller_matches_file(VIRTUAL_PAK_CONTROLLER, pak_path)) {
         virtual_pak_restore_file_to_controller(VIRTUAL_PAK_CONTROLLER, backup_path, NULL, 0.0f, 0.0f, NULL);
-        snprintf(error, error_len, "Virtual pak verification failed after loading controller 1");
+        SET_ERROR("Virtual pak verification failed after loading controller 1");
         return false;
     }
 
     uint8_t slot_label[VIRTUAL_PAK_LABEL_SIZE];
     if (!virtual_pak_read_label_block(VIRTUAL_PAK_CONTROLLER, slot_label, sizeof(slot_label))) {
         virtual_pak_restore_file_to_controller(VIRTUAL_PAK_CONTROLLER, backup_path, NULL, 0.0f, 0.0f, NULL);
-        snprintf(error, error_len, "Couldn't capture virtual pak recovery marker state");
+        SET_ERROR("Couldn't capture virtual pak recovery marker state");
         return false;
     }
+
+    #undef SET_ERROR
 
     virtual_pak_session_t session;
     virtual_pak_session_init(&session);
