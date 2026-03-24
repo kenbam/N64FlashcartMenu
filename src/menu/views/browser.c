@@ -512,7 +512,10 @@ static void playlist_recent_save(void) {
         return;
     }
 
-    FILE *f = fopen(playlist_recent_file_path, "wb");
+    char tmp_path[sizeof(playlist_recent_file_path) + 4];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", playlist_recent_file_path);
+
+    FILE *f = fopen(tmp_path, "wb");
     if (!f) {
         return;
     }
@@ -523,6 +526,10 @@ static void playlist_recent_save(void) {
         fprintf(f, "%s\n", playlist_recent_paths[i]);
     }
     fclose(f);
+
+    if (!file_rename(tmp_path, playlist_recent_file_path)) {
+        remove(tmp_path);
+    }
 }
 
 static void playlist_recent_remember(const char *playlist_path) {
