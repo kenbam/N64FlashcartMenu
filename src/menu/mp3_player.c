@@ -28,7 +28,7 @@ typedef struct {
     FILE *f; /**< File pointer */
     size_t file_size; /**< Size of the file */
     size_t data_start; /**< Start position of the data */
-    uint8_t buffer[64 * 1024]; /**< Buffer for reading data */
+    uint8_t buffer[16 * 1024]; /**< Buffer for reading data */
     uint8_t *buffer_ptr; /**< Pointer to the current position in the buffer */
     size_t buffer_left; /**< Amount of data left in the buffer */
 
