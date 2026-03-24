@@ -272,12 +272,12 @@ static bool menu_bgm_load_wav64_file (menu_t *menu, const char *file_name) {
     }
 
     wav64_open(&menu_bgm_wav64, resolved);
-    wav64_set_loop(&menu_bgm_wav64, true);
     if (menu_bgm_wav64.wave.read == NULL) {
         free(resolved);
         wav64_close(&menu_bgm_wav64);
         return false;
     }
+    wav64_set_loop(&menu_bgm_wav64, true);
     memset(&menu_bgm_wav64_wrap, 0, sizeof(menu_bgm_wav64_wrap));
     menu_bgm_wav64_wrap.wave = menu_bgm_wav64.wave;
     menu_bgm_wav64_wrap.inner_wave = &menu_bgm_wav64.wave;
