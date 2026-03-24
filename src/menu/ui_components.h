@@ -68,6 +68,13 @@ typedef struct {
  */
 void ui_components_box_draw(int x0, int y0, int x1, int y1, color_t color);
 
+/** Enter batched fill mode (one mode push, many rects). */
+void ui_components_fill_begin(void);
+/** Draw a filled rectangle while in batched fill mode. */
+void ui_components_fill_rect(int x0, int y0, int x1, int y1, color_t color);
+/** Exit batched fill mode (one mode pop). */
+void ui_components_fill_end(void);
+
 /**
  * @brief Draw a border component.
  * 

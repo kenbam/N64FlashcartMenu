@@ -322,6 +322,20 @@ void ui_components_box_draw (int x0, int y0, int x1, int y1, color_t color) {
     rdpq_mode_pop();
 }
 
+void ui_components_fill_begin (void) {
+    rdpq_mode_push();
+    rdpq_set_mode_fill(RGBA32(0, 0, 0, 0));
+}
+
+void ui_components_fill_rect (int x0, int y0, int x1, int y1, color_t color) {
+    rdpq_set_fill_color(color);
+    rdpq_fill_rectangle(x0, y0, x1, y1);
+}
+
+void ui_components_fill_end (void) {
+    rdpq_mode_pop();
+}
+
 /**
  * @brief Draw a border with the specified color.
  * 

@@ -513,8 +513,9 @@ static void draw_visualizer_oscilloscope(component_background_t *c) {
     const int amp = 14 + (int)(peak * 42.0f);
     const int width = right - left;
 
-    ui_components_box_draw(0, center_y - 42, DISPLAY_WIDTH, center_y + 42, RGBA32(0x03, 0x06, 0x0A, vis_alpha_scale(c, 0x58)));
-    ui_components_box_draw(left, center_y, right, center_y + 1, RGBA32(0xB0, 0xD8, 0xFF, vis_alpha_scale(c, 0x26)));
+    ui_components_fill_begin();
+    ui_components_fill_rect(0, center_y - 42, DISPLAY_WIDTH, center_y + 42, RGBA32(0x03, 0x06, 0x0A, vis_alpha_scale(c, 0x58)));
+    ui_components_fill_rect(left, center_y, right, center_y + 1, RGBA32(0xB0, 0xD8, 0xFF, vis_alpha_scale(c, 0x26)));
 
     float energy = peak * 0.75f + base * 0.25f;
     if (!have_meter) energy = 0.10f;
@@ -534,7 +535,7 @@ static void draw_visualizer_oscilloscope(component_background_t *c) {
             int maxx = prev_x > draw_x ? prev_x : draw_x;
             int miny = prev_y < y ? prev_y : y;
             int maxy = prev_y > y ? prev_y : y;
-            ui_components_box_draw(minx, miny, maxx + 2, maxy + 2, col);
+            ui_components_fill_rect(minx, miny, maxx + 2, maxy + 2, col);
             prev_x = draw_x;
             prev_y = y;
         }
@@ -554,10 +555,11 @@ static void draw_visualizer_oscilloscope(component_background_t *c) {
         int maxx = prev_x > draw_x ? prev_x : draw_x;
         int miny = prev_y < y ? prev_y : y;
         int maxy = prev_y > y ? prev_y : y;
-        ui_components_box_draw(minx, miny, maxx + 2, maxy + 2, core);
+        ui_components_fill_rect(minx, miny, maxx + 2, maxy + 2, core);
         prev_x = draw_x;
         prev_y = y;
     }
+    ui_components_fill_end();
 }
 
 /**
