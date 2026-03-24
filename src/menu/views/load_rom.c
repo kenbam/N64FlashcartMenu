@@ -56,6 +56,7 @@ static char cached_save_modified_buf[64];
 static bool cached_has_manual = false;
 
 static void refresh_display_cache(menu_t *menu);
+static void refresh_display_text_only(menu_t *menu);
 
 static void invalidate_metadata_directory_cache(void) {
     metadata_directory_cached = false;
@@ -495,7 +496,7 @@ static void set_cic_type (menu_t *menu, void *arg) {
     if (err != ROM_OK) {
         menu_show_error(menu, convert_error_message(err));
     }
-    refresh_display_cache(menu);
+    refresh_display_text_only(menu);
     menu->browser.reload = true;
 }
 
@@ -515,7 +516,7 @@ static void set_tv_type (menu_t *menu, void *arg) {
     if (err != ROM_OK) {
         menu_show_error(menu, convert_error_message(err));
     }
-    refresh_display_cache(menu);
+    refresh_display_text_only(menu);
     menu->browser.reload = true;
 }
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
@@ -536,13 +537,13 @@ static void set_cheat_option(menu_t *menu, void *arg) {
     if (!is_memory_expanded()) {
         // If the Expansion pak is not installed, we cannot use cheats, and force it to off (just incase).
         rom_config_setting_set_cheats(menu->load.rom_path, &menu->load.rom_info, false);
-        refresh_display_cache(menu);
+        refresh_display_text_only(menu);
         menu->browser.reload = true;
     }
     else {
         bool enabled = (bool)arg;
         rom_config_setting_set_cheats(menu->load.rom_path, &menu->load.rom_info, enabled);
-        refresh_display_cache(menu);
+        refresh_display_text_only(menu);
         menu->browser.reload = true;
     }
 }
@@ -551,7 +552,7 @@ static void set_cheat_option(menu_t *menu, void *arg) {
 static void set_patcher_option(menu_t *menu, void *arg) {
     bool enabled = (bool)arg;
     rom_config_setting_set_patches(menu->load.rom_path, &menu->load.rom_info, enabled);
-    refresh_display_cache(menu);
+    refresh_display_text_only(menu);
     menu->browser.reload = true;
 }
 
@@ -650,7 +651,7 @@ static void set_next_patch_profile(menu_t *menu, void *arg) {
         return;
     }
     sound_play_effect(SFX_SETTING);
-    refresh_display_cache(menu);
+    refresh_display_text_only(menu);
     menu->browser.reload = true;
 }
 #endif
@@ -671,7 +672,7 @@ static void set_virtual_pak_enabled(menu_t *menu, void *arg) {
         return;
     }
     sound_play_effect(SFX_SETTING);
-    refresh_display_cache(menu);
+    refresh_display_text_only(menu);
 }
 
 static void set_next_virtual_pak_slot(menu_t *menu, void *arg) {
@@ -690,7 +691,7 @@ static void set_next_virtual_pak_slot(menu_t *menu, void *arg) {
         return;
     }
     sound_play_effect(SFX_SETTING);
-    refresh_display_cache(menu);
+    refresh_display_text_only(menu);
 }
 
 static void set_previous_virtual_pak_slot(menu_t *menu, void *arg) {
@@ -708,7 +709,7 @@ static void set_previous_virtual_pak_slot(menu_t *menu, void *arg) {
         return;
     }
     sound_play_effect(SFX_SETTING);
-    refresh_display_cache(menu);
+    refresh_display_text_only(menu);
 }
 
 static void iterate_metadata_image(menu_t *menu, int direction) {
@@ -1324,6 +1325,15 @@ static void refresh_display_cache(menu_t *menu) {
         path_free(manual_dir);
     }
 
+    rebuild_details_layout(menu);
+    rom_display_data_valid = true;
+}
+
+/** Lightweight refresh: only rebuilds the text layout without re-statting SD files. */
+static void refresh_display_text_only(menu_t *menu) {
+    if (!menu) {
+        return;
+    }
     rebuild_details_layout(menu);
     rom_display_data_valid = true;
 }
