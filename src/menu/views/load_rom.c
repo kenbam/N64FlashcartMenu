@@ -1332,9 +1332,29 @@ static void refresh_display_cache(menu_t *menu) {
     bool init_save_expected = (init_save_type != SAVE_TYPE_NONE);
     char init_save_path[512];
     if (init_save_expected && get_save_file_path(menu, init_save_path, sizeof(init_save_path))) {
+        // Single stat() for both health and modified checks (saves 2 redundant SD ops).
+        struct stat save_st;
+        path_t *save_stat_path = path_create(init_save_path);
+        bool save_stat_ok = (stat(path_get(save_stat_path), &save_st) == 0);
+        path_free(save_stat_path);
+
         size_t init_expected_size = get_expected_save_size(init_save_type);
-        format_save_health(cached_save_health_buf, sizeof(cached_save_health_buf), init_save_path, init_expected_size);
-        format_save_last_modified(cached_save_modified_buf, sizeof(cached_save_modified_buf), init_save_path);
+        if (!save_stat_ok) {
+            snprintf(cached_save_health_buf, sizeof(cached_save_health_buf), "Missing (created on first load)");
+            snprintf(cached_save_modified_buf, sizeof(cached_save_modified_buf), "Not created");
+        } else {
+            if (init_expected_size > 0 && (size_t)save_st.st_size != init_expected_size) {
+                snprintf(cached_save_health_buf, sizeof(cached_save_health_buf), "Size mismatch (%lld vs %u bytes)",
+                         (long long)save_st.st_size, (unsigned int)init_expected_size);
+            } else {
+                snprintf(cached_save_health_buf, sizeof(cached_save_health_buf), "OK");
+            }
+            time_t modified = save_st.st_mtime;
+            struct tm *tm_info = localtime(&modified);
+            if (!tm_info || strftime(cached_save_modified_buf, sizeof(cached_save_modified_buf), "%m/%d %I:%M %p", tm_info) == 0) {
+                snprintf(cached_save_modified_buf, sizeof(cached_save_modified_buf), "Unknown");
+            }
+        }
     } else {
         snprintf(cached_save_health_buf, sizeof(cached_save_health_buf), "N/A");
         snprintf(cached_save_modified_buf, sizeof(cached_save_modified_buf), "N/A");
