@@ -605,6 +605,15 @@ static void menu_init (boot_params_t *boot_params) {
     debugf("N64FlashcartMenu debugging...\n");
 }
 
+typedef const struct {
+    menu_mode_t id;
+    void (*init) (menu_t *menu);
+    void (*show) (menu_t *menu, surface_t *display);
+    void (*deinit) (menu_t *menu);
+} view_t;
+
+static view_t *menu_get_view (menu_mode_t id);
+
 /**
  * @brief Deinitialize the menu system.
  * 
@@ -625,7 +634,10 @@ static void menu_deinit (menu_t *menu) {
     path_free(menu->load.disk_slots.primary.disk_path);
     path_free(menu->load.rom_path);
     free(menu->runtime_bgm_override_file);
-    view_browser_deinit(menu);
+    view_t *current = menu_get_view(menu->mode);
+    if (current && current->deinit) {
+        current->deinit(menu);
+    }
     path_free(menu->browser.picker_root);
     path_free(menu->browser.directory);
     free(menu);
@@ -644,42 +656,33 @@ static void menu_deinit (menu_t *menu) {
     flashcart_deinit();
 }
 
-/**
- * @brief View structure containing initialization and display functions.
- */
-typedef const struct {
-    menu_mode_t id; /**< View ID */
-    void (*init) (menu_t *menu); /**< Initialization function */
-    void (*show) (menu_t *menu, surface_t *display); /**< Display function */
-} view_t;
-
 static view_t menu_views[] = {
-    { MENU_MODE_STARTUP, view_startup_init, view_startup_display },
-    { MENU_MODE_BROWSER, view_browser_init, view_browser_display },
-    { MENU_MODE_FILE_INFO, view_file_info_init, view_file_info_display },
-    { MENU_MODE_SYSTEM_INFO, view_system_info_init, view_system_info_display },
-    { MENU_MODE_IMAGE_VIEWER, view_image_viewer_init, view_image_viewer_display },
-    { MENU_MODE_TEXT_VIEWER, view_text_viewer_init, view_text_viewer_display },
-    { MENU_MODE_MANUAL_VIEWER, view_manual_viewer_init, view_manual_viewer_display },
-    { MENU_MODE_MUSIC_PLAYER, view_music_player_init, view_music_player_display },
-    { MENU_MODE_CREDITS, view_credits_init, view_credits_display },
-    { MENU_MODE_SETTINGS_EDITOR, view_settings_init, view_settings_display },
-    { MENU_MODE_RTC, view_rtc_init, view_rtc_display },
-    { MENU_MODE_CONTROLLER_PAKFS, view_controller_pakfs_init, view_controller_pakfs_display },
-    { MENU_MODE_VIRTUAL_PAK_CENTER, view_virtual_pak_center_init, view_virtual_pak_center_display },
-    { MENU_MODE_CONTROLLER_PAK_DUMP_INFO, view_controller_pak_dump_info_init, view_controller_pak_dump_info_display },
-    { MENU_MODE_CONTROLLER_PAK_DUMP_NOTE_INFO, view_controller_pak_note_dump_info_init, view_controller_pak_note_dump_info_display },
-    { MENU_MODE_FLASHCART, view_flashcart_info_init, view_flashcart_info_display },
-    { MENU_MODE_LOAD_ROM, view_load_rom_init, view_load_rom_display },
-    { MENU_MODE_LOAD_DISK, view_load_disk_init, view_load_disk_display },
-    { MENU_MODE_LOAD_EMULATOR, view_load_emulator_init, view_load_emulator_display },
-    { MENU_MODE_ERROR, view_error_init, view_error_display },
-    { MENU_MODE_FAULT, view_fault_init, view_fault_display },
-    { MENU_MODE_FAVORITE, view_favorite_init, view_favorite_display },
-    { MENU_MODE_HISTORY, view_history_init, view_history_display },
-    { MENU_MODE_PLAYTIME, view_playtime_init, view_playtime_display },
-    { MENU_MODE_DATEL_CODE_EDITOR, view_datel_code_editor_init, view_datel_code_editor_display },
-    { MENU_MODE_EXTRACT_FILE, view_extract_file_init, view_extract_file_display }
+    { .id = MENU_MODE_STARTUP, .init = view_startup_init, .show = view_startup_display },
+    { .id = MENU_MODE_BROWSER, .init = view_browser_init, .show = view_browser_display, .deinit = view_browser_deinit },
+    { .id = MENU_MODE_FILE_INFO, .init = view_file_info_init, .show = view_file_info_display },
+    { .id = MENU_MODE_SYSTEM_INFO, .init = view_system_info_init, .show = view_system_info_display },
+    { .id = MENU_MODE_IMAGE_VIEWER, .init = view_image_viewer_init, .show = view_image_viewer_display },
+    { .id = MENU_MODE_TEXT_VIEWER, .init = view_text_viewer_init, .show = view_text_viewer_display },
+    { .id = MENU_MODE_MANUAL_VIEWER, .init = view_manual_viewer_init, .show = view_manual_viewer_display },
+    { .id = MENU_MODE_MUSIC_PLAYER, .init = view_music_player_init, .show = view_music_player_display },
+    { .id = MENU_MODE_CREDITS, .init = view_credits_init, .show = view_credits_display },
+    { .id = MENU_MODE_SETTINGS_EDITOR, .init = view_settings_init, .show = view_settings_display },
+    { .id = MENU_MODE_RTC, .init = view_rtc_init, .show = view_rtc_display },
+    { .id = MENU_MODE_CONTROLLER_PAKFS, .init = view_controller_pakfs_init, .show = view_controller_pakfs_display },
+    { .id = MENU_MODE_VIRTUAL_PAK_CENTER, .init = view_virtual_pak_center_init, .show = view_virtual_pak_center_display },
+    { .id = MENU_MODE_CONTROLLER_PAK_DUMP_INFO, .init = view_controller_pak_dump_info_init, .show = view_controller_pak_dump_info_display },
+    { .id = MENU_MODE_CONTROLLER_PAK_DUMP_NOTE_INFO, .init = view_controller_pak_note_dump_info_init, .show = view_controller_pak_note_dump_info_display },
+    { .id = MENU_MODE_FLASHCART, .init = view_flashcart_info_init, .show = view_flashcart_info_display },
+    { .id = MENU_MODE_LOAD_ROM, .init = view_load_rom_init, .show = view_load_rom_display },
+    { .id = MENU_MODE_LOAD_DISK, .init = view_load_disk_init, .show = view_load_disk_display },
+    { .id = MENU_MODE_LOAD_EMULATOR, .init = view_load_emulator_init, .show = view_load_emulator_display },
+    { .id = MENU_MODE_ERROR, .init = view_error_init, .show = view_error_display },
+    { .id = MENU_MODE_FAULT, .init = view_fault_init, .show = view_fault_display },
+    { .id = MENU_MODE_FAVORITE, .init = view_favorite_init, .show = view_favorite_display },
+    { .id = MENU_MODE_HISTORY, .init = view_history_init, .show = view_history_display },
+    { .id = MENU_MODE_PLAYTIME, .init = view_playtime_init, .show = view_playtime_display },
+    { .id = MENU_MODE_DATEL_CODE_EDITOR, .init = view_datel_code_editor_init, .show = view_datel_code_editor_display },
+    { .id = MENU_MODE_EXTRACT_FILE, .init = view_extract_file_init, .show = view_extract_file_display },
 };
 
 /**
@@ -739,6 +742,10 @@ void menu_run (boot_params_t *boot_params) {
             }
 
             while (menu->mode != menu->next_mode) {
+                view_t *prev_view = menu_get_view(menu->mode);
+                if (prev_view && prev_view->deinit) {
+                    prev_view->deinit(menu);
+                }
                 menu->mode = menu->next_mode;
 
                 view_t *next_view = menu_get_view(menu->next_mode);
