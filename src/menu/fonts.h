@@ -50,4 +50,7 @@ void fonts_init(char *custom_font_path);
  */
 void fonts_set_theme(int theme_id);
 
+/** @brief Return the number of font themes. Must match ui_components_theme_count(). */
+int fonts_theme_count(void);
+
 #endif /* FONTS_H__ */

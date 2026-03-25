@@ -167,12 +167,16 @@ static const font_theme_t font_themes[] = {
     },
 };
 
+int fonts_theme_count(void) {
+    return (int)(sizeof(font_themes) / sizeof(font_themes[0]));
+}
+
 void fonts_set_theme(int theme_id) {
     if (!default_font) {
         return;
     }
 
-    int max_theme = (int)(sizeof(font_themes) / sizeof(font_themes[0])) - 1;
+    int max_theme = fonts_theme_count() - 1;
     if (theme_id < 0 || theme_id > max_theme) {
         theme_id = 0;
     }

@@ -274,6 +274,9 @@ static ui_theme_palette_t active_theme = {
 
 void ui_components_set_theme(int theme_id) {
     int max_theme = (int)(sizeof(ui_theme_palettes) / sizeof(ui_theme_palettes[0])) - 1;
+    assertf(ui_components_theme_count() == fonts_theme_count(),
+            "Theme count mismatch: UI has %d, fonts has %d",
+            ui_components_theme_count(), fonts_theme_count());
     if (theme_id < 0 || theme_id > max_theme) {
         theme_id = 0;
     }
