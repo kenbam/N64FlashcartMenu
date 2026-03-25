@@ -59,6 +59,7 @@ SRCS = \
 	menu/fonts.c \
 	menu/hdmi.c \
 	menu/menu.c \
+	menu/browser_grid.c \
 	menu/browser_search.c \
 	menu/menu_bgm.c \
 	menu/mp3_player.c \
