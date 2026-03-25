@@ -585,9 +585,13 @@ void rom_metadata_load (path_t *rom_path, rom_info_t *rom_info, bool include_lon
 
     load_rom_metadata_from_directory(metadata_directory, rom_info, include_long_description);
 
-    // Region-agnostic fallback: /menu/metadata/<category>/<unique0>/<unique1>/metadata.ini
-    path_pop(metadata_directory);
-    load_rom_metadata_from_directory(metadata_directory, rom_info, include_long_description);
+    // Region-agnostic fallback — skip if region-specific already populated primary fields.
+    bool has_primary = (rom_info->metadata.name[0] != '\0') &&
+                       (rom_info->metadata.short_desc[0] != '\0' || rom_info->metadata.long_desc[0] != '\0');
+    if (!has_primary) {
+        path_pop(metadata_directory);
+        load_rom_metadata_from_directory(metadata_directory, rom_info, include_long_description);
+    }
 
     path_free(metadata_directory);
 }
