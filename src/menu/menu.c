@@ -210,6 +210,7 @@ static void menu_deinit (menu_t *menu) {
     if (current && current->deinit) {
         current->deinit(menu);
     }
+    view_browser_deinit(menu);
     path_free(menu->browser.picker_root);
     path_free(menu->browser.directory);
     free(menu);
@@ -230,7 +231,7 @@ static void menu_deinit (menu_t *menu) {
 
 static view_t menu_views[] = {
     { .id = MENU_MODE_STARTUP, .init = view_startup_init, .show = view_startup_display },
-    { .id = MENU_MODE_BROWSER, .init = view_browser_init, .show = view_browser_display, .deinit = view_browser_deinit },
+    { .id = MENU_MODE_BROWSER, .init = view_browser_init, .show = view_browser_display },
     { .id = MENU_MODE_FILE_INFO, .init = view_file_info_init, .show = view_file_info_display },
     { .id = MENU_MODE_SYSTEM_INFO, .init = view_system_info_init, .show = view_system_info_display },
     { .id = MENU_MODE_IMAGE_VIEWER, .init = view_image_viewer_init, .show = view_image_viewer_display },
