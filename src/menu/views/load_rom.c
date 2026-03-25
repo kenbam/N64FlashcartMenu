@@ -10,6 +10,7 @@
 #include "utils/fs.h"
 #include "views.h"
 #include "../menu_paths.h"
+#include "../rom_metadata.h"
 #include "../ui_components/constants.h"
 #include <stdio.h>
 #include <string.h>
@@ -27,6 +28,7 @@ static int details_scroll = 0;
 static int details_max_scroll = 0;
 static rdpq_paragraph_t *details_layout = NULL;
 static bool boxart_retry_pending = false;
+static int deferred_init_phase = -1; // -1 = done, 0+ = pending phase
 static bool metadata_directory_cached = false;
 static bool metadata_directory_available = false;
 static char cached_metadata_directory[64];
@@ -1609,6 +1611,7 @@ static void load (menu_t *menu) {
 }
 
 static void deinit (void) {
+    deferred_init_phase = -1;
     ui_components_boxart_free(boxart);
     boxart = NULL;
     free_details_layout();
@@ -1670,7 +1673,9 @@ void view_load_rom_init (menu_t *menu) {
     }
 
     debugf("Load ROM: loading ROM info from %s\n", path_get(menu->load.rom_path));
-    rom_err_t err = rom_config_load(menu->load.rom_path, &menu->load.rom_info);
+    // Phase 0 (init frame): header + database match + config only (~15-25ms)
+    rom_load_options_t quick_opts = { .include_config = true, .include_long_description = false };
+    rom_err_t err = rom_config_load_ex(menu->load.rom_path, &menu->load.rom_info, &quick_opts);
     if (err != ROM_OK) {
         path_free(menu->load.rom_path);
         menu->load.rom_path = NULL;
@@ -1681,38 +1686,62 @@ void view_load_rom_init (menu_t *menu) {
     if (!menu->settings.rom_autoload_enabled) {
 #endif
         current_metadata_image_index = 0;
-        // scan_metadata_images deferred to first L/R press (iterate_metadata_image)
-        // Pre-warm boxart dir cache so the init below gets a cache hit
-        // instead of re-resolving the same metadata directory (saves ~7 stats).
-        ui_components_boxart_prewarm_dir(
-            menu->storage_prefix,
-            menu->load.rom_info.game_code,
-            menu->load.rom_info.title
-        );
-        boxart = ui_components_boxart_init_memory_cached(
-            menu->storage_prefix,
-            menu->load.rom_info.game_code,
-            menu->load.rom_info.title,
-            IMAGE_BOXART_FRONT
-        );
-        if (boxart == NULL) {
-            boxart = ui_components_boxart_init_async(
-                menu->storage_prefix,
-                menu->load.rom_info.game_code,
-                menu->load.rom_info.title,
-                IMAGE_BOXART_FRONT
-            );
-        }
-        boxart_retry_pending = (boxart == NULL);
         ui_components_context_menu_init(&options_context_menu);
-        refresh_display_cache(menu);
+        // Defer heavy work (metadata, boxart, display cache) to first display frames
+        deferred_init_phase = 0;
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     }
 #endif
 
 }
 
+static void deferred_init_tick(menu_t *menu) {
+    if (deferred_init_phase < 0) {
+        return;
+    }
+    switch (deferred_init_phase) {
+        case 0:
+            // Phase 1: load full metadata (text files, descriptions)
+            rom_metadata_load(menu->load.rom_path, &menu->load.rom_info, true);
+            deferred_init_phase = 1;
+            break;
+        case 1:
+            // Phase 2: resolve boxart directory + start async load
+            ui_components_boxart_prewarm_dir(
+                menu->storage_prefix,
+                menu->load.rom_info.game_code,
+                menu->load.rom_info.title
+            );
+            boxart = ui_components_boxart_init_memory_cached(
+                menu->storage_prefix,
+                menu->load.rom_info.game_code,
+                menu->load.rom_info.title,
+                IMAGE_BOXART_FRONT
+            );
+            if (boxart == NULL) {
+                boxart = ui_components_boxart_init_async(
+                    menu->storage_prefix,
+                    menu->load.rom_info.game_code,
+                    menu->load.rom_info.title,
+                    IMAGE_BOXART_FRONT
+                );
+            }
+            boxart_retry_pending = (boxart == NULL);
+            deferred_init_phase = 2;
+            break;
+        case 2:
+            // Phase 3: save file check + manual check + build layout
+            refresh_display_cache(menu);
+            deferred_init_phase = -1;
+            break;
+        default:
+            deferred_init_phase = -1;
+            break;
+    }
+}
+
 void view_load_rom_display (menu_t *menu, surface_t *display) {
+    deferred_init_tick(menu);
     process(menu);
     retry_boxart_load(menu);
 
