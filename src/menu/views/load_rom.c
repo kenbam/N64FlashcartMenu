@@ -72,44 +72,53 @@ static bool resolve_metadata_directory_for_rom (path_t *path, const char game_co
         return false;
     }
 
-    char candidate[32];
+    // Navigate to parent: menu/metadata/<C0>/<C1>/<C2>/
+    char parent[32];
+    snprintf(parent, sizeof(parent), "%c/%c/%c", game_code[0], game_code[1], game_code[2]);
+    path_push(path, parent);
 
-    snprintf(candidate, sizeof(candidate), "%c/%c/%c/%c", game_code[0], game_code[1], game_code[2], game_code[3]);
-    path_push(path, candidate);
-    if (directory_exists(path_get(path))) {
-        if (resolved && resolved_size > 0) {
-            snprintf(resolved, resolved_size, "%s", candidate);
-        }
-        return true;
-    }
-    path_pop(path);
+    // Single dir scan replaces up to 7 directory_exists() calls.
+    const char preferred_regions[] = { game_code[3], 'E', 'P', 'J', 'U', 'A', '\0' };
+    char found_region = '\0';
+    int found_priority = 99;
 
-    const char fallback_regions[] = { 'E', 'P', 'J', 'U', 'A', '\0' };
-    for (size_t i = 0; fallback_regions[i] != '\0'; i++) {
-        if (fallback_regions[i] == game_code[3]) {
-            continue;
-        }
-        snprintf(candidate, sizeof(candidate), "%c/%c/%c/%c", game_code[0], game_code[1], game_code[2], fallback_regions[i]);
-        path_push(path, candidate);
-        if (directory_exists(path_get(path))) {
-            if (resolved && resolved_size > 0) {
-                snprintf(resolved, resolved_size, "%s", candidate);
+    dir_t info;
+    int result = dir_findfirst(path_get(path), &info);
+    while (result == 0) {
+        if (info.d_type == DT_DIR && info.d_name[0] != '.' &&
+            info.d_name[0] != '\0' && info.d_name[1] == '\0') {
+            char region = info.d_name[0];
+            for (int i = 0; preferred_regions[i] != '\0'; i++) {
+                if (region == preferred_regions[i] && i < found_priority) {
+                    found_region = region;
+                    found_priority = i;
+                    if (i == 0) goto scan_done;
+                    break;
+                }
             }
-            return true;
         }
-        path_pop(path);
+        result = dir_findnext(path_get(path), &info);
     }
+scan_done:
 
-    snprintf(candidate, sizeof(candidate), "%c/%c/%c", game_code[0], game_code[1], game_code[2]);
-    path_push(path, candidate);
-    if (directory_exists(path_get(path))) {
+    if (found_region != '\0') {
+        char region_dir[4] = { found_region, '\0' };
+        path_push(path, region_dir);
         if (resolved && resolved_size > 0) {
-            snprintf(resolved, resolved_size, "%s", candidate);
+            snprintf(resolved, resolved_size, "%s/%c", parent, found_region);
         }
         return true;
     }
-    path_pop(path);
 
+    // No region subdir found — use parent itself if it exists
+    if (directory_exists(path_get(path))) {
+        if (resolved && resolved_size > 0) {
+            snprintf(resolved, resolved_size, "%s", parent);
+        }
+        return true;
+    }
+
+    path_pop(path);
     return false;
 }
 
@@ -1361,6 +1370,8 @@ static void refresh_display_cache(menu_t *menu) {
         snprintf(cached_save_health_buf, sizeof(cached_save_health_buf), "N/A");
         snprintf(cached_save_modified_buf, sizeof(cached_save_modified_buf), "N/A");
     }
+
+    sound_poll();
 
     {
         path_t *manual_dir = NULL;
