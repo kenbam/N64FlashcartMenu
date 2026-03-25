@@ -36,6 +36,7 @@ static menu_bgm_backend_t menu_bgm_backend = MENU_BGM_BACKEND_NONE;
 static wav64_t menu_bgm_wav64;
 static bool menu_bgm_wav64_open = false;
 static bool menu_bgm_perf_pending = false;
+static bool menu_bgm_wav64_started = false;
 typedef struct {
     waveform_t wave;
     waveform_t *inner_wave;
@@ -387,10 +388,11 @@ void menu_bgm_poll (menu_t *menu) {
     }
 
     if (menu_bgm_backend == MENU_BGM_BACKEND_WAV64) {
-        if (!menu_bgm_is_playing()) {
+        if (!menu_bgm_wav64_started) {
             sound_init_default();
             mixer_ch_play(SOUND_MP3_PLAYER_CHANNEL, &menu_bgm_wav64_wrap.wave);
             mixer_ch_set_vol(SOUND_MP3_PLAYER_CHANNEL, 0.8f, 0.8f);
+            menu_bgm_wav64_started = true;
         }
         return;
     }
@@ -443,6 +445,7 @@ void menu_bgm_deinit (void) {
     sound_bgm_meter_reset();
     menu_bgm_initialized = false;
     menu_bgm_loaded = false;
+    menu_bgm_wav64_started = false;
     menu_bgm_error = false;
     menu_bgm_perf_pending = false;
 }
