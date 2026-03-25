@@ -18,6 +18,7 @@
 #include "boot/cic.h"
 #include "menu_paths.h"
 #include "rom_info.h"
+#include "sound.h"
 #include "rom_metadata.h"
 #include "utils/fs.h"
 
@@ -1456,6 +1457,7 @@ rom_err_t rom_config_load_ex(path_t *path, rom_info_t *rom_info, const rom_load_
 
     if (effective->include_config) {
         load_rom_config_from_file(path, rom_info);
+        sound_poll(); // Keep audio fed between SD operations
     }
     rom_metadata_load(path, rom_info, effective->include_long_description);
 

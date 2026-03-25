@@ -1701,17 +1701,22 @@ static void deferred_init_tick(menu_t *menu) {
     }
     switch (deferred_init_phase) {
         case 0:
-            // Phase 1: load full metadata (text files, descriptions)
+            // Phase 1: load full metadata (INI parse + text files).
+            // Poll audio before and after to keep the mixer fed during SD I/O.
+            sound_poll();
             rom_metadata_load(menu->load.rom_path, &menu->load.rom_info, true);
+            sound_poll();
             deferred_init_phase = 1;
             break;
         case 1:
-            // Phase 2: resolve boxart directory + start async load
+            // Phase 2: resolve boxart directory + start async load.
+            sound_poll();
             ui_components_boxart_prewarm_dir(
                 menu->storage_prefix,
                 menu->load.rom_info.game_code,
                 menu->load.rom_info.title
             );
+            sound_poll();
             boxart = ui_components_boxart_init_memory_cached(
                 menu->storage_prefix,
                 menu->load.rom_info.game_code,
@@ -1727,11 +1732,14 @@ static void deferred_init_tick(menu_t *menu) {
                 );
             }
             boxart_retry_pending = (boxart == NULL);
+            sound_poll();
             deferred_init_phase = 2;
             break;
         case 2:
-            // Phase 3: save file check + manual check + build layout
+            // Phase 3: save file check + manual check + build layout.
+            sound_poll();
             refresh_display_cache(menu);
+            sound_poll();
             deferred_init_phase = -1;
             break;
         default:
