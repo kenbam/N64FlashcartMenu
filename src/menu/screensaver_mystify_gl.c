@@ -6,14 +6,17 @@
 
 #include "screensaver_mystify_gl.h"
 
-#define MYSTIFY_MIN_X         (0.08f)
-#define MYSTIFY_MAX_X         (0.92f)
-#define MYSTIFY_MIN_Y         (0.10f)
-#define MYSTIFY_MAX_Y         (0.90f)
+#define MYSTIFY_MIN_X         (0.015f)
+#define MYSTIFY_MAX_X         (0.985f)
+#define MYSTIFY_MIN_Y         (0.02f)
+#define MYSTIFY_MAX_Y         (0.98f)
 #define MYSTIFY_MIN_SPEED     (0.16f)
 #define MYSTIFY_MAX_SPEED     (0.36f)
 #define MYSTIFY_BASE_ALPHA    (0.10f)
 #define MYSTIFY_HEAD_ALPHA    (0.80f)
+#define MYSTIFY_GLOW_ALPHA    (0.18f)
+#define MYSTIFY_GLOW_TRAILS   (3)
+#define MYSTIFY_GLOW_OFFSET   (0.020f)
 
 typedef struct {
     float r;
@@ -196,6 +199,26 @@ void screensaver_mystify_draw(surface_t *display, const screensaver_mystify_stat
         float alpha = MYSTIFY_BASE_ALPHA + ((1.0f - trail_t) * (MYSTIFY_HEAD_ALPHA - MYSTIFY_BASE_ALPHA));
         float offset = trail_t * 0.02f;
         float skew = sinf((state->time_s * 0.8f) + (trail_t * 3.0f)) * 0.015f;
+
+        if (trail < MYSTIFY_GLOW_TRAILS) {
+            static const float glow_offsets[][2] = {
+                { -MYSTIFY_GLOW_OFFSET, 0.0f },
+                {  MYSTIFY_GLOW_OFFSET, 0.0f },
+                { 0.0f, -MYSTIFY_GLOW_OFFSET },
+                { 0.0f,  MYSTIFY_GLOW_OFFSET },
+            };
+
+            glColor4f(color.r, color.g, color.b, MYSTIFY_GLOW_ALPHA * (1.0f - trail_t));
+            for (int g = 0; g < 4; g++) {
+                glBegin(GL_LINE_LOOP);
+                    for (int v = 0; v < SCREENSAVER_MYSTIFY_VERTEX_COUNT; v++) {
+                        float x = ((state->history[trail][v].x * 2.0f) - 1.0f) * aspect;
+                        float y = (state->history[trail][v].y * 2.0f) - 1.0f;
+                        glVertex2f(x + offset + glow_offsets[g][0], y + skew + glow_offsets[g][1]);
+                    }
+                glEnd();
+            }
+        }
 
         glColor4f(color.r, color.g, color.b, alpha);
         glBegin(GL_LINE_LOOP);
