@@ -22,6 +22,11 @@ N64_ROM_RTC = 1
 N64_ROM_REGIONFREE = 1
 N64_ROM_REGION = E
 
+# Optional feature flags (uncomment to enable):
+# N64_CFLAGS += -DFEATURE_AUTOLOAD_ROM_ENABLED   # Auto-load ROM on boot
+# N64_CFLAGS += -DFEATURE_PATCHER_GUI_ENABLED     # ROM patch profile picker UI
+# N64_CFLAGS += -DBETA_SETTINGS                   # Show experimental settings (PAL60, rumble, etc.)
+
 N64_CFLAGS += -iquote $(SOURCE_DIR) -iquote $(ASSETS_DIR) -I $(SOURCE_DIR)/libs -isystem $(SOURCE_DIR)/libs/miniz -flto=auto -Wextra -Wno-unused-parameter $(FLAGS)
 
 SRCS = \
