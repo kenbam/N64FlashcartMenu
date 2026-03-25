@@ -1701,15 +1701,21 @@ static void deferred_init_tick(menu_t *menu) {
     }
     switch (deferred_init_phase) {
         case 0:
-            // Phase 1: load full metadata (INI parse + text files).
-            // Poll audio before and after to keep the mixer fed during SD I/O.
+            // Phase 1: metadata INI parse only (no text files) — ~15-25ms
             sound_poll();
-            rom_metadata_load(menu->load.rom_path, &menu->load.rom_info, true);
+            rom_metadata_load(menu->load.rom_path, &menu->load.rom_info, false);
             sound_poll();
             deferred_init_phase = 1;
             break;
         case 1:
-            // Phase 2: resolve boxart directory + start async load.
+            // Phase 2: curated text files (descriptions, hooks, etc.) — ~30-80ms
+            sound_poll();
+            rom_metadata_load(menu->load.rom_path, &menu->load.rom_info, true);
+            sound_poll();
+            deferred_init_phase = 2;
+            break;
+        case 2:
+            // Phase 3: resolve boxart directory + start async load — ~35-75ms
             sound_poll();
             ui_components_boxart_prewarm_dir(
                 menu->storage_prefix,
@@ -1733,10 +1739,10 @@ static void deferred_init_tick(menu_t *menu) {
             }
             boxart_retry_pending = (boxart == NULL);
             sound_poll();
-            deferred_init_phase = 2;
+            deferred_init_phase = 3;
             break;
-        case 2:
-            // Phase 3: save file check + manual check + build layout.
+        case 3:
+            // Phase 4: save file check + manual check + build layout — ~50-100ms
             sound_poll();
             refresh_display_cache(menu);
             sound_poll();
