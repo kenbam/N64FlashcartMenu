@@ -230,7 +230,11 @@ static char *boxart_thumb_cache_file_path(const char *storage_prefix, const char
     if (!cache_dir) {
         return NULL;
     }
-    directory_create(path_get(cache_dir));
+    static bool cache_dir_created = false;
+    if (!cache_dir_created) {
+        directory_create(path_get(cache_dir));
+        cache_dir_created = true;
+    }
 
     uint64_t hash = fnv1a64_str(key_path);
     char file_name[32];
