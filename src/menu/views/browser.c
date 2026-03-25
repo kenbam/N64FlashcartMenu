@@ -4411,15 +4411,28 @@ static void draw (menu_t *menu, surface_t *d) {
             browser_sort_mode_string(menu)
         );
     } else {
-        ui_components_actions_bar_text_draw(
-            STL_DEFAULT,
-            ALIGN_RIGHT, VALIGN_TOP,
-            "^%02XStart: Settings^00\n"
-            "^%02XR: Options^00 | Sort:%s",
-            menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
-            menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
-            browser_sort_mode_string(menu)
-        );
+        if (menu->browser.playlist) {
+            ui_components_actions_bar_text_draw(
+                STL_DEFAULT,
+                ALIGN_RIGHT, VALIGN_TOP,
+                "^%02XStart: Settings^00 | ^%02XZ+C◀: Grid/List^00\n"
+                "^%02XR: Options^00 | Sort:%s",
+                menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+                STL_DEFAULT,
+                menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+                browser_sort_mode_string(menu)
+            );
+        } else {
+            ui_components_actions_bar_text_draw(
+                STL_DEFAULT,
+                ALIGN_RIGHT, VALIGN_TOP,
+                "^%02XStart: Settings^00\n"
+                "^%02XR: Options^00 | Sort:%s",
+                menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+                menu->browser.entries == 0 ? STL_GRAY : STL_DEFAULT,
+                browser_sort_mode_string(menu)
+            );
+        }
     }
 
     if (menu->current_time >= 0) {
