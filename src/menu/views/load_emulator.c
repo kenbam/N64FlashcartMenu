@@ -74,7 +74,7 @@ static void draw (menu_t *menu, surface_t *d) {
             STL_DEFAULT,
             ALIGN_LEFT, VALIGN_TOP,
             "A: Load and run Emulated ROM\n"
-            "B: Exit"
+            "B: Back"
         );
     }
 

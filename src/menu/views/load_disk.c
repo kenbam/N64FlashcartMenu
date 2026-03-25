@@ -123,7 +123,7 @@ static void draw (menu_t *menu, surface_t *d) {
             STL_DEFAULT,
             ALIGN_LEFT, VALIGN_TOP,
             "A: Load and run 64DD disk\n"
-            "B: Exit\n"
+            "B: Back\n"
         );
 
         if (menu->load.rom_path) {

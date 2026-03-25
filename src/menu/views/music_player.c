@@ -110,7 +110,7 @@ static void draw (menu_t *menu, surface_t *d) {
         STL_DEFAULT,
         ALIGN_LEFT, VALIGN_TOP,
         "A: %s\n"
-        "B: Exit\n",
+        "B: Back\n",
         mp3player_is_playing() ? "Pause" : mp3player_is_finished() ? "Play again" : "Play"
     );
 
