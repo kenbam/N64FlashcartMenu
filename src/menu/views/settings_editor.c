@@ -14,10 +14,7 @@ static component_context_menu_t set_screensaver_smooth_mode_context_menu;
 static component_context_menu_t set_screensaver_wait_context_menu;
 
 static const char *format_switch (bool state) {
-    switch (state) {
-        case true: return "On";
-        case false: return "Off";
-    }
+    return state ? "On" : "Off";
 }
 
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED

@@ -4,8 +4,8 @@
  * @ingroup menu 
  */
 
-#ifndef MENU_STRUCT_H__
-#define MENU_STRUCT_H__
+#ifndef MENU_STATE_H__
+#define MENU_STATE_H__
 
 
 #include <miniz.h>
