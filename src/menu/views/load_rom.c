@@ -1684,6 +1684,12 @@ void view_load_rom_init (menu_t *menu) {
     }
 
     debugf("Load ROM: loading ROM info from %s\n", path_get(menu->load.rom_path));
+
+    // Pre-fill audio buffers before heavy SD work to maximize runway.
+    for (int i = 0; i < 4; i++) {
+        sound_poll();
+    }
+
     // Phase 0 (init frame): header + database match + config only (~15-25ms)
     rom_load_options_t quick_opts = { .include_config = true, .include_long_description = false };
     rom_err_t err = rom_config_load_ex(menu->load.rom_path, &menu->load.rom_info, &quick_opts);
@@ -1710,24 +1716,25 @@ static void deferred_init_tick(menu_t *menu) {
     if (deferred_init_phase < 0) {
         return;
     }
+    // Top up audio buffers before each phase to maximize runway during SD I/O.
+    for (int i = 0; i < 3; i++) {
+        sound_poll();
+    }
+
     switch (deferred_init_phase) {
         case 0:
             // Phase 1: metadata INI parse only (no text files) — ~15-25ms
-            sound_poll();
             rom_metadata_load(menu->load.rom_path, &menu->load.rom_info, false);
-            sound_poll();
             deferred_init_phase = 1;
             break;
         case 1:
             // Phase 2: curated text files (descriptions, hooks, etc.) — ~30-80ms
-            sound_poll();
             rom_metadata_load(menu->load.rom_path, &menu->load.rom_info, true);
             sound_poll();
             deferred_init_phase = 2;
             break;
         case 2:
-            // Phase 3: resolve boxart directory + start async load — ~35-75ms
-            sound_poll();
+            // Phase 3: resolve boxart directory + start async load
             ui_components_boxart_prewarm_dir(
                 menu->storage_prefix,
                 menu->load.rom_info.game_code,
