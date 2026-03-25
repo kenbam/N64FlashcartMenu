@@ -319,6 +319,9 @@ static void process(menu_t *menu) {
             menu->next_mode = MENU_MODE_LOAD_ROM;
             sound_play_effect(SFX_ENTER);
         }
+    } else if (menu->actions.back) {
+        menu->next_mode = MENU_MODE_BROWSER;
+        sound_play_effect(SFX_EXIT);
     } else if (menu->actions.go_left) {
         if (tab_context == BOOKKEEPING_TAB_CONTEXT_PLAYTIME) {
             menu->next_mode = MENU_MODE_FAVORITE;
@@ -552,7 +555,7 @@ static void draw(menu_t *menu, surface_t *display) {
         ui_components_actions_bar_text_draw(
             STL_DEFAULT,
             ALIGN_LEFT, VALIGN_TOP,
-            "A: Open Game\n\n"
+            "A: Game Details | B: Back\n\n"
         );
 
         if (tab_context == BOOKKEEPING_TAB_CONTEXT_FAVORITE) {
@@ -562,6 +565,14 @@ static void draw(menu_t *menu, surface_t *display) {
                 "R: Remove item\n\n"
             );
         }
+    }
+
+    if (!item_index_valid(selected_item)) {
+        ui_components_actions_bar_text_draw(
+            STL_DEFAULT,
+            ALIGN_LEFT, VALIGN_TOP,
+            "B: Back\n\n"
+        );
     }
 
     ui_components_actions_bar_text_draw(
