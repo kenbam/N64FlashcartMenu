@@ -417,7 +417,7 @@ static void draw (menu_t *menu, surface_t *display) {
     ui_components_actions_bar_text_draw(
         STL_DEFAULT,
         ALIGN_RIGHT, VALIGN_TOP,
-        "L|Z: Save changes\n"
+        "L: Save changes\n"
         "  R: Item options\n"
     );
 
