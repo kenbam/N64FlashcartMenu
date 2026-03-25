@@ -1425,8 +1425,8 @@ static void draw (menu_t *menu, surface_t *d) {
             rom_filename
         );
 
-        if (!rom_display_data_valid || (details_layout == NULL)) {
-            refresh_display_cache(menu);
+        if (details_layout == NULL) {
+            rebuild_details_layout(menu);
         }
 
         int base_x = VISIBLE_AREA_X0 + TEXT_MARGIN_HORIZONTAL;
