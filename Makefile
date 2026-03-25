@@ -68,6 +68,7 @@ SRCS = \
 	menu/png_decoder.c \
 	menu/rom_patch.c \
 	menu/rom_info.c \
+	menu/rom_metadata.c \
 	menu/screensaver.c \
 	menu/screensaver_attract.c \
 	menu/screensaver_dvd.c \
