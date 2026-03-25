@@ -79,7 +79,7 @@ static void draw (menu_t *menu, surface_t *d) {
     ui_components_background_draw();
 
     if (menu->load_pending.extract_file) {
-        ui_components_loader_draw(0.0f, NULL);
+        ui_components_loader_draw(0.0f, "Extracting file...");
     } else {
         ui_components_layout_draw();
 

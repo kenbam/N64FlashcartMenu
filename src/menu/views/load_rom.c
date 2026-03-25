@@ -1392,7 +1392,7 @@ static void draw (menu_t *menu, surface_t *d) {
     ui_components_background_draw();
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (menu->load_pending.rom_file && menu->settings.loading_progress_bar_enabled) {
-        ui_components_loader_draw(0.0f, NULL);
+        ui_components_loader_draw(0.0f, "Loading ROM...");
     } else {
 #endif
         ui_components_layout_draw();

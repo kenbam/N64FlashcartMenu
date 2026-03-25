@@ -49,7 +49,7 @@ static void draw (menu_t *menu, surface_t *d) {
     ui_components_background_draw();
 
     if (menu->load_pending.emulator_file) {
-        ui_components_loader_draw(0.0f, NULL);
+        ui_components_loader_draw(0.0f, "Loading emulator...");
     } else {
         ui_components_layout_draw();
 
