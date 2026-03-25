@@ -301,6 +301,10 @@ int ui_components_theme_count(void) {
     return (int)(sizeof(ui_theme_names) / sizeof(ui_theme_names[0]));
 }
 
+color_t ui_components_get_highlight_color(void) {
+    return active_theme.file_list_highlight;
+}
+
 color_t ui_components_file_list_highlight_color(void) {
     return active_theme.file_list_highlight;
 }

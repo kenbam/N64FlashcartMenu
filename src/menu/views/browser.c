@@ -2139,7 +2139,7 @@ static void browser_playlist_grid_draw(menu_t *menu) {
         if (is_selected) {
             int sy1 = y0 + tile_h;
             rdpq_mode_push();
-                rdpq_set_mode_fill(RGBA32(0x30, 0x70, 0xFF, 0xFF));
+                rdpq_set_mode_fill(ui_components_get_highlight_color());
                 rdpq_fill_rectangle(x0 - 2, y0 - 2, x1 + 2, y0);        // top
                 rdpq_fill_rectangle(x0 - 2, sy1, x1 + 2, sy1 + 2);      // bottom
                 rdpq_fill_rectangle(x0 - 2, y0, x0, sy1);                // left

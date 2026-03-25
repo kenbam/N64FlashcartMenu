@@ -132,6 +132,9 @@ const char *ui_components_theme_name(int theme_id);
  */
 int ui_components_theme_count(void);
 
+/** @brief Get the current theme's highlight color for selections. */
+color_t ui_components_get_highlight_color(void);
+
 /**
  * @brief Get themed color used for file list highlight.
  *
