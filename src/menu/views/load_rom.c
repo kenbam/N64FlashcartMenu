@@ -260,8 +260,6 @@ static void scan_metadata_images(menu_t *menu) {
 
     if (dir_exists) {
         // Filenames array matches metadata_image_filename_cache order for indexed access
-        // Note: This mapping is also present in boxart.c but duplicated here
-        // for efficient scanning without calling into the component layer
         char *filenames[] = {
             "boxart_front.png",
             "boxart_back.png",
@@ -273,11 +271,33 @@ static void scan_metadata_images(menu_t *menu) {
             "gamepak_back.png"
         };
 
+        // Single directory scan instead of 16 individual stat() calls
+        dir_t info;
+        int scan_result = dir_findfirst(path_get(path), &info);
+        uint8_t found_mask = 0;
+        while (scan_result == 0) {
+            for (uint16_t i = 0; i < metadata_image_filename_cache_length; i++) {
+                if (strcasecmp(info.d_name, filenames[i]) == 0) {
+                    found_mask |= (1u << i);
+                    break;
+                }
+                // Check for .nimg sidecar variant
+                size_t fname_len = strlen(filenames[i]);
+                size_t dname_len = strlen(info.d_name);
+                if (dname_len == fname_len + 5 - 4 /* .png -> .png.nimg */) {
+                    char sidecar_name[64];
+                    snprintf(sidecar_name, sizeof(sidecar_name), "%s.nimg", filenames[i]);
+                    if (strcasecmp(info.d_name, sidecar_name) == 0) {
+                        found_mask |= (1u << i);
+                        break;
+                    }
+                }
+            }
+            scan_result = dir_findnext(path_get(path), &info);
+        }
+
         for (uint16_t i = 0; i < metadata_image_filename_cache_length; i++) {
-            path_push(path, filenames[i]);
-            metadata_image_available[i] = file_exists(path_get(path))
-                || native_image_sidecar_exists(path_get(path), ".nimg");
-            path_pop(path);
+            metadata_image_available[i] = (found_mask & (1u << i)) != 0;
         }
     } else {
         // No directory exists, mark all images as unavailable
