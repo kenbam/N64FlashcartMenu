@@ -16,6 +16,7 @@
 #include <mini.c/src/mini.h>
 
 #include "boot/cic.h"
+#include "menu_paths.h"
 #include "rom_info.h"
 #include "utils/fs.h"
 
@@ -1315,7 +1316,7 @@ static void load_rom_metadata (path_t *rom_path, rom_info_t *rom_info, bool incl
     memcpy(prefix, full_path, prefix_length);
     prefix[prefix_length] = '\0';
 
-    path_t *metadata_directory = path_init(prefix, "menu/metadata");
+    path_t *metadata_directory = path_init(prefix, MENU_DIR_METADATA);
     for (size_t i = 0; i < 4; i++) {
         char component[2] = { rom_info->game_code[i], '\0' };
         if (component[0] == '\0') {

@@ -21,6 +21,7 @@
 #include "utils/fs.h"
 #include "utils/hash.h"
 #include "views.h"
+#include "../menu_paths.h"
 #include "../sound.h"
 
 static const char *archive_extensions[] = { "zip", NULL };
@@ -154,8 +155,8 @@ static void browser_hide_all_context_menus(void);
 
 #define PLAYLIST_CACHE_MAGIC   (0x504C4331u)
 #define PLAYLIST_CACHE_VERSION (3u)
-#define PLAYLIST_CACHE_DIR     "menu/cache/playlists"
-#define PLAYLIST_RECENT_FILE   "menu/cache/playlists/recent.txt"
+#define PLAYLIST_CACHE_DIR     MENU_DIR_CACHE_PLAYLISTS
+#define PLAYLIST_RECENT_FILE   MENU_DIR_CACHE_PLAYLISTS "/recent.txt"
 #define PLAYLIST_MEM_CACHE_ENTRIES 6u
 #define PLAYLIST_RECENT_LIMIT  8u
 #define PLAYLIST_DISK_CACHE_MIN_SOURCE_BYTES 4096u

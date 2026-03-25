@@ -17,10 +17,12 @@
 #include "utils/fs.h"
 #include "utils/hash.h"
 
+#include "../menu_paths.h"
+
 #define OLD_BOXART_DIRECTORY       "menu/boxart"
-#define METADATA_BASE_DIRECTORY    "menu/metadata"
+#define METADATA_BASE_DIRECTORY    MENU_DIR_METADATA
 #define HOMEBREW_ID_SUBDIRECTORY   "homebrew"
-#define BOXART_CACHE_DIR           "menu/cache/thumbs"
+#define BOXART_CACHE_DIR           MENU_DIR_CACHE_THUMBS
 #define BOXART_CACHE_MAGIC         (0x42584154) /* BXAT */
 #define BOXART_THUMB_CACHE_ENTRIES (16)
 #define BOXART_LOAD_QUEUE_MAX      (24)

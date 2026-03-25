@@ -15,6 +15,7 @@
 #include <mini.c/src/mini.h>
 #include <libdragon.h>
 
+#include "menu_paths.h"
 #include "path.h"
 #include "rom_info.h"
 #include "rom_patch.h"
@@ -22,7 +23,7 @@
 #include "utils/hash.h"
 
 #define PATCHES_DIR "menu/patches"
-#define PATCH_CACHE_DIR "menu/cache/patched"
+#define PATCH_CACHE_DIR MENU_DIR_CACHE_PATCHED
 #define PATCH_MANIFEST_NAME "default.ini"
 #define PATCH_MAX_FILES 8
 #define PATCH_MAX_MANIFESTS 32

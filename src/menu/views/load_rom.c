@@ -9,6 +9,7 @@
 #include "boot/boot.h"
 #include "utils/fs.h"
 #include "views.h"
+#include "../menu_paths.h"
 #include "../ui_components/constants.h"
 #include <stdio.h>
 #include <string.h>
@@ -119,7 +120,7 @@ static bool resolve_metadata_directory_for_current_rom(menu_t *menu, char *resol
         cached_metadata_directory[0] = '\0';
         metadata_directory_available = false;
 
-        path_t *path = path_init(menu->storage_prefix, "menu/metadata");
+        path_t *path = path_init(menu->storage_prefix, MENU_DIR_METADATA);
         if (path != NULL) {
             char game_code_path[64] = {0};
 
@@ -176,7 +177,7 @@ static bool resolve_manual_directory_for_current_rom (menu_t *menu, path_t **out
         return false;
     }
 
-    path_t *metadata_directory = path_init(menu->storage_prefix, "menu/metadata");
+    path_t *metadata_directory = path_init(menu->storage_prefix, MENU_DIR_METADATA);
     if (!metadata_directory) {
         return false;
     }
@@ -248,7 +249,7 @@ static void scan_metadata_images(menu_t *menu) {
         return;
     }
 
-    path_t *path = path_init(menu->storage_prefix, "menu/metadata"); // should be METADATA_BASE_DIRECTORY
+    path_t *path = path_init(menu->storage_prefix, MENU_DIR_METADATA); // should be METADATA_BASE_DIRECTORY
     char game_code_path[64] = {0};
     bool dir_exists = (path != NULL) &&
         resolve_metadata_directory_for_current_rom(menu, game_code_path, sizeof(game_code_path));
