@@ -15,7 +15,6 @@
 #include "menu_paths.h"
 #include "path.h"
 #include "rom_info.h"
-#include "sound.h"
 #include "rom_metadata.h"
 #include "utils/fs.h"
 
@@ -491,14 +490,12 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
     }
 
     fclose(metadata_file);
-    sound_poll(); // Keep audio fed between SD operations
 
     // Pre-scan the directory once to avoid per-file stat() calls.
     // One dir scan (~10-30ms) replaces ~18 individual fopen attempts (~90-180ms).
     dir_listing_t listing = { .count = 0, .scanned = false };
     if (include_long_description) {
         dir_listing_scan(&listing, path_get(directory));
-        sound_poll(); // Keep audio fed after dir scan
     }
 
     if (include_long_description &&
@@ -532,7 +529,6 @@ static void load_rom_metadata_from_directory (path_t *directory, rom_info_t *rom
                                          rom_info->metadata.tags, sizeof(rom_info->metadata.tags));
     read_metadata_mapped_text_if_missing(directory, &listing, include_long_description, warnings_file, "warnings.txt",
                                          rom_info->metadata.warnings, sizeof(rom_info->metadata.warnings));
-    sound_poll(); // Keep audio fed mid-sequence
     read_metadata_mapped_text_if_missing(directory, &listing, include_long_description, museum_card_file, "museum_card.txt",
                                          rom_info->metadata.museum_card, sizeof(rom_info->metadata.museum_card));
     read_metadata_mapped_text_if_missing(directory, &listing, include_long_description, trivia_museum_file, "trivia_museum.txt",

@@ -1371,8 +1371,6 @@ static void refresh_display_cache(menu_t *menu) {
         snprintf(cached_save_modified_buf, sizeof(cached_save_modified_buf), "N/A");
     }
 
-    sound_poll();
-
     {
         path_t *manual_dir = NULL;
         cached_has_manual = resolve_manual_directory_for_current_rom(menu, &manual_dir, NULL);
@@ -1685,11 +1683,6 @@ void view_load_rom_init (menu_t *menu) {
 
     debugf("Load ROM: loading ROM info from %s\n", path_get(menu->load.rom_path));
 
-    // Pre-fill audio buffers before heavy SD work to maximize runway.
-    for (int i = 0; i < 4; i++) {
-        sound_poll();
-    }
-
     // Phase 0 (init frame): header + database match + config only (~15-25ms)
     rom_load_options_t quick_opts = { .include_config = true, .include_long_description = false };
     rom_err_t err = rom_config_load_ex(menu->load.rom_path, &menu->load.rom_info, &quick_opts);
@@ -1716,10 +1709,9 @@ static void deferred_init_tick(menu_t *menu) {
     if (deferred_init_phase < 0) {
         return;
     }
-    // Top up audio buffers before each phase to maximize runway during SD I/O.
-    for (int i = 0; i < 3; i++) {
-        sound_poll();
-    }
+    // Single sound_poll before each phase — safe here since we're between frames
+    // (after rdpq_detach_show, before rdpq_attach).
+    sound_poll();
 
     switch (deferred_init_phase) {
         case 0:
@@ -1730,7 +1722,6 @@ static void deferred_init_tick(menu_t *menu) {
         case 1:
             // Phase 2: curated text files (descriptions, hooks, etc.) — ~30-80ms
             rom_metadata_load(menu->load.rom_path, &menu->load.rom_info, true);
-            sound_poll();
             deferred_init_phase = 2;
             break;
         case 2:
@@ -1740,7 +1731,6 @@ static void deferred_init_tick(menu_t *menu) {
                 menu->load.rom_info.game_code,
                 menu->load.rom_info.title
             );
-            sound_poll();
             boxart = ui_components_boxart_init_memory_cached(
                 menu->storage_prefix,
                 menu->load.rom_info.game_code,
@@ -1756,14 +1746,11 @@ static void deferred_init_tick(menu_t *menu) {
                 );
             }
             boxart_retry_pending = (boxart == NULL);
-            sound_poll();
             deferred_init_phase = 3;
             break;
         case 3:
-            // Phase 4: save file check + manual check + build layout — ~50-100ms
-            sound_poll();
+            // Phase 4: save file check + manual check + build layout
             refresh_display_cache(menu);
-            sound_poll();
             deferred_init_phase = -1;
             break;
         default:

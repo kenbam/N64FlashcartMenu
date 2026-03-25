@@ -13,7 +13,6 @@
 #include "../native_image.h"
 #include "../path.h"
 #include "../png_decoder.h"
-#include "../sound.h"
 #include "constants.h"
 #include "utils/fs.h"
 #include "utils/hash.h"
@@ -437,21 +436,18 @@ static void boxart_queue_pump(void) {
             continue;
         }
 
-        sound_poll(); // Keep audio fed before SD I/O
         surface_t *native = NULL;
         if (string_ends_with(ctx->cache_key, BOXART_NATIVE_SIDECAR)) {
             native = native_image_load_rgba16_file(ctx->cache_key, BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX);
         } else {
             native = native_image_load_sidecar_rgba16(ctx->cache_key, BOXART_NATIVE_SIDECAR, BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX);
         }
-        sound_poll(); // Keep audio fed after SD I/O
         if (native) {
             boxart_thumb_cache_put(ctx->cache_key, native);
             boxart_complete_context_with_image(ctx, native);
             continue;
         }
 
-        sound_poll(); // Keep audio fed before PNG decode start (opens file)
         if (png_decoder_start(ctx->cache_key, BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX, png_decoder_callback, ctx) == PNG_OK) {
             g_boxart_active_load_ctx = ctx;
             break;
@@ -625,7 +621,6 @@ static bool resolve_boxart_image_path(const char *storage_prefix, const char *ga
     }
 
     bool found = false;
-    sound_poll();
     if (file_exists(path_get(path)) || native_image_sidecar_exists(path_get(path), BOXART_NATIVE_SIDECAR)) {
         *resolved_image_path_out = strdup(path_get(path));
         found = (*resolved_image_path_out != NULL);
