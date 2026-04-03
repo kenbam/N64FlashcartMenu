@@ -6,6 +6,48 @@ built from latest commit on main branch.
 - For the 64Drive, use the `menu.bin` file in the root of your SD card.
 - For the ares emulator, use the `N64FlashcartMenu.n64` file.
 
+## Release Notes 2026-04-03 - Tagged custom-2026.04.03
+
+This is the first release of the customized fork since upstream `0.3.1`.
+It bundles roughly 232 commits of fork-specific work focused on library browsing,
+metadata, media presentation, playtime tracking, Controller Pak workflows,
+audio stability, and general UX/performance tuning.
+
+- **Fork baseline**
+	- Establishes this customized `main` branch as its own date-based custom release line.
+	- Includes the personal/fork feature set documented in the fork notes below.
+
+- **Library browsing and playlists**
+	- Added `.m3u` playlist support with preserved authored order and better path handling.
+	- Added smarter browser sorting, random/smart-random flows, and improved favorites/recent/playtime navigation.
+	- Added metadata-driven smart playlists and stronger ROM identity tracking so references survive path changes.
+	- Added experimental playlist grid browsing with thumbnail caching/prefetch.
+
+- **ROM details, metadata, and manuals**
+	- Expanded the ROM details page with richer metadata fields, longer descriptions, better scrolling, and improved boxart/manual handling.
+	- Added metadata parser improvements and broader key compatibility for personal metadata packs.
+	- Added native manual viewing support with image-backed page packages.
+
+- **Playtime and SC64-focused workflow**
+	- Added playtime tracking, recent sessions, and leaderboard-style views.
+	- Added SC64-oriented workflow integration for playtime/session bookkeeping.
+	- Added per-ROM virtual Controller Pak slots plus a virtual pak control center and recovery flow.
+
+- **Themes, music, and presentation**
+	- Added theme presets, background image support, selectable menu music, and visualizer experiments.
+	- Added WAV64 menu-BGM support and a round of audio-pipeline fixes to reduce skips and mid-playback restarts.
+	- Added experimental GL screensavers including GL Pipes and GL Mystify.
+
+- **Performance and reliability**
+	- Reduced repeated SD-card I/O in browser, grid, and ROM-details paths.
+	- Split ROM-details loading into cheaper phases to reduce audio skips during heavy content loads.
+	- Hardened config/save write paths and improved general recovery behavior around pak/config flows.
+
+- **Known scope**
+	- This release is intentionally fork-specific and tuned for one personal setup.
+	- Some features remain experimental, especially around visualizers, grid browsing, and advanced Controller Pak/media workflows.
+
+
 ## Fork Notes (custom `main`)
 
 ### Overview
