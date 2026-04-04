@@ -699,6 +699,9 @@ static void attract_ensure_prompt_icon(screensaver_attract_state_t *state) {
     }
     state->prompt_icon_attempted = true;
     for (int i = 0; attract_prompt_icon_paths[i] != NULL; i++) {
+        if (!file_exists((char *)attract_prompt_icon_paths[i])) {
+            continue;
+        }
         sprite_t *image = sprite_load(attract_prompt_icon_paths[i]);
         if (image != NULL) {
             state->prompt_icon = image;

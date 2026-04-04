@@ -235,6 +235,11 @@ static bool menu_bgm_load_wav64_file (menu_t *menu, const char *file_name) {
         return false;
     }
 
+    if (!file_exists(resolved)) {
+        free(resolved);
+        return false;
+    }
+
     wav64_open(&menu_bgm_wav64, resolved);
     if (menu_bgm_wav64.wave.read == NULL) {
         free(resolved);
