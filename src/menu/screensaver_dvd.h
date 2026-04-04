@@ -14,6 +14,7 @@ typedef struct {
     uint8_t color_index;
     uint32_t rng;
     surface_t *logo_image;
+    sprite_t *logo_sprite;
     bool logo_loading;
     bool logo_search_done;
 } screensaver_dvd_state_t;

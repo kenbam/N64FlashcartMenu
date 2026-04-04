@@ -127,9 +127,11 @@ SOUNDS = \
 	settings.wav
 
 IMAGES = \
-	attract_a_button.png
+	attract_a_button.png \
+	dvd_logo_builtin.png
 
 $(FILESYSTEM_DIR)/attract_a_button.sprite: MKSPRITE_FLAGS+=-f RGBA32
+$(FILESYSTEM_DIR)/dvd_logo_builtin.sprite: MKSPRITE_FLAGS+=-f RGBA32
 
 OBJS = $(addprefix $(BUILD_DIR)/, $(addsuffix .o,$(basename $(SRCS))))
 MINIZ_OBJS = $(filter $(BUILD_DIR)/libs/miniz/%.o,$(OBJS))

@@ -19,6 +19,7 @@
 #define SCREENSAVER_LOGO_FILE         "/menu/DVD_video_logo.png"
 #define SCREENSAVER_LOGO_FILE_ALT     "/menu/screensavers/DVD_video_logo.png"
 #define SCREENSAVER_LOGO_FILE_DEFAULT "/menu/screensavers/dvd-logo.png"
+#define SCREENSAVER_LOGO_ROM_FALLBACK "rom:/dvd_logo_builtin.sprite"
 #define SCREENSAVER_SPEED_X           (70.0f)
 #define SCREENSAVER_SPEED_Y           (58.0f)
 #define SCREENSAVER_DEBUG_BOUNDS      (0)
@@ -85,6 +86,10 @@ static void screensaver_dvd_logo_free(screensaver_dvd_state_t *state) {
         free(state->logo_image);
         state->logo_image = NULL;
     }
+    if (state->logo_sprite) {
+        sprite_free(state->logo_sprite);
+        state->logo_sprite = NULL;
+    }
 }
 
 static void screensaver_dvd_logo_callback(png_err_t err, surface_t *decoded_image, void *callback_data) {
@@ -134,6 +139,12 @@ static void screensaver_dvd_get_logo_size(const screensaver_dvd_state_t *state, 
     if (state && state->logo_image) {
         *width = state->logo_image->width;
         *height = state->logo_image->height;
+        return;
+    }
+    if (state && state->logo_sprite) {
+        surface_t surf = sprite_get_pixels(state->logo_sprite);
+        *width = surf.width;
+        *height = surf.height;
         return;
     }
     *width = SCREENSAVER_LOGO_WIDTH;
@@ -225,6 +236,7 @@ void screensaver_dvd_init_state(screensaver_dvd_state_t *state) {
     state->color_index = 0;
     state->rng = 0;
     state->logo_image = NULL;
+    state->logo_sprite = NULL;
     state->logo_loading = false;
     state->logo_search_done = false;
 }
@@ -256,6 +268,9 @@ void screensaver_dvd_logo_try_load(menu_t *menu, screensaver_dvd_state_t *state)
     }
     if (!state->logo_loading && !state->logo_image) {
         screensaver_dvd_logo_try_load_path(menu, state, SCREENSAVER_LOGO_FILE);
+    }
+    if (!state->logo_loading && !state->logo_image && !state->logo_sprite && file_exists((char *)SCREENSAVER_LOGO_ROM_FALLBACK)) {
+        state->logo_sprite = sprite_load(SCREENSAVER_LOGO_ROM_FALLBACK);
     }
 
     if (!state->logo_loading) {
@@ -349,6 +364,16 @@ void screensaver_dvd_draw(menu_t *menu, screensaver_dvd_state_t *state, surface_
             rdpq_set_mode_copy(true);
             rdpq_set_scissor(0, 0, screen_w, screen_h);
             rdpq_tex_blit(state->logo_image, draw_x, draw_y, &(rdpq_blitparms_t){
+                .width = logo_width,
+                .height = logo_height,
+                .filtering = false,
+            });
+        rdpq_mode_pop();
+    } else if (state->logo_sprite) {
+        rdpq_mode_push();
+            rdpq_set_mode_copy(true);
+            rdpq_set_scissor(0, 0, screen_w, screen_h);
+            rdpq_sprite_blit(state->logo_sprite, (float)draw_x, (float)draw_y, &(rdpq_blitparms_t){
                 .width = logo_width,
                 .height = logo_height,
                 .filtering = false,
