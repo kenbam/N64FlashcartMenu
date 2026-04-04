@@ -127,11 +127,12 @@ SOUNDS = \
 	settings.wav
 
 IMAGES = \
-	attract_a_button.png \
-	dvd_logo_builtin.png
+	attract_a_button.png
+
+NIMAGES = \
+	dvd_logo_builtin.nimg
 
 $(FILESYSTEM_DIR)/attract_a_button.sprite: MKSPRITE_FLAGS+=-f RGBA32
-$(FILESYSTEM_DIR)/dvd_logo_builtin.sprite: MKSPRITE_FLAGS+=-f RGBA32
 
 OBJS = $(addprefix $(BUILD_DIR)/, $(addsuffix .o,$(basename $(SRCS))))
 MINIZ_OBJS = $(filter $(BUILD_DIR)/libs/miniz/%.o,$(OBJS))
@@ -141,7 +142,8 @@ DEPS = $(OBJS:.o=.d)
 FILESYSTEM = \
 	$(addprefix $(FILESYSTEM_DIR)/, $(notdir $(FONTS:%.ttf=%.font64))) \
 	$(addprefix $(FILESYSTEM_DIR)/, $(notdir $(SOUNDS:%.wav=%.wav64))) \
-	$(addprefix $(FILESYSTEM_DIR)/, $(notdir $(IMAGES:%.png=%.sprite)))
+	$(addprefix $(FILESYSTEM_DIR)/, $(notdir $(IMAGES:%.png=%.sprite))) \
+	$(addprefix $(FILESYSTEM_DIR)/, $(NIMAGES))
 
 $(MINIZ_OBJS): N64_CFLAGS+=-Wno-unused-function -Wno-type-limits -fcompare-debug-second
 $(SPNG_OBJS): N64_CFLAGS+=-DSPNG_USE_MINIZ -fcompare-debug-second
@@ -161,6 +163,10 @@ $(FILESYSTEM_DIR)/%.wav64: $(ASSETS_DIR)/sounds/%.wav
 $(FILESYSTEM_DIR)/%.sprite: $(ASSETS_DIR)/images/%.png
 	@echo "    [SPRITE] $@"
 	@$(N64_MKSPRITE) $(MKSPRITE_FLAGS) -o $(dir $@) "$<"
+
+$(FILESYSTEM_DIR)/dvd_logo_builtin.nimg: $(ASSETS_DIR)/screensaver/nintendo-logo-retro.png tools/sc64/menu_assets.sh
+	@echo "    [NIMG] $@"
+	@bash tools/sc64/menu_assets.sh screensaver-native "$<" "$@"
 
 $(BUILD_DIR)/$(PROJECT_NAME).dfs: $(FILESYSTEM)
 
