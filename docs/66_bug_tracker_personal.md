@@ -2,6 +2,12 @@
 
 ## Open
 
+- `BGM CPU use and stutter during menu/playlist activity` (investigation; cause not yet proven)
+  - Symptom: current background music can stutter under UI load. Software MP3 decoding competes for CPU, but synchronous playlist/SD operations can also delay audio buffer servicing.
+  - Candidate: Libdragon's RSP-accelerated ULC codec in a `.wav64` container; **not** yet supported by this repo's pinned Libdragon commit.
+  - Next step: baseline MP3/VADPCM behavior, trial ULC on a branch, instrument `mixer_try_play()` gaps, and fix independent blocking-I/O causes if necessary.
+  - Investigation plan: [ULC BGM performance investigation](./72_ulc_bgm_performance_investigation.md).
+
 - `WAV64 BGM wrapper crash` (temporary workaround applied)
   - Symptom: boot-time crash with `Read from invalid memory address` in `audio/wav64_vadpcm.c`, reported at `src/menu/menu.c:587` wrapper callsite.
   - Current status: mitigated by bypassing WAV64 meter wrapper and playing WAV64 directly.
