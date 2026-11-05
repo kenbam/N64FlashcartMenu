@@ -36,6 +36,11 @@
   - longer-term: emulator library browser mode / shelves grouped by system, instead of treating emulator ROMs as generic files.
 
 ## Rank 3: Performance/Architecture
+- **Evaluate Libdragon ULC WAV64 for background music** (high-value experiment; not implemented):
+  - Current software MP3 decoding costs CPU; RSP-assisted ULC reportedly uses ~4% CPU / 5% RSP at 44.1 kHz stereo, but must be benchmarked in this menu.
+  - Update pinned Libdragon/encoder on a branch; initialize WAV64 compression level 2; try ULC `.wav64` via the existing WAV64 BGM/playlist override path. Keep MP3 and VADPCM fallback.
+  - Investigate separately whether synchronous playlist/SD work is starving `mixer_try_play()`; a codec switch alone cannot fix those stalls. Check WAV64 visualizer-wrapper safety and RSP contention.
+  - Detailed approach, baselines and acceptance criteria: [ULC BGM performance investigation](./72_ulc_bgm_performance_investigation.md).
 - Firmware-assisted I/O prefetch hints for backgrounds/boxart/music.
 - Menu decode queue improvements with explicit frame budget and hard audio priority.
 - Persistent thumbnail + metadata warm caches with integrity/version checks.
